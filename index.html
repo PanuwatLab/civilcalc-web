@@ -513,6 +513,22 @@
     <button id="mode-cont-btn" class="mode-tab px-4 py-2 rounded-lg text-[13px] font-medium border">คานต่อเนื่อง (หลายช่วง)</button>
   </div>
 
+  <!-- ============ Phase 1 · Beam Meta (เบอร์/prefix/ชั้น/หมายเหตุ · เห็นทั้ง 2 โหมด · optional · ไม่บล็อกคำนวณ) ============ -->
+  <div id="beam-meta-card" class="cc-card p-3 mb-5 flex flex-wrap items-end gap-x-4 gap-y-2">
+    <div class="flex items-end gap-1.5">
+      <span class="text-[12px] text-slate-500 mb-1.5">🔖 คาน</span>
+      <select id="bm-prefix" class="input-underline !text-[13px] !font-sans" aria-label="ประเภทคาน (prefix)" title="ประเภทคาน: B ทั่วไป · GB คอดิน · RB หลังคา · CB ยึด">
+        <option value="B">B</option><option value="GB">GB</option><option value="RB">RB</option><option value="CB">CB</option>
+      </select>
+      <input id="bm-number" type="text" maxlength="8" value="1" class="input-underline !w-14 !text-center text-sm" aria-label="เบอร์คาน" title="เบอร์คาน เช่น 1, 12A" placeholder="1">
+    </div>
+    <label class="text-[11px] text-slate-500 flex flex-col gap-0.5">ชั้น (floor)
+      <input id="bm-floor" type="text" maxlength="16" class="input-underline !w-24 text-sm !font-sans" aria-label="ชั้น" placeholder="2 / ดาดฟ้า"></label>
+    <label class="text-[11px] text-slate-500 flex flex-col gap-0.5 flex-1 min-w-[150px]">หมายเหตุ
+      <input id="bm-notes" type="text" maxlength="60" class="input-underline w-full text-sm !font-sans" aria-label="หมายเหตุ" placeholder="เช่น คานรับผนัง (ไม่บังคับ)"></label>
+    <span class="text-[10px] text-slate-400 self-center">ไม่กรอกก็คำนวณได้ · โชว์บนหัวผล</span>
+  </div>
+
   <!-- ============ CONTINUOUS BEAM PANEL (Session 3A) ============ -->
   <section id="continuous-panel" class="hidden">
     <div class="desktop-grid">
@@ -7063,6 +7079,31 @@ window.BeamWorkspace = (function(){
 })();
 </script>
 
+<!-- ============ Phase 1 · Beam Meta wiring (→ BeamWorkspace · refresh active-mode header · optional) ============ -->
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function refreshActive(){
+    try{ if(window.__contBeam && window.__contBeam.refreshNaming) window.__contBeam.refreshNaming(); }catch(e){}
+    try{ if(window.__ssRefreshNaming) window.__ssRefreshNaming(); }catch(e){}
+  }
+  function wire(){
+    const BW=window.BeamWorkspace, pre=$('bm-prefix'); if(!BW||!pre) return;
+    const num=$('bm-number'), fl=$('bm-floor'), nt=$('bm-notes');
+    pre.value=BW.beam.beamMark.prefix; num.value=BW.beam.beamMark.number;
+    fl.value=BW.beam.metadata.floor; nt.value=BW.beam.metadata.notes;
+    pre.addEventListener('change',()=>{ BW.setBeamMark(pre.value,null); refreshActive(); });
+    ['input','change'].forEach(ev=>{
+      num.addEventListener(ev,()=>{ BW.setBeamMark(null,num.value); refreshActive(); });
+      fl.addEventListener(ev,()=>{ BW.setMeta(fl.value,null); refreshActive(); });
+      nt.addEventListener(ev,()=>{ BW.setMeta(null,nt.value); refreshActive(); });
+    });
+    if(typeof window.enhanceA11y==='function') window.enhanceA11y($('beam-meta-card'));
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',wire); else wire();
+})();
+</script>
+
 <!-- ============ Session 3A · continuous-beam UI logic ============ -->
 <script>
 (function(){
@@ -7653,7 +7694,7 @@ window.BeamWorkspace = (function(){
     }
     renderSpanInputs(); renderCantInputs();
     window.__contBeam = { calc:calcContinuous, setMode, getSpans:()=>spans, setSpans:s=>{spans=s.map(x=>({pts:[],...x}));renderSpanInputs();},
-      setCant:(L,R)=>{cantL=L;cantR=R;if(cbL)cbL.checked=!!L;if(cbR)cbR.checked=!!R;renderCantInputs();} };
+      setCant:(L,R)=>{cantL=L;cantR=R;if(cbL)cbL.checked=!!L;if(cbR)cbR.checked=!!R;renderCantInputs();}, refreshNaming };
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })();
