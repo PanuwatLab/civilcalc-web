@@ -7,8 +7,10 @@ Ground truth (closed-form):
   2 equal spans, central P each span -> M_B = -3PL/16
 """
 import sys, io, importlib.util
+from pathlib import Path
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-spec = importlib.util.spec_from_file_location("calc", r"C:\Users\Jone\Desktop\civilcalc-web\calc.py")
+_CALC_PATH = Path(__file__).resolve().parent / "calc.py"
+spec = importlib.util.spec_from_file_location("calc", str(_CALC_PATH))
 calc = importlib.util.module_from_spec(spec); sys.modules["calc"] = calc; spec.loader.exec_module(calc)
 SI, PL = calc.SpanInput, calc.PointLoad
 
@@ -104,3 +106,5 @@ chk("Ld DRMK Ex8.2 (DB25 top)", calc.dev_length_top_tension_cm(2.5, 4000, 240), 
 print("\n" + "="*64)
 print(f"RESULT: {len(PASS)} PASS / {len(FAIL)} FAIL", "| ALL GREEN" if not FAIL else "| FAIL: "+", ".join(FAIL))
 print("="*64)
+
+sys.exit(1 if FAIL else 0)

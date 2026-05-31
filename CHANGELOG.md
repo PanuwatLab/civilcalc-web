@@ -1,0 +1,32 @@
+# Changelog
+
+รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/) · เวอร์ชันตาม [SemVer](https://semver.org/)
+
+## [Unreleased]
+### เพิ่ม
+- ตั้งค่า GitHub workflow: branch protection (main + dev), PR template, CI (รันเทสต์ Python ทุก PR), README, CHANGELOG
+
+## [0.4.0] — 2026-05-30
+### เพิ่ม
+- **คานยื่น (Cantilever)** — ส่วนยื่นปลายซ้าย/ขวาบนคานต่อเนื่อง (Three-Moment · เหล็กบน · เฉือนหน้าเสา · Ld · min-depth)
+- Smart Load Input — โหลดอัตโนมัติจากไลบรารี ว.ส.ท. (ผนัง / พื้น / จร)
+- Design Parameters แสดงทั้ง 2 โหมด · As/ρ ต่อช่วง
+### ปรับปรุง
+- Design system unify ทั้ง 2 โหมด (support symbols · animation · verdict card · color tokens)
+- a11y: ARIA + keyboard · responsive มือถือ · full-width 2-col layout
+- ระบบกันพังในแอป: `runTests()` 52/52 + `runDesignAudit()` 27/27
+
+## [0.3.0] — 2026-05-30
+### เพิ่ม
+- **คานต่อเนื่อง 2–4 ช่วง** — วิเคราะห์แม่นยำ Three-Moment + จุดโหลด + โหลดต่อช่วง
+- กราฟ V/M ซ้อน + ตารางเหล็กต่อช่วง + Excel export (ก.ว.-ready)
+
+## [0.2.0] — 2026-05-29
+### เพิ่ม
+- จุดโหลด (Point loads) 0–5 จุด
+- ออกแบบเหล็กปลอก (Shear stirrup · DRMK ว.ส.ท. 1008-38)
+- หน่วยไทย (ตัน) ทั้งแอป
+
+## [0.1.0] — 2026-05-29
+### เพิ่ม
+- เวอร์ชันแรก — ออกแบบคานช่วงเดียว (ดัด · singly-reinforced flexure)

@@ -11,10 +11,12 @@ Layers:
   E · Unit-conversion consistency (kN <-> kg <-> ton)
 """
 import sys, io, math, importlib.util, traceback
+from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-spec = importlib.util.spec_from_file_location("calc", r"C:\Users\Jone\Desktop\civilcalc-web\calc.py")
+_CALC_PATH = Path(__file__).resolve().parent / "calc.py"
+spec = importlib.util.spec_from_file_location("calc", str(_CALC_PATH))
 calc = importlib.util.module_from_spec(spec)
 sys.modules["calc"] = calc          # needed for dataclass forward-ref resolution
 spec.loader.exec_module(calc)
@@ -247,3 +249,5 @@ if FAIL:
 else:
     print("ALL GREEN")
 print("="*68)
+
+sys.exit(1 if FAIL else 0)
