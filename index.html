@@ -7520,6 +7520,7 @@ window.BeamWorkspace = (function(){
       svg+=`<rect x="${lo}" y="${yB-5}" width="${Math.abs(b-a)}" height="10" rx="2" fill="url(#cbgrad)" opacity="0.92"/>`;
       const tipX=X(g.tip_x);
       svg+=`<line x1="${tipX}" y1="${yB-10}" x2="${tipX}" y2="${yB+10}" stroke="#94a3b8" stroke-width="2"/>`;   // free tip
+      svg+=`<text x="${tipX}" y="${yB+24}" text-anchor="middle" font-size="9" fill="#94a3b8" font-style="italic">↳ ปลายยื่น</text>`;   // A7 · non-editable (ขอบ ไม่ใช่แกนกริด)
       (g.points||[]).forEach(p=>{ const px=X(p.x_global);
         svg+=`<line x1="${px}" y1="20" x2="${px}" y2="${yB-6}" stroke="#dc2626" stroke-width="2.5"/><polygon points="${px-5},${yB-12} ${px+5},${yB-12} ${px},${yB-4}" fill="#dc2626"/>`;
         svg+=`<text x="${px}" y="16" text-anchor="middle" font-size="11" fill="#b91c1c" font-weight="700">P=${p.Pu_ton} ต</text>`; });
@@ -7787,6 +7788,12 @@ window.runDesignAudit = async function runDesignAudit(){
   A('a11y: pill มี aria-pressed', !!(_pill&&_pill.hasAttribute('aria-pressed')), _pill?_pill.getAttribute('aria-pressed'):'n/a');
   var _bigSvg=document.getElementById('svg-M');
   A('a11y: กราฟ SVG role=img + aria-label', !!(_bigSvg&&_bigSvg.getAttribute('role')==='img'&&_bigSvg.getAttribute('aria-label')), _bigSvg?_bigSvg.getAttribute('aria-label'):'n/a');
+  // ---- A5 · Phase 1 beam-naming guards (drift checker · index-only · display-only) ----
+  A('naming: BeamWorkspace module พร้อม (gridName)', typeof window.BeamWorkspace==='object' && typeof window.BeamWorkspace.gridName==='function');
+  A('naming: gridName fallback ปลอดภัย (ว่าง→default)', (()=>{ try{ return window.BeamWorkspace.gridName(99,'Z')==='Z'; }catch(e){ return false; } })());
+  A('naming: header cross-ref รูปแบบ "คาน … · ช่วงกริด …"', (()=>{ try{ const bw=window.BeamWorkspace; return /^คาน .+· ช่วงกริด /.test(bw.headerStr(bw.spanRef(0,1,'A','B'))); }catch(e){ return false; } })());
+  A('naming: ต่อเนื่อง มีแถบตั้งชื่อกริด (#c-grid-bar)', (()=>{ const b=document.getElementById('c-grid-bar'); return !!b && b.querySelectorAll('.cc-grid-input').length>0; })());
+  A('naming: ชื่อกริด XSS-safe (strip <>&)', (()=>{ try{ const bw=window.BeamWorkspace; bw.setGridName(999,'<b>&x'); const v=bw.beam.gridNames[999]; delete bw.beam.gridNames[999]; return v==='bx'; }catch(e){ return false; } })());
   const passed=checks.filter(c=>c.pass).length, failed=checks.length-passed;
   console.log(`[design-audit] ${passed}/${checks.length} · `+(failed?'⚠ DRIFT: '+checks.filter(c=>!c.pass).map(c=>c.name).join(' | '):'✓ ALL CONSISTENT'));
   if(failed) try{ console.table(checks.filter(c=>!c.pass)); }catch(e){}
