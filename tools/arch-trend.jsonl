@@ -1,0 +1,1 @@
+{"ts": "2026-05-31T14:23:21+00:00", "label": "baseline", "file": "index.html", "lines": 7719, "kb": 407.9, "verdict_file": "RED", "verdict": "SPLIT SOON", "js_blocks": 15, "red_blocks": 0, "func_count": 113, "red_funcs": 7, "globals": 11, "responsibilities": 6, "biggest_js": [863, ""]}
