@@ -6250,7 +6250,18 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
       const stirNote = sd.shop_drawing_notation || '—';
       const MuTon = U.fTm(Mu_kNm), VuTon = U.fT(out.Vu);
       const xM = (out.x_at_M_max != null ? out.x_at_M_max : out.input.L/2).toFixed(2);
-      let html = `
+      // Phase 1 · cross-ref header + grid-naming bar (2 grids A/B · index-only · names display-only · XSS-safe)
+      const _bw=window.BeamWorkspace;
+      const _esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      let _hdr='', _bar='';
+      if(_bw){
+        _hdr=`<div class="cc-card p-3 mb-3 border-l-4 border-amber-400"><div class="text-[10px] uppercase tracking-wider text-slate-400">รายการคาน</div><div class="font-mono text-[15px] font-semibold text-slate-800">${_esc(_bw.headerStr(_bw.spanRef(0,1,'A','B')))}</div></div>`;
+        let _cells='';
+        for(let i=0;i<=1;i++){ const def=String.fromCharCode(65+i);
+          _cells+=`<input class="ss-grid-input" data-grid="${i}" value="${_esc(_bw.beam.gridNames[i]||'')}" placeholder="${def}" maxlength="16" aria-label="ชื่อกริดจุดที่ ${i+1} (ค่าเริ่มต้น ${def})" title="แก้ชื่อกริด · ค่าเริ่มต้น ${def} · ว่าง=คืนค่าเริ่มต้น" style="width:48px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px 2px;background:#fff;color:#1e293b">`; }
+        _bar=`<div class="flex items-center gap-2 flex-wrap mb-3"><span class="text-[11px] text-slate-500 font-medium">🏷️ ชื่อกริด</span><div class="flex items-center gap-1.5">${_cells}</div><span class="text-[10px] text-slate-400">แก้ได้ · ว่าง=ค่าเริ่มต้น</span></div>`;
+      }
+      let html = _hdr + _bar + `
         <div class="text-[12px] text-slate-500 mb-2">วิเคราะห์คานช่วงเดียว (simply-supported) · b×h = ${out.input.b}×${out.input.h} ซม. · f'c=${out.input.fc} · fy=${out.input.fy} ksc</div>
         <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์บวก (กลางคาน) → เหล็กล่าง + เหล็กปลอก</div>
         <table class="c-tbl"><thead><tr><th>ช่วง</th><th>+M (ต·ม)</th><th>เหล็กล่าง</th><th>Vu (ต)</th><th>เหล็กปลอก</th></tr></thead>
@@ -6268,10 +6279,24 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
           <p class="text-[10px] text-slate-400 mt-2">รูปแสดงเหล็กตามจำนวนจริง · ขอปลอก 135°</p>`;
       }
       host.innerHTML = html;
+      // wire single-span grid-naming bar (A/B) → BeamWorkspace + refresh (display-only · no recompute)
+      const _bw2=window.BeamWorkspace;
+      if(_bw2) host.querySelectorAll('.ss-grid-input').forEach(inp=>{
+        inp.addEventListener('change',()=>{
+          const i=+inp.dataset.grid;
+          const others=[...host.querySelectorAll('.ss-grid-input')].filter(x=>+x.dataset.grid!==i).map(x=>(x.value.trim()||x.placeholder));
+          const res=_bw2.setGridName(i, inp.value, others);
+          if(!res.ok){ inp.value=_bw2.beam.gridNames[i]||''; inp.style.borderColor='#f43f5e'; inp.style.background='#fff1f2'; setTimeout(()=>{inp.style.borderColor='#cbd5e1';inp.style.background='#fff';},1400); return; }
+          inp.value=_bw2.beam.gridNames[i]||'';
+          if(window.__ssRefreshNaming) window.__ssRefreshNaming();
+        });
+      });
+      if(typeof window.enhanceA11y==='function') window.enhanceA11y(host);
     })();
 
     // Store last result for Excel + further use
     window.__lastDesign = out;
+    window.__ssRefreshNaming = function(){ if(window.__lastDesign) bindResultPass(window.__lastDesign); };
   }
 
   // ===== Session 2 · bind Shear card + beam-elevation spacing diagram (DRMK style) =====
