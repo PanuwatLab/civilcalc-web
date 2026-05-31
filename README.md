@@ -48,6 +48,7 @@ rebar_table.json   # ตารางขนาดเหล็ก
 uat_recheck.py     # เทสต์ engine: ดัด/เฉือน (เทียบ ground-truth ตำรา DRMK)
 uat_continuous.py  # เทสต์ engine: ต่อเนื่อง + คานยื่น (closed-form)
 design.md          # เอกสารออกแบบ
+tools/             # เครื่องมือ dev — web_arch_audit.py (sensor สุขภาพโครงสร้างโค้ด · sensor-only)
 ```
 
 ## 🧪 การทดสอบ

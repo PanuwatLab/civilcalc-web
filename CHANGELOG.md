@@ -5,6 +5,7 @@
 ## [Unreleased]
 ### เพิ่ม
 - ตั้งค่า GitHub workflow: branch protection (main + dev), PR template, CI (รันเทสต์ Python ทุก PR), README, CHANGELOG
+- **เครื่องมือ dev (ไม่ใช่ฟีเจอร์แอป)** — `tools/web_arch_audit.py` sensor วัดสุขภาพโครงสร้าง `index.html` (script-block size · function length · cross-scope globals · responsibility count → SPLIT verdict · **sensor-only ไม่แตะโค้ด**) + CI step **warn-only** (ไม่บล็อก build) + trend log `tools/arch-trend.jsonl`
 
 ## [0.4.0] — 2026-05-30
 ### เพิ่ม
