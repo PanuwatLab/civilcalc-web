@@ -1,1 +1,2 @@
 {"ts": "2026-05-31T14:23:21+00:00", "label": "baseline", "file": "index.html", "lines": 7719, "kb": 407.9, "verdict_file": "RED", "verdict": "SPLIT SOON", "js_blocks": 15, "red_blocks": 0, "func_count": 113, "red_funcs": 7, "globals": 11, "responsibilities": 6, "biggest_js": [863, ""]}
+{"ts": "2026-05-31T20:01:50+00:00", "label": "phase1-naming", "file": "index.html", "lines": 7893, "kb": 422.3, "verdict_file": "RED", "verdict": "SPLIT SOON", "js_blocks": 17, "red_blocks": 0, "func_count": 125, "red_funcs": 7, "globals": 12, "responsibilities": 6, "biggest_js": [876, ""]}
