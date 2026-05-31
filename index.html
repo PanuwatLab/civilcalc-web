@@ -6995,11 +6995,77 @@ function renderLoadList(host, items, onChange){
 }
 </script>
 
+<!-- ============ Phase 1 · Beam Workspace — gridName + beam-meta state (clean module · index-only engine access) ============ -->
+<script>
+/* BeamWorkspace — Phase 1 (in-memory · ไม่ persist · นั่นคือ Phase 2)
+   หลักการ: engine เข้าถึง "by index เท่านั้น" — ชื่อ custom เป็น display-only ห้าม query ผลด้วยชื่อ
+   โมดูลสะอาดระดับ window · ไม่บอลต์เข้า IIFE เดิม (กันเพิ่ม tangle · ref Web-Arch-Guard) */
+window.BeamWorkspace = (function(){
+  const SCHEMA = 1;
+  const MAX_LEN = 12;                       // ความยาวชื่อกริดสูงสุด (UI: เกิน → ellipsis+title)
+  const beam = {                            // Beam object (1 ตัว · Phase 2 = หลายตัว + persist)
+    id: 'beam-1',
+    schemaVersion: SCHEMA,
+    beamMark: { prefix: 'B', number: '1' }, // → "B1" · prefix ∈ B/GB/RB/CB
+    metadata: { floor: '', notes: '' },     // ตัด "ตำแหน่ง" ตาม ฟันธง · optional ทั้งหมด
+    gridNames: {}                           // sparse { gridIndex: "customName" } · ว่าง = ใช้ default
+  };
+  const PREFIXES = ['B','GB','RB','CB'];
+
+  const _s = v => (v==null ? '' : String(v)).trim();
+
+  // ป้ายกริดที่จะแสดง — custom ถ้ามี ไม่งั้น fallback (caller ส่ง default ของโหมดนั้น เช่น gl(i)=A,B,C)
+  function gridName(i, fallback){
+    const c = beam.gridNames[i];
+    if (c != null && _s(c) !== '') return String(c);
+    return (fallback != null) ? fallback : String.fromCharCode(65+i);
+  }
+
+  // ตั้งชื่อกริด · edge (locked): ว่าง→default(เคลียร์) · ซ้ำ→block+revert · ยาว→รับไว้ (UI ellipsis)
+  // others = ชื่อที่ "แสดงจริง" ของกริดอื่น (effective · custom|default) สำหรับเช็คซ้ำข้ามทั้ง custom+default
+  function setGridName(i, name, others){
+    name = _s(name);
+    if (name === '') { delete beam.gridNames[i]; return { ok:true, cleared:true }; }
+    const sibs = Array.isArray(others) ? others.map(_s) : Object.keys(beam.gridNames)
+      .filter(k => +k !== i).map(k => _s(beam.gridNames[k]));
+    if (sibs.indexOf(name) !== -1) return { ok:false, reason:'duplicate' };
+    beam.gridNames[i] = name;
+    return { ok:true };
+  }
+
+  function beamMarkStr(){ return _s(beam.beamMark.prefix) + _s(beam.beamMark.number); }
+  function setBeamMark(prefix, number){
+    if (prefix != null && PREFIXES.indexOf(prefix) !== -1) beam.beamMark.prefix = prefix;
+    if (number != null) beam.beamMark.number = _s(number);
+  }
+  function setMeta(floor, notes){
+    if (floor != null) beam.metadata.floor = _s(floor);
+    if (notes != null) beam.metadata.notes = _s(notes);
+  }
+
+  // หัวผล cross-ref: "คาน B1 · ช่วงกริด g1–g2 · ชั้น X" (ส่วนที่ว่างถูกตัดทิ้ง)
+  function spanRef(i0, i1, fb0, fb1){ return `ช่วงกริด ${gridName(i0,fb0)}–${gridName(i1,fb1)}`; }
+  function headerStr(spanRefText){
+    let s = 'คาน ' + (beamMarkStr() || '—');
+    if (spanRefText) s += ' · ' + spanRefText;
+    if (_s(beam.metadata.floor)) s += ' · ชั้น ' + _s(beam.metadata.floor);
+    return s;
+  }
+
+  return {
+    SCHEMA, MAX_LEN, PREFIXES, beam,
+    gridName, setGridName, beamMarkStr, setBeamMark, setMeta, spanRef, headerStr,
+    getState: () => JSON.parse(JSON.stringify(beam)),
+    reset(){ beam.gridNames={}; beam.beamMark={prefix:'B',number:'1'}; beam.metadata={floor:'',notes:''}; }
+  };
+})();
+</script>
+
 <!-- ============ Session 3A · continuous-beam UI logic ============ -->
 <script>
 (function(){
   const KNM_PER_TON = 1/0.10197;      // ตัน/ม → kN/m · and ตัน(force) → kN
-  const gl = i => String.fromCharCode(65+i);   // 0->A
+  const gl = i => (window.BeamWorkspace ? window.BeamWorkspace.gridName(i, String.fromCharCode(65+i)) : String.fromCharCode(65+i));   // 0->A · custom name ผ่าน BeamWorkspace (fallback A,B,C)
   const round = (n,d=2)=>{ const f=Math.pow(10,d); return Math.round(n*f)/f; };
   const fmtTon = x => (x).toFixed(2);
 
