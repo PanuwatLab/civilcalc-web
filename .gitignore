@@ -1,0 +1,45 @@
+# ───────────────────────────────────────────────
+# Civil Calc Web — .gitignore
+# web app: single index.html + Pyodide-embedded calc.py
+# ───────────────────────────────────────────────
+
+# Local safety backups (เซฟมือ — เก็บในเครื่องพอ)
+*.bak
+
+# Python compiled / cache / venv
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Mockup & design-history (~2.4MB · เก็บในเครื่อง + PanuwatBrain vault)
+mockup-*.html
+iteration-prompt-*.txt
+v2-extracted/
+v3-extracted/
+
+# Claude Code local-only settings (เก็บ launch.json ไว้ · ตัด perms ส่วนตัว)
+.claude/settings.local.json
+
+# Secrets (โปรเจคนี้ไม่ควรมี — กันพลาดไว้)
+.env
+.env.local
+*.key
+*.pem
+*serviceAccount*.json
+firebase-adminsdk*.json
+secrets/
+credentials/
+tokens/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build / package artifacts
+*.zip
+dist/
+build/
+release/

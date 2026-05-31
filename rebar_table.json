@@ -1,0 +1,110 @@
+{
+  "schema_version": "1.0",
+  "source": "TIS 24-2548 (มอก. เหล็กข้ออ้อยและเหล็กเส้นกลม) · cross-check มงคล Table A.2",
+  "unit": "cm and cm² · Thai construction standard",
+  "sizes": [
+    {
+      "name": "DB10",
+      "type": "deformed",
+      "diameter_cm": 1.0,
+      "diameter_mm": 10,
+      "area_cm2": 0.785,
+      "area_mm2": 78.54,
+      "weight_kg_per_m": 0.617,
+      "notes": "smallest standard deformed bar · used for small beams · stirrups in some designs"
+    },
+    {
+      "name": "DB12",
+      "type": "deformed",
+      "diameter_cm": 1.2,
+      "diameter_mm": 12,
+      "area_cm2": 1.131,
+      "area_mm2": 113.10,
+      "weight_kg_per_m": 0.888,
+      "notes": "common for small beams · slabs"
+    },
+    {
+      "name": "DB16",
+      "type": "deformed",
+      "diameter_cm": 1.6,
+      "diameter_mm": 16,
+      "area_cm2": 2.011,
+      "area_mm2": 201.06,
+      "weight_kg_per_m": 1.578,
+      "notes": "most common for residential beam main bars"
+    },
+    {
+      "name": "DB20",
+      "type": "deformed",
+      "diameter_cm": 2.0,
+      "diameter_mm": 20,
+      "area_cm2": 3.142,
+      "area_mm2": 314.16,
+      "weight_kg_per_m": 2.466,
+      "notes": "common for commercial beam main bars"
+    },
+    {
+      "name": "DB25",
+      "type": "deformed",
+      "diameter_cm": 2.5,
+      "diameter_mm": 25,
+      "area_cm2": 4.909,
+      "area_mm2": 490.87,
+      "weight_kg_per_m": 3.854,
+      "notes": "heavy beam · column main bars"
+    },
+    {
+      "name": "DB28",
+      "type": "deformed",
+      "diameter_cm": 2.8,
+      "diameter_mm": 28,
+      "area_cm2": 6.158,
+      "area_mm2": 615.75,
+      "weight_kg_per_m": 4.834,
+      "notes": "very heavy beam · special construction · check supplier availability"
+    }
+  ],
+  "stirrup_sizes": [
+    {
+      "name": "RB6",
+      "type": "smooth-round",
+      "diameter_cm": 0.6,
+      "diameter_mm": 6,
+      "area_cm2": 0.283,
+      "weight_kg_per_m": 0.222,
+      "notes": "smallest stirrup · light beams"
+    },
+    {
+      "name": "RB9",
+      "type": "smooth-round",
+      "diameter_cm": 0.9,
+      "diameter_mm": 9,
+      "area_cm2": 0.636,
+      "weight_kg_per_m": 0.499,
+      "notes": "common stirrup size for typical beams"
+    },
+    {
+      "name": "DB10",
+      "type": "deformed-stirrup",
+      "diameter_cm": 1.0,
+      "diameter_mm": 10,
+      "area_cm2": 0.785,
+      "weight_kg_per_m": 0.617,
+      "notes": "deformed stirrup · heavier beams · better anchorage"
+    }
+  ],
+  "spacing_rules": {
+    "min_clear_spacing_cm_formula": "max(db, 2.5)",
+    "min_clear_spacing_note": "per ACI 25.2.1 / ว.ส.ท. · min clear between parallel bars in single layer",
+    "max_bars_per_layer_typical": 6,
+    "max_bars_per_layer_note": "more than 6 main bars in one layer = production difficulty · use multi-layer instead",
+    "min_cover_indoor_cm": 3.0,
+    "min_cover_outdoor_cm": 4.0,
+    "min_cover_severe_cm": 5.0
+  },
+  "grade_compatibility": {
+    "stirrup_recommended_grades": ["SR24", "SD30"],
+    "main_bar_recommended_grades": ["SD40", "SD50"],
+    "note": "SD40/SD50 (deformed · high-yield) standard for main bars · SR24/SD30 for stirrups (smaller diameter · ductility for bending around bars)"
+  }
+}
