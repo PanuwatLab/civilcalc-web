@@ -7055,7 +7055,7 @@ window.BeamWorkspace = (function(){
     gridNames: {}                           // sparse { gridIndex: "customName" } · ว่าง = ใช้ default
   };
   const PREFIXES = ['B','GB','RB','CB'];
-  let gridUniverse = 3;   // จำนวนกริดสูงสุดที่เคยเรนเดอร์ (ทั้ง 2 โหมด · min 3 = ต่อเนื่อง default 2 ช่วง A,B,C) · ใช้เช็ค dup กับ default ข้ามโหมด
+  let gridUniverse = 5;   // reserve กริดสูงสุดที่เป็นไปได้ A–E (ต่อเนื่อง cap 4 ช่วง = 5 กริด) ตั้งแต่ต้น · custom ชน default ข้ามโหมดไม่ได้เลย (Codex r8: กัน future-default collision · setGridCount ขยายต่อถ้า cap เปลี่ยน)
 
   const _s = v => (v==null ? '' : String(v)).trim();
   const _safe = v => _s(v).replace(/[<>&"']/g, '');   // strip HTML-dangerous chars (XSS defense · ชื่อ/meta = โค้ดสั้น)
@@ -7110,7 +7110,7 @@ window.BeamWorkspace = (function(){
     SCHEMA, MAX_LEN, PREFIXES, beam,
     gridName, setGridName, setGridCount, beamMarkStr, setBeamMark, setMeta, spanRef, headerStr,
     getState: () => JSON.parse(JSON.stringify(beam)),
-    reset(){ beam.gridNames={}; beam.beamMark={prefix:'B',number:'1'}; beam.metadata={floor:'',notes:''}; gridUniverse=3; }
+    reset(){ beam.gridNames={}; beam.beamMark={prefix:'B',number:'1'}; beam.metadata={floor:'',notes:''}; gridUniverse=5; }
   };
 })();
 </script>
