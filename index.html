@@ -458,7 +458,7 @@
   .method-tab:hover { border-color:#0ea5e9; }
   .method-tab-active { background:#0ea5e9; border-color:#0ea5e9; color:#fff; }
   /* in continuous mode hide every direct child of main except the mode bar + panel */
-  body.mode-continuous main > :not(#cont-mode-bar):not(#continuous-panel) { display:none !important; }
+  body.mode-continuous main > :not(#cont-mode-bar):not(#continuous-panel):not(#beam-meta-card) { display:none !important; }
   body:not(.mode-continuous) #continuous-panel { display:none !important; }
   .c-span-row { display:grid; grid-template-columns: 28px 1fr 1fr 1fr 28px; gap:6px; align-items:center; }
   .c-tbl { width:100%; border-collapse:collapse; font-size:12px; }
