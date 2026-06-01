@@ -7149,6 +7149,7 @@ window.BeamWorkspace = (function(){
   const round = (n,d=2)=>{ const f=Math.pow(10,d); return Math.round(n*f)/f; };
   const fmtTon = x => (x).toFixed(2);
   const escHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));   // escape innerHTML + attribute context (quotes too · self-sufficient defense-in-depth)
+  const mapLbl = lbl => { const BW=window.BeamWorkspace; return String(lbl==null?'':lbl).replace(/[A-Z]/g, c => BW ? BW.gridName(c.charCodeAt(0)-65, c) : c); };   // engine grid letter(s) → custom name (Codex r9: ตาราง/Excel/reactions ตรงกับ header/schematic หลัง rename · display-only)
 
   // ---- span state (DL/LL in ตัน/ม · pts = point loads [{x:m, P:ตัน, kind:'DL'|'LL'}]) ----
   let spans = [ {L:4.0, DL:1.0, LL:0.4, pts:[]}, {L:4.0, DL:1.0, LL:0.4, pts:[]} ];
@@ -7337,7 +7338,7 @@ window.BeamWorkspace = (function(){
     const _rho = d => (d && d.rho_final!=null && d.rho_final>0) ? d.rho_final.toFixed(5) : '—';
     let spanRows = o.spans.map(s=>{
       const sh = s.shear||{};
-      return `<tr><td class="lbl">${s.label}</td>`+
+      return `<tr><td class="lbl">${escHtml(mapLbl(s.label))}</td>`+
         `<td>${fmtTon(s.M_pos_tonm)}</td>`+
         `<td>${_asr(s.bottom)}</td>`+
         `<td>${_rho(s.bottom)}</td>`+
@@ -7347,17 +7348,17 @@ window.BeamWorkspace = (function(){
     }).join('');
     // per-support table
     let supRows = o.supports.map(s=>{
-      if(Math.abs(s.M_neg_tonm) < 0.005) return `<tr><td class="lbl">${s.label}</td><td colspan="4" class="text-slate-400">${s.desc||'M⁻=0'}</td></tr>`;
+      if(Math.abs(s.M_neg_tonm) < 0.005) return `<tr><td class="lbl">${escHtml(mapLbl(s.label))}</td><td colspan="4" class="text-slate-400">${s.desc||'M⁻=0'}</td></tr>`;
       const coef = s.neg_denom ? ` <span class="text-slate-400">(1/${s.neg_denom})</span>` : '';
-      return `<tr><td class="lbl">${s.label}</td><td>${fmtTon(s.M_neg_tonm)}${coef}</td><td>${_asr(s.top)}</td><td>${_rho(s.top)}</td><td><b>${s.top_bars}</b></td></tr>`;
+      return `<tr><td class="lbl">${escHtml(mapLbl(s.label))}</td><td>${fmtTon(s.M_neg_tonm)}${coef}</td><td>${_asr(s.top)}</td><td>${_rho(s.top)}</td><td><b>${s.top_bars}</b></td></tr>`;
     }).join('');
-    const reac = (o.reactions||[]).map(x=>`${x.label}: ${fmtTon(x.R_ton)} ต`).join(' · ');
+    const reac = (o.reactions||[]).map(x=>`${escHtml(mapLbl(x.label))}: ${fmtTon(x.R_ton)} ต`).join(' · ');
     let rec = '';
     if(o.recommended_top){
       const t=o.recommended_top;
       rec = `<div class="cc-card p-4 bg-emerald-50 border border-emerald-200">
         <div class="text-[13px] font-semibold text-emerald-800 mb-1">🔩 เหล็กบนแนะนำ (พาดทุกหัวเสาภายใน)</div>
-        <div class="text-[13px] text-emerald-900"><b>${t.bars}</b> · governing ที่หัวเสา ${t.governing_support} (M⁻=${fmtTon(t.M_neg_tonm)} ต·ม)<br>
+        <div class="text-[13px] text-emerald-900"><b>${t.bars}</b> · governing ที่หัวเสา ${escHtml(mapLbl(t.governing_support))} (M⁻=${fmtTon(t.M_neg_tonm)} ต·ม)<br>
         ยื่นจากกึ่งกลางเสา L/4 = <b>${t.cutoff_each_side_m.toFixed(2)} ม.</b> ต่อข้าง</div></div>`;
     }
     // unified verdict card (matches single-span .verdict-pass / .verdict-fail)
@@ -7396,7 +7397,7 @@ window.BeamWorkspace = (function(){
         const st=parseStir(s.shear);
         const svg=rcBeamSection({b:o.b*10,h:o.h*10,cover:30,topN:top.N,topDia:top.dia,
           botN:bot.N,botDia:bot.dia,stirrupDia:st.dia,spacing:st.sp,hook:135,scale:0.5});
-        return `<div class="text-center"><div class="text-[12px] font-semibold text-slate-600 mb-0.5">ช่วง ${s.label}</div>`+
+        return `<div class="text-center"><div class="text-[12px] font-semibold text-slate-600 mb-0.5">ช่วง ${escHtml(mapLbl(s.label))}</div>`+
                `<div class="text-[10px] text-slate-400 mb-1">บน ${sup.top_bars} · ล่าง ${s.bottom_bars}</div>`+
                `<div style="max-width:100%;overflow-x:auto">${svg}</div></div>`;
       }).join('');
@@ -7650,12 +7651,12 @@ window.BeamWorkspace = (function(){
       // span table
       ws.getCell(`A${r}`).value='โมเมนต์บวก (กลางช่วง) → เหล็กล่าง + เหล็กปลอก'; ws.getCell(`A${r}`).font={...TH(12),bold:true}; r++;
       hdr(['ช่วง','+M (ต·ม)','เหล็กล่าง','Vu (ต)','เหล็กปลอก']);
-      o.spans.forEach(s=> row([s.label, (s.M_pos_tonm).toFixed(2), s.bottom_bars, (s.Vu_ton).toFixed(2), (s.shear&&s.shear.shop_drawing_notation)||'—']));
+      o.spans.forEach(s=> row([mapLbl(s.label), (s.M_pos_tonm).toFixed(2), s.bottom_bars, (s.Vu_ton).toFixed(2), (s.shear&&s.shear.shop_drawing_notation)||'—']));
       r++;
       // support table
       ws.getCell(`A${r}`).value='โมเมนต์ลบ (หัวเสา) → เหล็กบน'; ws.getCell(`A${r}`).font={...TH(12),bold:true}; r++;
       hdr(['ที่รองรับ','−M (ต·ม)','เหล็กบน','','']);
-      o.supports.forEach(s=> row([s.label, Math.abs(s.M_neg_tonm)<0.005?'—':(s.M_neg_tonm).toFixed(2), s.top_bars, '', '']));
+      o.supports.forEach(s=> row([mapLbl(s.label), Math.abs(s.M_neg_tonm)<0.005?'—':(s.M_neg_tonm).toFixed(2), s.top_bars, '', '']));
       r++;
       // cantilever table
       if((o.cantilevers||[]).length){
@@ -7666,7 +7667,7 @@ window.BeamWorkspace = (function(){
         (o.cantilever_warnings||[]).forEach(w=>{ ws.mergeCells(`A${r}:E${r}`); const cx=ws.getCell(`A${r}`); cx.value=String(w).replace(/<br>/g,' '); cx.font={...TH(10),color:{argb:'FF991B1B'}}; r++; });
         r++;
       }
-      ws.mergeCells(`A${r}:E${r}`); c=ws.getCell(`A${r}`); c.value='แรงปฏิกิริยา: '+o.reactions.map(x=>`${x.label}=${x.R_ton.toFixed(2)} ต`).join(' · '); c.font=TH(11); r++;
+      ws.mergeCells(`A${r}:E${r}`); c=ws.getCell(`A${r}`); c.value='แรงปฏิกิริยา: '+o.reactions.map(x=>`${mapLbl(x.label)}=${x.R_ton.toFixed(2)} ต`).join(' · '); c.font=TH(11); r++;
       if(o.recommended_top){ ws.mergeCells(`A${r}:E${r}`); c=ws.getCell(`A${r}`); c.value=`เหล็กบนแนะนำ: ${o.recommended_top.bars} พาดทุกหัวเสาภายใน · ยื่น L/4=${o.recommended_top.cutoff_each_side_m.toFixed(2)} ม.`; c.font={...TH(11),bold:true}; r++; }
       r++;
       // embed diagrams
