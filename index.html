@@ -458,7 +458,7 @@
   .method-tab:hover { border-color:#0ea5e9; }
   .method-tab-active { background:#0ea5e9; border-color:#0ea5e9; color:#fff; }
   /* in continuous mode hide every direct child of main except the mode bar + panel */
-  body.mode-continuous main > :not(#cont-mode-bar):not(#continuous-panel) { display:none !important; }
+  body.mode-continuous main > :not(#cont-mode-bar):not(#continuous-panel):not(#beam-meta-card) { display:none !important; }
   body:not(.mode-continuous) #continuous-panel { display:none !important; }
   .c-span-row { display:grid; grid-template-columns: 28px 1fr 1fr 1fr 28px; gap:6px; align-items:center; }
   .c-tbl { width:100%; border-collapse:collapse; font-size:12px; }
@@ -511,6 +511,22 @@
     <span class="text-[12px] text-slate-500 mr-1">โหมด:</span>
     <button id="mode-single-btn" class="mode-tab mode-tab-active px-4 py-2 rounded-lg text-[13px] font-medium border">คานช่วงเดียว</button>
     <button id="mode-cont-btn" class="mode-tab px-4 py-2 rounded-lg text-[13px] font-medium border">คานต่อเนื่อง (หลายช่วง)</button>
+  </div>
+
+  <!-- ============ Phase 1 · Beam Meta (เบอร์/prefix/ชั้น/หมายเหตุ · เห็นทั้ง 2 โหมด · optional · ไม่บล็อกคำนวณ) ============ -->
+  <div id="beam-meta-card" class="cc-card p-3 mb-5 flex flex-wrap items-end gap-x-4 gap-y-2">
+    <div class="flex items-end gap-1.5">
+      <span class="text-[12px] text-slate-500 mb-1.5">🔖 คาน</span>
+      <select id="bm-prefix" class="input-underline !text-[13px] !font-sans" aria-label="ประเภทคาน (prefix)" title="ประเภทคาน: B ทั่วไป · GB คอดิน · RB หลังคา · CB ยึด">
+        <option value="B">B</option><option value="GB">GB</option><option value="RB">RB</option><option value="CB">CB</option>
+      </select>
+      <input id="bm-number" type="text" maxlength="8" value="1" class="input-underline !w-14 !text-center text-sm" aria-label="เบอร์คาน" title="เบอร์คาน เช่น 1, 12A" placeholder="1">
+    </div>
+    <label class="text-[11px] text-slate-500 flex flex-col gap-0.5">ชั้น (floor)
+      <input id="bm-floor" type="text" maxlength="16" class="input-underline !w-24 text-sm !font-sans" aria-label="ชั้น" placeholder="2 / ดาดฟ้า"></label>
+    <label class="text-[11px] text-slate-500 flex flex-col gap-0.5 flex-1 min-w-[150px]">หมายเหตุ
+      <input id="bm-notes" type="text" maxlength="60" class="input-underline w-full text-sm !font-sans" aria-label="หมายเหตุ" placeholder="เช่น คานรับผนัง (ไม่บังคับ)"></label>
+    <span class="text-[10px] text-slate-400 self-center">ไม่กรอกก็คำนวณได้ · โชว์บนหัวผล</span>
   </div>
 
   <!-- ============ CONTINUOUS BEAM PANEL (Session 3A) ============ -->
@@ -626,6 +642,7 @@
             <span id="c-sch-meta" class="text-[11px] text-slate-500 font-mono"></span>
           </div>
           <div id="c-schematic" class="w-full overflow-x-auto"></div>
+          <div id="c-grid-bar"></div>
         </div>
 
         <div class="cc-card p-4">
@@ -6233,7 +6250,18 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
       const stirNote = sd.shop_drawing_notation || '—';
       const MuTon = U.fTm(Mu_kNm), VuTon = U.fT(out.Vu);
       const xM = (out.x_at_M_max != null ? out.x_at_M_max : out.input.L/2).toFixed(2);
-      let html = `
+      // Phase 1 · cross-ref header + grid-naming bar (2 grids A/B · index-only · names display-only · XSS-safe)
+      const _bw=window.BeamWorkspace;
+      const _esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      let _hdr='', _bar='';
+      if(_bw){
+        _hdr=`<div class="cc-card p-3 mb-3 border-l-4 border-amber-400"><div class="text-[10px] uppercase tracking-wider text-slate-400">รายการคาน</div><div class="font-mono text-[15px] font-semibold text-slate-800">${_esc(_bw.headerStr(_bw.spanRef(0,1,'A','B')))}</div></div>`;
+        let _cells='';
+        for(let i=0;i<=1;i++){ const def=String.fromCharCode(65+i);
+          _cells+=`<input class="ss-grid-input" data-grid="${i}" value="${_esc(_bw.beam.gridNames[i]||'')}" placeholder="${def}" maxlength="8" aria-label="ชื่อกริดจุดที่ ${i+1} (ค่าเริ่มต้น ${def})" title="แก้ชื่อกริด · ค่าเริ่มต้น ${def} · ว่าง=คืนค่าเริ่มต้น" style="width:48px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px 2px;background:#fff;color:#1e293b;text-overflow:ellipsis;overflow:hidden">`; }
+        _bar=`<div class="flex items-center gap-2 flex-wrap mb-3"><span class="text-[11px] text-slate-500 font-medium">🏷️ ชื่อกริด</span><div class="flex items-center gap-1.5">${_cells}</div><span class="text-[10px] text-slate-400">แก้ได้ · ว่าง=ค่าเริ่มต้น</span></div>`;
+      }
+      let html = _hdr + _bar + `
         <div class="text-[12px] text-slate-500 mb-2">วิเคราะห์คานช่วงเดียว (simply-supported) · b×h = ${out.input.b}×${out.input.h} ซม. · f'c=${out.input.fc} · fy=${out.input.fy} ksc</div>
         <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์บวก (กลางคาน) → เหล็กล่าง + เหล็กปลอก</div>
         <table class="c-tbl"><thead><tr><th>ช่วง</th><th>+M (ต·ม)</th><th>เหล็กล่าง</th><th>Vu (ต)</th><th>เหล็กปลอก</th></tr></thead>
@@ -6251,10 +6279,26 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
           <p class="text-[10px] text-slate-400 mt-2">รูปแสดงเหล็กตามจำนวนจริง · ขอปลอก 135°</p>`;
       }
       host.innerHTML = html;
+      // wire single-span grid-naming bar (A/B) → BeamWorkspace + refresh (display-only · no recompute)
+      const _bw2=window.BeamWorkspace;
+      if(_bw2) host.querySelectorAll('.ss-grid-input').forEach(inp=>{
+        inp.addEventListener('input',(e)=>e.stopPropagation());   // P2#2 (Codex): กัน bubbling 'input' ตอนพิมพ์ → delegated recalc
+        inp.addEventListener('change',(e)=>{
+          e.stopPropagation();   // P2 (Codex #3): กัน change bubble → delegated recalc (rename = display-only)
+          const i=+inp.dataset.grid;
+          const others=[...host.querySelectorAll('.ss-grid-input')].filter(x=>+x.dataset.grid!==i).map(x=>(x.value.trim()||x.placeholder));
+          const res=_bw2.setGridName(i, inp.value, others);
+          if(!res.ok){ inp.value=_bw2.beam.gridNames[i]||''; inp.style.borderColor='#f43f5e'; inp.style.background='#fff1f2'; setTimeout(()=>{inp.style.borderColor='#cbd5e1';inp.style.background='#fff';},1400); return; }
+          inp.value=_bw2.beam.gridNames[i]||'';
+          if(window.__ssRefreshNaming) window.__ssRefreshNaming();
+        });
+      });
+      if(typeof window.enhanceA11y==='function') window.enhanceA11y(host);
     })();
 
     // Store last result for Excel + further use
     window.__lastDesign = out;
+    window.__ssRefreshNaming = function(){ if(window.__lastDesign) bindResultPass(window.__lastDesign); };
   }
 
   // ===== Session 2 · bind Shear card + beam-elevation spacing diagram (DRMK style) =====
@@ -6995,13 +7039,117 @@ function renderLoadList(host, items, onChange){
 }
 </script>
 
+<!-- ============ Phase 1 · Beam Workspace — gridName + beam-meta state (clean module · index-only engine access) ============ -->
+<script>
+/* BeamWorkspace — Phase 1 (in-memory · ไม่ persist · นั่นคือ Phase 2)
+   หลักการ: engine เข้าถึง "by index เท่านั้น" — ชื่อ custom เป็น display-only ห้าม query ผลด้วยชื่อ
+   โมดูลสะอาดระดับ window · ไม่บอลต์เข้า IIFE เดิม (กันเพิ่ม tangle · ref Web-Arch-Guard) */
+window.BeamWorkspace = (function(){
+  const SCHEMA = 1;
+  const MAX_LEN = 8;                        // cap ความยาวชื่อกริด — enforced ใน setGridName + maxlength + ellipsis (กัน overflow ป้าย SVG)
+  const beam = {                            // Beam object (1 ตัว · Phase 2 = หลายตัว + persist)
+    id: 'beam-1',
+    schemaVersion: SCHEMA,
+    beamMark: { prefix: 'B', number: '1' }, // → "B1" · prefix ∈ B/GB/RB/CB
+    metadata: { floor: '', notes: '' },     // ตัด "ตำแหน่ง" ตาม ฟันธง · optional ทั้งหมด
+    gridNames: {}                           // sparse { gridIndex: "customName" } · ว่าง = ใช้ default
+  };
+  const PREFIXES = ['B','GB','RB','CB'];
+  let gridUniverse = 5;   // reserve กริดสูงสุดที่เป็นไปได้ A–E (ต่อเนื่อง cap 4 ช่วง = 5 กริด) ตั้งแต่ต้น · custom ชน default ข้ามโหมดไม่ได้เลย (Codex r8: กัน future-default collision · setGridCount ขยายต่อถ้า cap เปลี่ยน)
+
+  const _s = v => (v==null ? '' : String(v)).trim();
+  const _safe = v => _s(v).replace(/[<>&"']/g, '');   // strip HTML-dangerous chars (XSS defense · ชื่อ/meta = โค้ดสั้น)
+
+  // ป้ายกริดที่จะแสดง — custom ถ้ามี ไม่งั้น fallback (caller ส่ง default ของโหมดนั้น เช่น gl(i)=A,B,C)
+  function gridName(i, fallback){
+    const c = beam.gridNames[i];
+    if (c != null && _s(c) !== '') return String(c);
+    return (fallback != null) ? fallback : String.fromCharCode(65+i);
+  }
+
+  // ตั้งชื่อกริด · edge (locked): ว่าง→default(เคลียร์) · ซ้ำ→block+revert · ยาว→รับไว้ (UI ellipsis)
+  // others = ชื่อที่ "แสดงจริง" ของกริดอื่น (effective · custom|default) สำหรับเช็คซ้ำข้ามทั้ง custom+default
+  function setGridName(i, name, others){
+    name = _safe(name).slice(0, MAX_LEN);   // P2: enforce length cap (MAX_LEN live · กัน overflow ป้าย SVG)
+    if (name === '') { delete beam.gridNames[i]; return { ok:true, cleared:true }; }
+    // dup check = effective name (custom||default) ของ "ทุกกริดในจักรวาล" (gridUniverse · ทั้ง 2 โหมด) ยกเว้น i + others ที่ส่งมา
+    // กันชนกับ DEFAULT ของกริด off-screen (Codex r6: single-span ตั้ง A→'C' ชน default กริด C ของต่อเนื่อง → 'C–C' กำกวม)
+    const sibs = [];
+    const _N = Math.max(gridUniverse, i + 1);
+    // ใส่ทั้ง effective name (custom||default) และ default letter ของทุก sibling — กัน custom ของ sibling ไป "บัง" default ของมัน
+    // (Codex r7: B→'X' แล้ว C→'B' = B contribute 'X' ไม่ใช่ 'B' → clear B ทีหลังชน 'B'/'B' · invariant: custom ต้องต่างจากทั้ง effective+default ของ sibling)
+    for (let k = 0; k < _N; k++) if (k !== i) { sibs.push(gridName(k, String.fromCharCode(65+k))); sibs.push(String.fromCharCode(65+k)); }
+    if (Array.isArray(others)) others.forEach(o => { const v = _s(o); if (v) sibs.push(v); });
+    if (sibs.map(s => s.toUpperCase()).indexOf(name.toUpperCase()) !== -1) return { ok:false, reason:'duplicate' };  // case-insensitive ('B'≡'b')
+    beam.gridNames[i] = name;
+    return { ok:true };
+  }
+
+  function beamMarkStr(){ return _s(beam.beamMark.prefix) + _s(beam.beamMark.number); }
+  function setBeamMark(prefix, number){
+    if (prefix != null && PREFIXES.indexOf(prefix) !== -1) beam.beamMark.prefix = prefix;
+    if (number != null) beam.beamMark.number = _safe(number);
+  }
+  function setMeta(floor, notes){
+    if (floor != null) beam.metadata.floor = _safe(floor);
+    if (notes != null) beam.metadata.notes = _safe(notes);
+  }
+
+  // หัวผล cross-ref: "คาน B1 · ช่วงกริด g1–g2 · ชั้น X" (ส่วนที่ว่างถูกตัดทิ้ง)
+  function spanRef(i0, i1, fb0, fb1){ return `ช่วงกริด ${gridName(i0,fb0)}–${gridName(i1,fb1)}`; }
+  function headerStr(spanRefText){
+    let s = 'คาน ' + (beamMarkStr() || '—');
+    if (spanRefText) s += ' · ' + spanRefText;
+    if (_s(beam.metadata.floor)) s += ' · ชั้น ' + _s(beam.metadata.floor);
+    if (_s(beam.metadata.notes)) s += ' · ' + _s(beam.metadata.notes);   // P2 (Codex r5): notes โชว์บนหัวผล ตามที่การ์ดบอก
+    return s;
+  }
+
+  function setGridCount(n){ if (n > gridUniverse) gridUniverse = n; }   // โหมดเรนเดอร์กริดกี่จุด → ขยายจักรวาล (เช็ค dup ข้ามโหมด)
+  return {
+    SCHEMA, MAX_LEN, PREFIXES, beam,
+    gridName, setGridName, setGridCount, beamMarkStr, setBeamMark, setMeta, spanRef, headerStr,
+    getState: () => JSON.parse(JSON.stringify(beam)),
+    reset(){ beam.gridNames={}; beam.beamMark={prefix:'B',number:'1'}; beam.metadata={floor:'',notes:''}; gridUniverse=5; }
+  };
+})();
+</script>
+
+<!-- ============ Phase 1 · Beam Meta wiring (→ BeamWorkspace · refresh active-mode header · optional) ============ -->
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  function refreshActive(){   // P3: refresh เฉพาะโหมดที่ active (กัน re-render โหมดที่ซ่อนทุก keystroke)
+    const cont = document.body.classList.contains('mode-continuous');
+    try{ if(cont && window.__contBeam && window.__contBeam.refreshNaming) window.__contBeam.refreshNaming(); }catch(e){}
+    try{ if(!cont && window.__ssRefreshNaming) window.__ssRefreshNaming(); }catch(e){}
+  }
+  function wire(){
+    const BW=window.BeamWorkspace, pre=$('bm-prefix'); if(!BW||!pre) return;
+    const num=$('bm-number'), fl=$('bm-floor'), nt=$('bm-notes');
+    pre.value=BW.beam.beamMark.prefix; num.value=BW.beam.beamMark.number;
+    fl.value=BW.beam.metadata.floor; nt.value=BW.beam.metadata.notes;
+    pre.addEventListener('change',()=>{ BW.setBeamMark(pre.value,null); refreshActive(); });
+    ['input','change'].forEach(ev=>{
+      num.addEventListener(ev,()=>{ BW.setBeamMark(null,num.value); refreshActive(); });
+      fl.addEventListener(ev,()=>{ BW.setMeta(fl.value,null); refreshActive(); });
+      nt.addEventListener(ev,()=>{ BW.setMeta(null,nt.value); refreshActive(); });
+    });
+    if(typeof window.enhanceA11y==='function') window.enhanceA11y($('beam-meta-card'));
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',wire); else wire();
+})();
+</script>
+
 <!-- ============ Session 3A · continuous-beam UI logic ============ -->
 <script>
 (function(){
   const KNM_PER_TON = 1/0.10197;      // ตัน/ม → kN/m · and ตัน(force) → kN
-  const gl = i => String.fromCharCode(65+i);   // 0->A
+  const gl = i => (window.BeamWorkspace ? window.BeamWorkspace.gridName(i, String.fromCharCode(65+i)) : String.fromCharCode(65+i));   // 0->A · custom name ผ่าน BeamWorkspace (fallback A,B,C)
   const round = (n,d=2)=>{ const f=Math.pow(10,d); return Math.round(n*f)/f; };
   const fmtTon = x => (x).toFixed(2);
+  const escHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));   // escape innerHTML + attribute context (quotes too · self-sufficient defense-in-depth)
+  const mapLbl = lbl => { const BW=window.BeamWorkspace; return String(lbl==null?'':lbl).replace(/[A-Z]/g, c => BW ? BW.gridName(c.charCodeAt(0)-65, c) : c); };   // engine grid letter(s) → custom name (Codex r9: ตาราง/Excel/reactions ตรงกับ header/schematic หลัง rename · display-only)
 
   // ---- span state (DL/LL in ตัน/ม · pts = point loads [{x:m, P:ตัน, kind:'DL'|'LL'}]) ----
   let spans = [ {L:4.0, DL:1.0, LL:0.4, pts:[]}, {L:4.0, DL:1.0, LL:0.4, pts:[]} ];
@@ -7035,7 +7183,7 @@ function renderLoadList(host, items, onChange){
       const row = document.createElement('div');
       row.className = 'c-span-row';
       row.innerHTML =
-        `<div class="text-[11px] font-semibold text-slate-500 text-center">${gl(i)}${gl(i+1)}</div>`+
+        `<div class="text-[11px] font-semibold text-slate-500 text-center">${String.fromCharCode(65+i)}${String.fromCharCode(65+i+1)}</div>`+
         `<input type="number" step="0.1" class="cc-input" data-i="${i}" data-k="L"  value="${s.L}">`+
         `<input type="number" step="0.1" class="cc-input" data-i="${i}" data-k="DL" value="${s.DL}"${hasLoads?' disabled title="มาจากรายการโหลด"':''}>`+
         `<input type="number" step="0.1" class="cc-input" data-i="${i}" data-k="LL" value="${s.LL}"${hasLoads?' disabled title="มาจากรายการโหลด"':''}>`+
@@ -7173,7 +7321,7 @@ function renderLoadList(host, items, onChange){
     else { warn.className='hidden'; warn.innerHTML=''; }
     lastResult = o;
     const meta=$('c-sch-meta'); if(meta) meta.textContent = `${o.n_spans} ช่วง · L รวม = ${o.total_L} ม. · b×h=${o.b}×${o.h}`;
-    renderSchematic(o); renderShear(o); renderMoment(o); renderResults(o);
+    renderSchematic(o); renderGridBar(o); renderShear(o); renderMoment(o); renderResults(o);
   }
 
   function banner(kind, html){
@@ -7190,7 +7338,7 @@ function renderLoadList(host, items, onChange){
     const _rho = d => (d && d.rho_final!=null && d.rho_final>0) ? d.rho_final.toFixed(5) : '—';
     let spanRows = o.spans.map(s=>{
       const sh = s.shear||{};
-      return `<tr><td class="lbl">${s.label}</td>`+
+      return `<tr><td class="lbl">${escHtml(mapLbl(s.label))}</td>`+
         `<td>${fmtTon(s.M_pos_tonm)}</td>`+
         `<td>${_asr(s.bottom)}</td>`+
         `<td>${_rho(s.bottom)}</td>`+
@@ -7200,17 +7348,17 @@ function renderLoadList(host, items, onChange){
     }).join('');
     // per-support table
     let supRows = o.supports.map(s=>{
-      if(Math.abs(s.M_neg_tonm) < 0.005) return `<tr><td class="lbl">${s.label}</td><td colspan="4" class="text-slate-400">${s.desc||'M⁻=0'}</td></tr>`;
+      if(Math.abs(s.M_neg_tonm) < 0.005) return `<tr><td class="lbl">${escHtml(mapLbl(s.label))}</td><td colspan="4" class="text-slate-400">${s.desc||'M⁻=0'}</td></tr>`;
       const coef = s.neg_denom ? ` <span class="text-slate-400">(1/${s.neg_denom})</span>` : '';
-      return `<tr><td class="lbl">${s.label}</td><td>${fmtTon(s.M_neg_tonm)}${coef}</td><td>${_asr(s.top)}</td><td>${_rho(s.top)}</td><td><b>${s.top_bars}</b></td></tr>`;
+      return `<tr><td class="lbl">${escHtml(mapLbl(s.label))}</td><td>${fmtTon(s.M_neg_tonm)}${coef}</td><td>${_asr(s.top)}</td><td>${_rho(s.top)}</td><td><b>${s.top_bars}</b></td></tr>`;
     }).join('');
-    const reac = (o.reactions||[]).map(x=>`${x.label}: ${fmtTon(x.R_ton)} ต`).join(' · ');
+    const reac = (o.reactions||[]).map(x=>`${escHtml(mapLbl(x.label))}: ${fmtTon(x.R_ton)} ต`).join(' · ');
     let rec = '';
     if(o.recommended_top){
       const t=o.recommended_top;
       rec = `<div class="cc-card p-4 bg-emerald-50 border border-emerald-200">
         <div class="text-[13px] font-semibold text-emerald-800 mb-1">🔩 เหล็กบนแนะนำ (พาดทุกหัวเสาภายใน)</div>
-        <div class="text-[13px] text-emerald-900"><b>${t.bars}</b> · governing ที่หัวเสา ${t.governing_support} (M⁻=${fmtTon(t.M_neg_tonm)} ต·ม)<br>
+        <div class="text-[13px] text-emerald-900"><b>${t.bars}</b> · governing ที่หัวเสา ${escHtml(mapLbl(t.governing_support))} (M⁻=${fmtTon(t.M_neg_tonm)} ต·ม)<br>
         ยื่นจากกึ่งกลางเสา L/4 = <b>${t.cutoff_each_side_m.toFixed(2)} ม.</b> ต่อข้าง</div></div>`;
     }
     // unified verdict card (matches single-span .verdict-pass / .verdict-fail)
@@ -7249,7 +7397,7 @@ function renderLoadList(host, items, onChange){
         const st=parseStir(s.shear);
         const svg=rcBeamSection({b:o.b*10,h:o.h*10,cover:30,topN:top.N,topDia:top.dia,
           botN:bot.N,botDia:bot.dia,stirrupDia:st.dia,spacing:st.sp,hook:135,scale:0.5});
-        return `<div class="text-center"><div class="text-[12px] font-semibold text-slate-600 mb-0.5">ช่วง ${s.label}</div>`+
+        return `<div class="text-center"><div class="text-[12px] font-semibold text-slate-600 mb-0.5">ช่วง ${escHtml(mapLbl(s.label))}</div>`+
                `<div class="text-[10px] text-slate-400 mb-1">บน ${sup.top_bars} · ล่าง ${s.bottom_bars}</div>`+
                `<div style="max-width:100%;overflow-x:auto">${svg}</div></div>`;
       }).join('');
@@ -7279,8 +7427,10 @@ function renderLoadList(host, items, onChange){
     const _rb = (0.85*_b1*o.fc/o.fy)*(6120/(6120+o.fy));
     const _rmin = 14/o.fy, _rmax = 0.75*_rb;
     const paramsCard = `<div class="cc-card p-4"><div class="diagram-label mb-2">📐 Design Parameters · พารามิเตอร์ออกแบบ (วัสดุ)</div><div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-[12px] font-mono"><span class="text-slate-600">β₁</span><span class="text-right text-slate-800">${_b1.toFixed(2)}</span><span class="text-slate-600">ρb</span><span class="text-right text-slate-800">${_rb.toFixed(5)}</span><span class="text-slate-600">ρmin</span><span class="text-right text-slate-800">${_rmin.toFixed(5)}</span><span class="text-slate-600">ρmax</span><span class="text-right text-slate-800">${_rmax.toFixed(5)}</span><span class="text-slate-600">φ (flexure)</span><span class="text-right text-slate-800">0.90</span><span class="text-slate-600">f'c / fy</span><span class="text-right text-slate-800">${o.fc}/${o.fy} ksc</span></div><div class="mt-3 pt-3 border-t border-slate-100 text-[10px] text-slate-500 font-mono">ACI 318-19 §22.2 · ว.ส.ท. 1008-38 · As/ρ ต่อช่วงดูในตาราง</div></div>`;
+    const _bw=window.BeamWorkspace;
+    const beamHeader=_bw?`<div class="cc-card p-3 mb-3 border-l-4 border-amber-400"><div class="text-[10px] uppercase tracking-wider text-slate-400">รายการคาน</div><div class="font-mono text-[15px] font-semibold text-slate-800">${escHtml(_bw.headerStr(_bw.spanRef(0,o.n_spans,'A',String.fromCharCode(65+o.n_spans))))}</div></div>`:'';
     res.innerHTML =
-      `${verdictCard}${metricsCard}<div class="cc-card p-4">
+      `${beamHeader}${verdictCard}${metricsCard}<div class="cc-card p-4">
          <div class="flex items-center justify-between mb-3"><div class="diagram-label">ผลออกแบบ · ${o.n_spans} ช่วง</div><div class="flex items-center gap-2"><button id="c-excel-btn" class="px-3 py-1 rounded-lg text-[12px] bg-emerald-600 hover:bg-emerald-700 text-white">📥 Excel</button></div></div>
          <div class="text-[11px] text-slate-500 mb-3">${o.method} · b×h = ${o.b}×${o.h} ซม. · f'c=${o.fc} · fy=${o.fy} ksc · combo ${cCombo}</div>
          <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์บวก (กลางช่วง) → เหล็กล่าง + เหล็กปลอก</div>
@@ -7324,6 +7474,39 @@ function renderLoadList(host, items, onChange){
     return `<g filter="url(#cbsh)"><rect x="${bx-w/2}" y="${by+oy-13}" width="${w}" height="20" rx="6" fill="#fff" stroke="${color}" stroke-width="1.2"/>`+
       `<text x="${bx}" y="${by+oy+1}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="11" font-weight="700" fill="${color}">${txt}</text></g><circle cx="${bx}" cy="${by}" r="3" fill="${color}"/>`; }
 
+  // ---- grid-naming bar (A2) + cross-ref refresh (A8) · index-only · names display-only ----
+  function renderGridBar(o){
+    const host=$('c-grid-bar'); if(!host) return;
+    const BW=window.BeamWorkspace; if(!BW){ host.innerHTML=''; return; }
+    const n=o.n_spans;   // grid axes = supports 0..n
+    if(BW.setGridCount) BW.setGridCount(n+1);   // ขยายจักรวาลกริด → dup เช็คข้ามโหมดครอบ default ของต่อเนื่อง
+    let cells='';
+    for(let i=0;i<=n;i++){
+      const def=String.fromCharCode(65+i);
+      cells+=`<input class="cc-grid-input" data-grid="${i}" value="${escHtml(BW.beam.gridNames[i]||'')}" placeholder="${def}" maxlength="8" aria-label="ชื่อกริดจุดที่ ${i+1} (ค่าเริ่มต้น ${def})" title="แก้ชื่อกริด · ค่าเริ่มต้น ${def} · ว่าง=คืนค่าเริ่มต้น" style="width:48px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px 2px;background:#fff;color:#1e293b;text-overflow:ellipsis;overflow:hidden">`;
+    }
+    host.innerHTML=`<div class="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-slate-100"><span class="text-[11px] text-slate-500 font-medium whitespace-nowrap">🏷️ ชื่อกริด</span><div class="flex items-center gap-1.5 flex-wrap">${cells}</div><span class="text-[10px] text-slate-400 whitespace-nowrap">แก้ได้ · ว่าง=ค่าเริ่มต้น</span></div>`;
+    host.querySelectorAll('.cc-grid-input').forEach(inp=>{
+      inp.addEventListener('input',(e)=>e.stopPropagation());   // P2#2 (Codex): กัน bubbling 'input' ตอนพิมพ์ → delegated scheduleContCalc (input listener)
+      inp.addEventListener('change',(e)=>{
+        e.stopPropagation();   // P2 (Codex #3): กัน change bubble → delegated scheduleContCalc → ไม่ recompute (rename = display-only)
+        const i=+inp.dataset.grid;
+        const others=[...host.querySelectorAll('.cc-grid-input')].filter(x=>+x.dataset.grid!==i).map(x=>(x.value.trim()||x.placeholder));
+        const res=BW.setGridName(i, inp.value, others);
+        if(!res.ok){   // duplicate → revert + flash
+          inp.value=BW.beam.gridNames[i]||'';
+          inp.style.borderColor='#f43f5e'; inp.style.background='#fff1f2'; inp.title='ชื่อซ้ำกับกริดอื่น — เปลี่ยนกลับแล้ว';
+          setTimeout(()=>{inp.style.borderColor='#cbd5e1'; inp.style.background='#fff'; inp.title='แก้ชื่อกริด';},1400);
+          return;
+        }
+        inp.value=BW.beam.gridNames[i]||'';   // reflect sanitized / cleared value
+        refreshNaming();                       // re-render labels ทุกที่ (NO recompute · index-only)
+      });
+    });
+    if(typeof window.enhanceA11y==='function') window.enhanceA11y(host);
+  }
+  function refreshNaming(){ if(!lastResult) return; renderSchematic(lastResult); renderResults(lastResult); renderGridBar(lastResult); }
+
   // ---- 1) BEAM SCHEMATIC (loads) ----
   function renderSchematic(o){
     const host=$('c-schematic'); if(!host) return;
@@ -7353,6 +7536,7 @@ function renderLoadList(host, items, onChange){
       svg+=`<rect x="${lo}" y="${yB-5}" width="${Math.abs(b-a)}" height="10" rx="2" fill="url(#cbgrad)" opacity="0.92"/>`;
       const tipX=X(g.tip_x);
       svg+=`<line x1="${tipX}" y1="${yB-10}" x2="${tipX}" y2="${yB+10}" stroke="#94a3b8" stroke-width="2"/>`;   // free tip
+      svg+=`<text x="${tipX}" y="${yB+24}" text-anchor="middle" font-size="9" fill="#94a3b8" font-style="italic">↳ ปลายยื่น</text>`;   // A7 · non-editable (ขอบ ไม่ใช่แกนกริด)
       (g.points||[]).forEach(p=>{ const px=X(p.x_global);
         svg+=`<line x1="${px}" y1="20" x2="${px}" y2="${yB-6}" stroke="#dc2626" stroke-width="2.5"/><polygon points="${px-5},${yB-12} ${px+5},${yB-12} ${px},${yB-4}" fill="#dc2626"/>`;
         svg+=`<text x="${px}" y="16" text-anchor="middle" font-size="11" fill="#b91c1c" font-weight="700">P=${p.Pu_ton} ต</text>`; });
@@ -7467,12 +7651,12 @@ function renderLoadList(host, items, onChange){
       // span table
       ws.getCell(`A${r}`).value='โมเมนต์บวก (กลางช่วง) → เหล็กล่าง + เหล็กปลอก'; ws.getCell(`A${r}`).font={...TH(12),bold:true}; r++;
       hdr(['ช่วง','+M (ต·ม)','เหล็กล่าง','Vu (ต)','เหล็กปลอก']);
-      o.spans.forEach(s=> row([s.label, (s.M_pos_tonm).toFixed(2), s.bottom_bars, (s.Vu_ton).toFixed(2), (s.shear&&s.shear.shop_drawing_notation)||'—']));
+      o.spans.forEach(s=> row([mapLbl(s.label), (s.M_pos_tonm).toFixed(2), s.bottom_bars, (s.Vu_ton).toFixed(2), (s.shear&&s.shear.shop_drawing_notation)||'—']));
       r++;
       // support table
       ws.getCell(`A${r}`).value='โมเมนต์ลบ (หัวเสา) → เหล็กบน'; ws.getCell(`A${r}`).font={...TH(12),bold:true}; r++;
       hdr(['ที่รองรับ','−M (ต·ม)','เหล็กบน','','']);
-      o.supports.forEach(s=> row([s.label, Math.abs(s.M_neg_tonm)<0.005?'—':(s.M_neg_tonm).toFixed(2), s.top_bars, '', '']));
+      o.supports.forEach(s=> row([mapLbl(s.label), Math.abs(s.M_neg_tonm)<0.005?'—':(s.M_neg_tonm).toFixed(2), s.top_bars, '', '']));
       r++;
       // cantilever table
       if((o.cantilevers||[]).length){
@@ -7483,7 +7667,7 @@ function renderLoadList(host, items, onChange){
         (o.cantilever_warnings||[]).forEach(w=>{ ws.mergeCells(`A${r}:E${r}`); const cx=ws.getCell(`A${r}`); cx.value=String(w).replace(/<br>/g,' '); cx.font={...TH(10),color:{argb:'FF991B1B'}}; r++; });
         r++;
       }
-      ws.mergeCells(`A${r}:E${r}`); c=ws.getCell(`A${r}`); c.value='แรงปฏิกิริยา: '+o.reactions.map(x=>`${x.label}=${x.R_ton.toFixed(2)} ต`).join(' · '); c.font=TH(11); r++;
+      ws.mergeCells(`A${r}:E${r}`); c=ws.getCell(`A${r}`); c.value='แรงปฏิกิริยา: '+o.reactions.map(x=>`${mapLbl(x.label)}=${x.R_ton.toFixed(2)} ต`).join(' · '); c.font=TH(11); r++;
       if(o.recommended_top){ ws.mergeCells(`A${r}:E${r}`); c=ws.getCell(`A${r}`); c.value=`เหล็กบนแนะนำ: ${o.recommended_top.bars} พาดทุกหัวเสาภายใน · ยื่น L/4=${o.recommended_top.cutoff_each_side_m.toFixed(2)} ม.`; c.font={...TH(11),bold:true}; r++; }
       r++;
       // embed diagrams
@@ -7552,7 +7736,7 @@ function renderLoadList(host, items, onChange){
     }
     renderSpanInputs(); renderCantInputs();
     window.__contBeam = { calc:calcContinuous, setMode, getSpans:()=>spans, setSpans:s=>{spans=s.map(x=>({pts:[],...x}));renderSpanInputs();},
-      setCant:(L,R)=>{cantL=L;cantR=R;if(cbL)cbL.checked=!!L;if(cbR)cbR.checked=!!R;renderCantInputs();} };
+      setCant:(L,R)=>{cantL=L;cantR=R;if(cbL)cbL.checked=!!L;if(cbR)cbR.checked=!!R;renderCantInputs();}, refreshNaming };
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })();
@@ -7620,6 +7804,12 @@ window.runDesignAudit = async function runDesignAudit(){
   A('a11y: pill มี aria-pressed', !!(_pill&&_pill.hasAttribute('aria-pressed')), _pill?_pill.getAttribute('aria-pressed'):'n/a');
   var _bigSvg=document.getElementById('svg-M');
   A('a11y: กราฟ SVG role=img + aria-label', !!(_bigSvg&&_bigSvg.getAttribute('role')==='img'&&_bigSvg.getAttribute('aria-label')), _bigSvg?_bigSvg.getAttribute('aria-label'):'n/a');
+  // ---- A5 · Phase 1 beam-naming guards (drift checker · index-only · display-only) ----
+  A('naming: BeamWorkspace module พร้อม (gridName)', typeof window.BeamWorkspace==='object' && typeof window.BeamWorkspace.gridName==='function');
+  A('naming: gridName fallback ปลอดภัย (ว่าง→default)', (()=>{ try{ return window.BeamWorkspace.gridName(99,'Z')==='Z'; }catch(e){ return false; } })());
+  A('naming: header cross-ref รูปแบบ "คาน … · ช่วงกริด …"', (()=>{ try{ const bw=window.BeamWorkspace; return /^คาน .+· ช่วงกริด /.test(bw.headerStr(bw.spanRef(0,1,'A','B'))); }catch(e){ return false; } })());
+  A('naming: ต่อเนื่อง มีแถบตั้งชื่อกริด (#c-grid-bar)', (()=>{ const b=document.getElementById('c-grid-bar'); return !!b && b.querySelectorAll('.cc-grid-input').length>0; })());
+  A('naming: ชื่อกริด XSS-safe (strip <>&)', (()=>{ try{ const bw=window.BeamWorkspace; bw.setGridName(999,'<b>&x'); const v=bw.beam.gridNames[999]; delete bw.beam.gridNames[999]; return v==='bx'; }catch(e){ return false; } })());
   const passed=checks.filter(c=>c.pass).length, failed=checks.length-passed;
   console.log(`[design-audit] ${passed}/${checks.length} · `+(failed?'⚠ DRIFT: '+checks.filter(c=>!c.pass).map(c=>c.name).join(' | '):'✓ ALL CONSISTENT'));
   if(failed) try{ console.table(checks.filter(c=>!c.pass)); }catch(e){}

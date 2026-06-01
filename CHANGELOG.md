@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 ### เพิ่ม
+- **Beam Workspace Phase 1 — ตั้งชื่อกริด + เบอร์คาน + metadata** (ทั้ง 2 โหมด · in-memory) — ตั้งชื่อกริดเอง (free-text · cap 8 ตัว) · การ์ดเบอร์คาน (prefix B/GB/RB/CB + เลข + ชั้น + หมายเหตุ · optional ไม่บล็อกคำนวณ) · หัวผล cross-ref "คาน B1 · ช่วงกริด g1–g2 · ชั้น X" · ป้าย "ปลายยื่น" ที่คานยื่น · ชื่อ display-only (engine เข้าถึง by index) · XSS-safe · **ไม่แตะ engine** · runDesignAudit 27→32 (+5 naming guards)
 - ตั้งค่า GitHub workflow: branch protection (main + dev), PR template, CI (รันเทสต์ Python ทุก PR), README, CHANGELOG
 - **เครื่องมือ dev (ไม่ใช่ฟีเจอร์แอป)** — `tools/web_arch_audit.py` sensor วัดสุขภาพโครงสร้าง `index.html` (script-block size · function length · cross-scope globals · responsibility count → SPLIT verdict · **sensor-only ไม่แตะโค้ด**) + CI step **warn-only** (ไม่บล็อก build) + trend log `tools/arch-trend.jsonl`
 
