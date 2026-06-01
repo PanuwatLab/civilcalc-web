@@ -7071,8 +7071,9 @@ window.BeamWorkspace = (function(){
   function setGridName(i, name, others){
     name = _safe(name).slice(0, MAX_LEN);   // P2: enforce length cap (MAX_LEN live · กัน overflow ป้าย SVG)
     if (name === '') { delete beam.gridNames[i]; return { ok:true, cleared:true }; }
-    const sibs = Array.isArray(others) ? others.map(_s) : Object.keys(beam.gridNames)
-      .filter(k => +k !== i).map(k => _s(beam.gridNames[k]));
+    // dup check = passed others (current mode's effective names) UNION stored off-screen names (P2: กันซ้ำข้ามโหมด · state แชร์)
+    const stored = Object.keys(beam.gridNames).filter(k => +k !== i).map(k => _s(beam.gridNames[k]));
+    const sibs = (Array.isArray(others) ? others.map(_s) : []).concat(stored);
     if (sibs.map(s=>s.toUpperCase()).indexOf(name.toUpperCase()) !== -1) return { ok:false, reason:'duplicate' };  // case-insensitive ('B'≡'b')
     beam.gridNames[i] = name;
     return { ok:true };
@@ -7173,7 +7174,7 @@ window.BeamWorkspace = (function(){
       const row = document.createElement('div');
       row.className = 'c-span-row';
       row.innerHTML =
-        `<div class="text-[11px] font-semibold text-slate-500 text-center">${gl(i)}${gl(i+1)}</div>`+
+        `<div class="text-[11px] font-semibold text-slate-500 text-center">${String.fromCharCode(65+i)}${String.fromCharCode(65+i+1)}</div>`+
         `<input type="number" step="0.1" class="cc-input" data-i="${i}" data-k="L"  value="${s.L}">`+
         `<input type="number" step="0.1" class="cc-input" data-i="${i}" data-k="DL" value="${s.DL}"${hasLoads?' disabled title="มาจากรายการโหลด"':''}>`+
         `<input type="number" step="0.1" class="cc-input" data-i="${i}" data-k="LL" value="${s.LL}"${hasLoads?' disabled title="มาจากรายการโหลด"':''}>`+
