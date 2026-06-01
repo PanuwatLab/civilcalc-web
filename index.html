@@ -6282,6 +6282,7 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
       // wire single-span grid-naming bar (A/B) → BeamWorkspace + refresh (display-only · no recompute)
       const _bw2=window.BeamWorkspace;
       if(_bw2) host.querySelectorAll('.ss-grid-input').forEach(inp=>{
+        inp.addEventListener('input',(e)=>e.stopPropagation());   // P2#2 (Codex): กัน bubbling 'input' ตอนพิมพ์ → delegated recalc
         inp.addEventListener('change',(e)=>{
           e.stopPropagation();   // P2 (Codex #3): กัน change bubble → delegated recalc (rename = display-only)
           const i=+inp.dataset.grid;
@@ -7474,6 +7475,7 @@ window.BeamWorkspace = (function(){
     }
     host.innerHTML=`<div class="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-slate-100"><span class="text-[11px] text-slate-500 font-medium whitespace-nowrap">🏷️ ชื่อกริด</span><div class="flex items-center gap-1.5 flex-wrap">${cells}</div><span class="text-[10px] text-slate-400 whitespace-nowrap">แก้ได้ · ว่าง=ค่าเริ่มต้น</span></div>`;
     host.querySelectorAll('.cc-grid-input').forEach(inp=>{
+      inp.addEventListener('input',(e)=>e.stopPropagation());   // P2#2 (Codex): กัน bubbling 'input' ตอนพิมพ์ → delegated scheduleContCalc (input listener)
       inp.addEventListener('change',(e)=>{
         e.stopPropagation();   // P2 (Codex #3): กัน change bubble → delegated scheduleContCalc → ไม่ recompute (rename = display-only)
         const i=+inp.dataset.grid;
