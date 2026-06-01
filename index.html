@@ -7095,6 +7095,7 @@ window.BeamWorkspace = (function(){
     let s = 'คาน ' + (beamMarkStr() || '—');
     if (spanRefText) s += ' · ' + spanRefText;
     if (_s(beam.metadata.floor)) s += ' · ชั้น ' + _s(beam.metadata.floor);
+    if (_s(beam.metadata.notes)) s += ' · ' + _s(beam.metadata.notes);   // P2 (Codex r5): notes โชว์บนหัวผล ตามที่การ์ดบอก
     return s;
   }
 
