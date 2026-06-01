@@ -7055,6 +7055,7 @@ window.BeamWorkspace = (function(){
     gridNames: {}                           // sparse { gridIndex: "customName" } · ว่าง = ใช้ default
   };
   const PREFIXES = ['B','GB','RB','CB'];
+  let gridUniverse = 3;   // จำนวนกริดสูงสุดที่เคยเรนเดอร์ (ทั้ง 2 โหมด · min 3 = ต่อเนื่อง default 2 ช่วง A,B,C) · ใช้เช็ค dup กับ default ข้ามโหมด
 
   const _s = v => (v==null ? '' : String(v)).trim();
   const _safe = v => _s(v).replace(/[<>&"']/g, '');   // strip HTML-dangerous chars (XSS defense · ชื่อ/meta = โค้ดสั้น)
@@ -7071,10 +7072,13 @@ window.BeamWorkspace = (function(){
   function setGridName(i, name, others){
     name = _safe(name).slice(0, MAX_LEN);   // P2: enforce length cap (MAX_LEN live · กัน overflow ป้าย SVG)
     if (name === '') { delete beam.gridNames[i]; return { ok:true, cleared:true }; }
-    // dup check = passed others (current mode's effective names) UNION stored off-screen names (P2: กันซ้ำข้ามโหมด · state แชร์)
-    const stored = Object.keys(beam.gridNames).filter(k => +k !== i).map(k => _s(beam.gridNames[k]));
-    const sibs = (Array.isArray(others) ? others.map(_s) : []).concat(stored);
-    if (sibs.map(s=>s.toUpperCase()).indexOf(name.toUpperCase()) !== -1) return { ok:false, reason:'duplicate' };  // case-insensitive ('B'≡'b')
+    // dup check = effective name (custom||default) ของ "ทุกกริดในจักรวาล" (gridUniverse · ทั้ง 2 โหมด) ยกเว้น i + others ที่ส่งมา
+    // กันชนกับ DEFAULT ของกริด off-screen (Codex r6: single-span ตั้ง A→'C' ชน default กริด C ของต่อเนื่อง → 'C–C' กำกวม)
+    const sibs = [];
+    const _N = Math.max(gridUniverse, i + 1);
+    for (let k = 0; k < _N; k++) if (k !== i) sibs.push(gridName(k, String.fromCharCode(65+k)));
+    if (Array.isArray(others)) others.forEach(o => { const v = _s(o); if (v) sibs.push(v); });
+    if (sibs.map(s => s.toUpperCase()).indexOf(name.toUpperCase()) !== -1) return { ok:false, reason:'duplicate' };  // case-insensitive ('B'≡'b')
     beam.gridNames[i] = name;
     return { ok:true };
   }
@@ -7099,11 +7103,12 @@ window.BeamWorkspace = (function(){
     return s;
   }
 
+  function setGridCount(n){ if (n > gridUniverse) gridUniverse = n; }   // โหมดเรนเดอร์กริดกี่จุด → ขยายจักรวาล (เช็ค dup ข้ามโหมด)
   return {
     SCHEMA, MAX_LEN, PREFIXES, beam,
-    gridName, setGridName, beamMarkStr, setBeamMark, setMeta, spanRef, headerStr,
+    gridName, setGridName, setGridCount, beamMarkStr, setBeamMark, setMeta, spanRef, headerStr,
     getState: () => JSON.parse(JSON.stringify(beam)),
-    reset(){ beam.gridNames={}; beam.beamMark={prefix:'B',number:'1'}; beam.metadata={floor:'',notes:''}; }
+    reset(){ beam.gridNames={}; beam.beamMark={prefix:'B',number:'1'}; beam.metadata={floor:'',notes:''}; gridUniverse=3; }
   };
 })();
 </script>
@@ -7471,6 +7476,7 @@ window.BeamWorkspace = (function(){
     const host=$('c-grid-bar'); if(!host) return;
     const BW=window.BeamWorkspace; if(!BW){ host.innerHTML=''; return; }
     const n=o.n_spans;   // grid axes = supports 0..n
+    if(BW.setGridCount) BW.setGridCount(n+1);   // ขยายจักรวาลกริด → dup เช็คข้ามโหมดครอบ default ของต่อเนื่อง
     let cells='';
     for(let i=0;i<=n;i++){
       const def=String.fromCharCode(65+i);
