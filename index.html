@@ -7076,7 +7076,9 @@ window.BeamWorkspace = (function(){
     // กันชนกับ DEFAULT ของกริด off-screen (Codex r6: single-span ตั้ง A→'C' ชน default กริด C ของต่อเนื่อง → 'C–C' กำกวม)
     const sibs = [];
     const _N = Math.max(gridUniverse, i + 1);
-    for (let k = 0; k < _N; k++) if (k !== i) sibs.push(gridName(k, String.fromCharCode(65+k)));
+    // ใส่ทั้ง effective name (custom||default) และ default letter ของทุก sibling — กัน custom ของ sibling ไป "บัง" default ของมัน
+    // (Codex r7: B→'X' แล้ว C→'B' = B contribute 'X' ไม่ใช่ 'B' → clear B ทีหลังชน 'B'/'B' · invariant: custom ต้องต่างจากทั้ง effective+default ของ sibling)
+    for (let k = 0; k < _N; k++) if (k !== i) { sibs.push(gridName(k, String.fromCharCode(65+k))); sibs.push(String.fromCharCode(65+k)); }
     if (Array.isArray(others)) others.forEach(o => { const v = _s(o); if (v) sibs.push(v); });
     if (sibs.map(s => s.toUpperCase()).indexOf(name.toUpperCase()) !== -1) return { ok:false, reason:'duplicate' };  // case-insensitive ('B'≡'b')
     beam.gridNames[i] = name;
