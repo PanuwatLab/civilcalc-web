@@ -6252,13 +6252,13 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
       const xM = (out.x_at_M_max != null ? out.x_at_M_max : out.input.L/2).toFixed(2);
       // Phase 1 · cross-ref header + grid-naming bar (2 grids A/B · index-only · names display-only · XSS-safe)
       const _bw=window.BeamWorkspace;
-      const _esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      const _esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       let _hdr='', _bar='';
       if(_bw){
         _hdr=`<div class="cc-card p-3 mb-3 border-l-4 border-amber-400"><div class="text-[10px] uppercase tracking-wider text-slate-400">รายการคาน</div><div class="font-mono text-[15px] font-semibold text-slate-800">${_esc(_bw.headerStr(_bw.spanRef(0,1,'A','B')))}</div></div>`;
         let _cells='';
         for(let i=0;i<=1;i++){ const def=String.fromCharCode(65+i);
-          _cells+=`<input class="ss-grid-input" data-grid="${i}" value="${_esc(_bw.beam.gridNames[i]||'')}" placeholder="${def}" maxlength="16" aria-label="ชื่อกริดจุดที่ ${i+1} (ค่าเริ่มต้น ${def})" title="แก้ชื่อกริด · ค่าเริ่มต้น ${def} · ว่าง=คืนค่าเริ่มต้น" style="width:48px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px 2px;background:#fff;color:#1e293b">`; }
+          _cells+=`<input class="ss-grid-input" data-grid="${i}" value="${_esc(_bw.beam.gridNames[i]||'')}" placeholder="${def}" maxlength="8" aria-label="ชื่อกริดจุดที่ ${i+1} (ค่าเริ่มต้น ${def})" title="แก้ชื่อกริด · ค่าเริ่มต้น ${def} · ว่าง=คืนค่าเริ่มต้น" style="width:48px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px 2px;background:#fff;color:#1e293b;text-overflow:ellipsis;overflow:hidden">`; }
         _bar=`<div class="flex items-center gap-2 flex-wrap mb-3"><span class="text-[11px] text-slate-500 font-medium">🏷️ ชื่อกริด</span><div class="flex items-center gap-1.5">${_cells}</div><span class="text-[10px] text-slate-400">แก้ได้ · ว่าง=ค่าเริ่มต้น</span></div>`;
       }
       let html = _hdr + _bar + `
@@ -7046,7 +7046,7 @@ function renderLoadList(host, items, onChange){
    โมดูลสะอาดระดับ window · ไม่บอลต์เข้า IIFE เดิม (กันเพิ่ม tangle · ref Web-Arch-Guard) */
 window.BeamWorkspace = (function(){
   const SCHEMA = 1;
-  const MAX_LEN = 12;                       // ความยาวชื่อกริดสูงสุด (UI: เกิน → ellipsis+title)
+  const MAX_LEN = 8;                        // cap ความยาวชื่อกริด — enforced ใน setGridName + maxlength + ellipsis (กัน overflow ป้าย SVG)
   const beam = {                            // Beam object (1 ตัว · Phase 2 = หลายตัว + persist)
     id: 'beam-1',
     schemaVersion: SCHEMA,
@@ -7069,11 +7069,11 @@ window.BeamWorkspace = (function(){
   // ตั้งชื่อกริด · edge (locked): ว่าง→default(เคลียร์) · ซ้ำ→block+revert · ยาว→รับไว้ (UI ellipsis)
   // others = ชื่อที่ "แสดงจริง" ของกริดอื่น (effective · custom|default) สำหรับเช็คซ้ำข้ามทั้ง custom+default
   function setGridName(i, name, others){
-    name = _safe(name);
+    name = _safe(name).slice(0, MAX_LEN);   // P2: enforce length cap (MAX_LEN live · กัน overflow ป้าย SVG)
     if (name === '') { delete beam.gridNames[i]; return { ok:true, cleared:true }; }
     const sibs = Array.isArray(others) ? others.map(_s) : Object.keys(beam.gridNames)
       .filter(k => +k !== i).map(k => _s(beam.gridNames[k]));
-    if (sibs.indexOf(name) !== -1) return { ok:false, reason:'duplicate' };
+    if (sibs.map(s=>s.toUpperCase()).indexOf(name.toUpperCase()) !== -1) return { ok:false, reason:'duplicate' };  // case-insensitive ('B'≡'b')
     beam.gridNames[i] = name;
     return { ok:true };
   }
@@ -7110,9 +7110,10 @@ window.BeamWorkspace = (function(){
 <script>
 (function(){
   const $=id=>document.getElementById(id);
-  function refreshActive(){
-    try{ if(window.__contBeam && window.__contBeam.refreshNaming) window.__contBeam.refreshNaming(); }catch(e){}
-    try{ if(window.__ssRefreshNaming) window.__ssRefreshNaming(); }catch(e){}
+  function refreshActive(){   // P3: refresh เฉพาะโหมดที่ active (กัน re-render โหมดที่ซ่อนทุก keystroke)
+    const cont = document.body.classList.contains('mode-continuous');
+    try{ if(cont && window.__contBeam && window.__contBeam.refreshNaming) window.__contBeam.refreshNaming(); }catch(e){}
+    try{ if(!cont && window.__ssRefreshNaming) window.__ssRefreshNaming(); }catch(e){}
   }
   function wire(){
     const BW=window.BeamWorkspace, pre=$('bm-prefix'); if(!BW||!pre) return;
@@ -7138,7 +7139,7 @@ window.BeamWorkspace = (function(){
   const gl = i => (window.BeamWorkspace ? window.BeamWorkspace.gridName(i, String.fromCharCode(65+i)) : String.fromCharCode(65+i));   // 0->A · custom name ผ่าน BeamWorkspace (fallback A,B,C)
   const round = (n,d=2)=>{ const f=Math.pow(10,d); return Math.round(n*f)/f; };
   const fmtTon = x => (x).toFixed(2);
-  const escHtml = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));   // escape for innerHTML (defense-in-depth · names already stripped in BeamWorkspace)
+  const escHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));   // escape innerHTML + attribute context (quotes too · self-sufficient defense-in-depth)
 
   // ---- span state (DL/LL in ตัน/ม · pts = point loads [{x:m, P:ตัน, kind:'DL'|'LL'}]) ----
   let spans = [ {L:4.0, DL:1.0, LL:0.4, pts:[]}, {L:4.0, DL:1.0, LL:0.4, pts:[]} ];
@@ -7471,7 +7472,7 @@ window.BeamWorkspace = (function(){
     let cells='';
     for(let i=0;i<=n;i++){
       const def=String.fromCharCode(65+i);
-      cells+=`<input class="cc-grid-input" data-grid="${i}" value="${escHtml(BW.beam.gridNames[i]||'')}" placeholder="${def}" maxlength="16" aria-label="ชื่อกริดจุดที่ ${i+1} (ค่าเริ่มต้น ${def})" title="แก้ชื่อกริด · ค่าเริ่มต้น ${def} · ว่าง=คืนค่าเริ่มต้น" style="width:48px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px 2px;background:#fff;color:#1e293b">`;
+      cells+=`<input class="cc-grid-input" data-grid="${i}" value="${escHtml(BW.beam.gridNames[i]||'')}" placeholder="${def}" maxlength="8" aria-label="ชื่อกริดจุดที่ ${i+1} (ค่าเริ่มต้น ${def})" title="แก้ชื่อกริด · ค่าเริ่มต้น ${def} · ว่าง=คืนค่าเริ่มต้น" style="width:48px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px 2px;background:#fff;color:#1e293b;text-overflow:ellipsis;overflow:hidden">`;
     }
     host.innerHTML=`<div class="flex items-center gap-2 flex-wrap mt-2 pt-2 border-t border-slate-100"><span class="text-[11px] text-slate-500 font-medium whitespace-nowrap">🏷️ ชื่อกริด</span><div class="flex items-center gap-1.5 flex-wrap">${cells}</div><span class="text-[10px] text-slate-400 whitespace-nowrap">แก้ได้ · ว่าง=ค่าเริ่มต้น</span></div>`;
     host.querySelectorAll('.cc-grid-input').forEach(inp=>{
