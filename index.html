@@ -674,6 +674,13 @@
         <div id="c-results" class="space-y-4"></div>
       </div>
     </div>
+
+    <!-- Action buttons (ตำแหน่งเดียวกับช่วงเดียว · Nu 2026-06-02) -->
+    <div class="flex items-center justify-center gap-3 mt-6">
+      <button id="c-excel-btn" class="btn btn-accent px-6 py-3 text-sm">📥 ดาวน์โหลด Excel</button>
+      <button id="c-print-btn" class="btn btn-ghost px-6 py-3 text-sm border border-slate-200" title="พิมพ์รายการคำนวณเป็น PDF (A4)">🖨️ พิมพ์ PDF</button>
+      <button id="c-reset-btn" class="btn btn-ghost px-5 py-3 text-sm border border-slate-200">🔁 รีเซ็ต</button>
+    </div>
   </section>
 
   <!-- ============ ROW 1: input + diagrams ============ -->
@@ -7646,7 +7653,7 @@ window.renderShowWork = function(out, opts){
     const beamHeader=_bw?`<div class="cc-card p-3 mb-3 border-l-4 border-amber-400"><div class="text-[10px] uppercase tracking-wider text-slate-400">รายการคาน</div><div class="font-mono text-[15px] font-semibold text-slate-800">${escHtml(_bw.headerStr(_bw.spanRef(0,o.n_spans,'A',String.fromCharCode(65+o.n_spans))))}</div></div>`:'';
     res.innerHTML =
       `${beamHeader}${verdictCard}${metricsCard}<div class="cc-card p-4">
-         <div class="flex items-center justify-between mb-3"><div class="diagram-label">ผลออกแบบ · ${o.n_spans} ช่วง</div><div class="flex items-center gap-2"><button id="c-excel-btn" class="px-3 py-1 rounded-lg text-[12px] bg-emerald-600 hover:bg-emerald-700 text-white">📥 Excel</button><button id="c-print-btn" class="px-3 py-1 rounded-lg text-[12px] border border-slate-300 text-slate-600 hover:bg-slate-50">🖨️ พิมพ์ PDF</button></div></div>
+         <div class="flex items-center justify-between mb-3"><div class="diagram-label">ผลออกแบบ · ${o.n_spans} ช่วง</div></div>
          <div class="text-[11px] text-slate-500 mb-3">${o.method} · b×h = ${o.b}×${o.h} ซม. · f'c=${o.fc} · fy=${o.fy} ksc · combo ${cCombo}</div>
          <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์บวก (กลางช่วง) → เหล็กล่าง + เหล็กปลอก</div>
          <div style="overflow-x:auto"><table class="c-tbl mb-4"><thead><tr><th>ช่วง</th><th>+M (ต·ม)</th><th>As<sub>req</sub> (ซม²)</th><th>ρ</th><th>เหล็กล่าง</th><th>Vu (ต)</th><th>เหล็กปลอก</th></tr></thead><tbody>${spanRows}</tbody></table></div>
@@ -7655,8 +7662,6 @@ window.renderShowWork = function(out, opts){
          <div class="text-[11px] text-slate-500 mt-3">แรงปฏิกิริยา: ${reac}</div>
        </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork(o, {dc: ((govSafety!=null && (o.passes || govSafety<0)) ? [{label:'การดัด (วิกฤต · φMn ≥ Mu)', pct: (govSafety<=-99?999:10000/(100+govSafety)), pass: !!o.passes && govSafety>=0, sub:'จากช่วง/หัวเสาที่ใช้กำลังสูงสุด · D/C = 100/(100+margin)'}] : [])}) : ''}`;
     // ^ Codex P2 (#6): ซ่อน governing D/C เมื่อ design fail แต่ govSafety ยังบวก (failure อยู่ที่ element ไม่มี margin เช่น SectionTooSmall) → กันโชว์ "เขียวผ่าน" หลอกตา · pass ผูกกับ o.passes
-    const eb=$('c-excel-btn'); if(eb) eb.onclick=exportContinuousExcel;
-    const pb=$('c-print-btn'); if(pb && window.ccPreparePrint) pb.onclick=window.ccPreparePrint;
     if(window.ccPopulatePrint) try{ window.ccPopulatePrint(); }catch(e){}   // หัวกระดาษพร้อมเสมอ (กัน Ctrl+P beforeprint ไม่ทัน)
     res.style.opacity='1';   // restore after debounced loading dim
   }
@@ -7931,6 +7936,10 @@ window.renderShowWork = function(out, opts){
     $('c-add-span').addEventListener('click', ()=>{ if(spans.length<4){ const l=spans[spans.length-1]; spans.push({L:l.L,DL:l.DL,LL:l.LL,pts:[]}); renderSpanInputs(); }});
     $('c-dup-span').addEventListener('click', ()=>{ if(spans.length<4){ const l=spans[spans.length-1]; spans.push({L:l.L,DL:l.DL,LL:l.LL,pts:(l.pts||[]).map(p=>({...p}))}); renderSpanInputs(); }});
     $('c-calc-btn').addEventListener('click', calcContinuous);
+    // Action row (ตำแหน่งเดียวกับช่วงเดียว · Nu 2026-06-02)
+    { const xb=$('c-excel-btn'); if(xb) xb.addEventListener('click', exportContinuousExcel);
+      const pb=$('c-print-btn'); if(pb && window.ccPreparePrint) pb.addEventListener('click', window.ccPreparePrint);
+      const rb=$('c-reset-btn'); if(rb) rb.addEventListener('click', ()=>{ spans=[{L:4,DL:1,LL:0.4,pts:[]},{L:4,DL:1,LL:0.4,pts:[]}]; cantL=null; cantR=null; const _l=$('c-cantL-on'),_r=$('c-cantR-on'); if(_l)_l.checked=false; if(_r)_r.checked=false; renderSpanInputs(); renderCantInputs(); calcContinuous(); }); }
     const cbL=$('c-cantL-on'), cbR=$('c-cantR-on');
     if(cbL) cbL.addEventListener('change', e=>{ cantL = e.target.checked ? {L:1.5,DL:0.5,LL:0.3,pts:[]} : null; renderCantInputs(); });
     if(cbR) cbR.addEventListener('change', e=>{ cantR = e.target.checked ? {L:1.5,DL:0.5,LL:0.3,pts:[]} : null; renderCantInputs(); });
