@@ -7533,7 +7533,8 @@ window.renderShowWork = function(out, opts){
          <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์ลบ (หัวเสา) → เหล็กบน</div>
          <div style="overflow-x:auto"><table class="c-tbl"><thead><tr><th>ที่รองรับ</th><th>−M (ต·ม)</th><th>As<sub>req</sub> (ซม²)</th><th>ρ</th><th>เหล็กบน</th></tr></thead><tbody>${supRows}</tbody></table></div>
          <div class="text-[11px] text-slate-500 mt-3">แรงปฏิกิริยา: ${reac}</div>
-       </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork(o, {dc: (govSafety!=null ? [{label:'การดัด (วิกฤต · φMn ≥ Mu)', pct: (govSafety<=-99?999:10000/(100+govSafety)), pass: govSafety>=0, sub:'จากช่วง/หัวเสาที่ใช้กำลังสูงสุด · D/C = 100/(100+margin)'}] : [])}) : ''}`;
+       </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork(o, {dc: ((govSafety!=null && (o.passes || govSafety<0)) ? [{label:'การดัด (วิกฤต · φMn ≥ Mu)', pct: (govSafety<=-99?999:10000/(100+govSafety)), pass: !!o.passes && govSafety>=0, sub:'จากช่วง/หัวเสาที่ใช้กำลังสูงสุด · D/C = 100/(100+margin)'}] : [])}) : ''}`;
+    // ^ Codex P2 (#6): ซ่อน governing D/C เมื่อ design fail แต่ govSafety ยังบวก (failure อยู่ที่ element ไม่มี margin เช่น SectionTooSmall) → กันโชว์ "เขียวผ่าน" หลอกตา · pass ผูกกับ o.passes
     const eb=$('c-excel-btn'); if(eb) eb.onclick=exportContinuousExcel;
     res.style.opacity='1';   // restore after debounced loading dim
   }
