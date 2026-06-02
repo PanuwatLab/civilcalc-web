@@ -6279,7 +6279,12 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
           </div>
           <p class="text-[10px] text-slate-400 mt-2">รูปแสดงเหล็กตามจำนวนจริง · ขอปลอก 135°</p>`;
       }
-      html += (window.renderShowWork ? window.renderShowWork(out) : '');   // 📖 ดูวิธีทำ (citations+notes ของ engine · display-only)
+      // 📖 ดูวิธีทำ + D/C ใช้กำลัง (Mu_kg_cm/φMn, Vu/φVn — engine pair เดียวกัน · parity-safe)
+      const _sd = out.stirrup_design || {};
+      const _dc = [];
+      if(out.phi_Mn > 0 && out.Mu_kg_cm != null) _dc.push({label:'การดัด (φMn ≥ Mu)', pct: out.Mu_kg_cm/out.phi_Mn*100, pass: !!out.passes_flexure});
+      if(_sd.phi_Vn_ton > 0 && _sd.Vu_at_d_ton != null) _dc.push({label:'แรงเฉือน (φVn ≥ Vu)', pct: _sd.Vu_at_d_ton/_sd.phi_Vn_ton*100, pass: _sd.passes !== false});
+      html += (window.renderShowWork ? window.renderShowWork(out, {dc:_dc}) : '');
       host.innerHTML = html;
       // wire single-span grid-naming bar (A/B) → BeamWorkspace + refresh (display-only · no recompute)
       const _bw2=window.BeamWorkspace;
@@ -7173,6 +7178,14 @@ window.BeamWorkspace = (function(){
   .cc-sw-notes-h{font-size:11px;font-weight:600;color:#64748b;margin-bottom:4px}
   .cc-sw-notes ul{margin:0;padding-left:18px}
   .cc-sw-notes li{font-size:11.5px;color:#64748b;line-height:1.55}
+  .cc-sw-dcwrap{display:flex;flex-direction:column;gap:9px;margin-bottom:13px;padding-bottom:11px;border-bottom:1px dashed #e2e8f0}
+  .cc-sw-dc-h{font-size:11px;font-weight:600;color:#64748b;margin-bottom:1px}
+  .cc-sw-dc-top{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;color:#475569;margin-bottom:3px}
+  .cc-sw-dc-val{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:600;font-size:12px}
+  .cc-sw-ok{color:#059669}.cc-sw-bad{color:#e11d48}
+  .cc-sw-dc-bar{height:6px;background:#f1f5f9;border-radius:99px;overflow:hidden}
+  .cc-sw-dc-fill{height:100%;border-radius:99px;transition:width .5s ease-out}
+  .cc-sw-dc-fill.cc-sw-ok{background:#10b981}.cc-sw-dc-fill.cc-sw-bad{background:#f43f5e}
   .cc-sw-foot{margin-top:12px;font-size:10px;color:#94a3b8;line-height:1.5;border-top:1px solid #f1f5f9;padding-top:8px}
 </style>
 <script>
@@ -7184,7 +7197,8 @@ window.renderShowWork = function(out, opts){
   const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const cits  = Array.isArray(out && out.citations) ? out.citations.filter(c => String(c||'').trim()) : [];
   const notes = Array.isArray(out && out.notes)     ? out.notes.filter(n => String(n||'').trim())     : [];
-  if(!cits.length && !notes.length) return '';   // ไม่มีอะไร → ไม่โชว์กล่องเปล่า
+  const dc    = Array.isArray(opts.dc) ? opts.dc.filter(d => d && typeof d.pct === 'number' && isFinite(d.pct)) : [];   // [{label, pct, pass, sub?}] · ใช้กำลัง D/C (demand/capacity)
+  if(!cits.length && !notes.length && !dc.length) return '';   // ไม่มีอะไร → ไม่โชว์กล่องเปล่า
   // heuristic: split ที่ " · " แรก → หัว = สูตร/ค่า (mono · hero) · หาง = code-ref + คำอธิบาย (ref-token ทำเป็น badge)
   // กัน over-split: ไม่แตกทุก " · " (บาง citation มี " · " ในวงเล็บ) · escape ก่อนแล้วค่อย wrap badge
   const REFTOK = /(ว\.ส\.ท\.\s*[\d฀-๿\-]+|มยผ\.?\s*[\d\-]+|ACI\s*318(?:-\d+)?|EIT\s*[\d\-]+|(?:มงคล|DRMK)\s*(?:Eq\.?|Equation|Figure|Fig\.?|Section|Table|รูป|หน้า|p\.)\s*[\d.]+[฀-๿]?)/g;
@@ -7197,12 +7211,26 @@ window.renderShowWork = function(out, opts){
     if(tail) h += ` <span class="cc-sw-extra">${esc(tail).replace(REFTOK, '<span class="cc-sw-ref">$1</span>')}</span>`;
     return `<li class="cc-sw-li">${h}</li>`;
   }
+  // อัตราส่วนใช้กำลัง D/C (demand/capacity) — pct = Mu_kg_cm/φMn หรือ Vu/φVn ที่ caller คำนวณจาก engine pair (parity-safe)
+  function dcRow(d){
+    const pct = Math.max(0, d.pct);
+    const ok  = (d.pass != null) ? !!d.pass : (pct <= 100);
+    const cls = ok ? 'cc-sw-ok' : 'cc-sw-bad';
+    const w   = Math.min(100, pct);   // bar เต็มที่ 100% (เกิน = แดงเต็มแถบ)
+    return `<div>
+      <div class="cc-sw-dc-top"><span>${esc(d.label)}</span><span class="cc-sw-dc-val ${cls}">ใช้กำลัง ${pct.toFixed(0)}% ${ok?'✓':'⚠'}</span></div>
+      <div class="cc-sw-dc-bar"><div class="cc-sw-dc-fill ${cls}" style="width:${w.toFixed(0)}%"></div></div>
+      ${d.sub ? `<div class="cc-sw-extra" style="margin-top:2px">${esc(d.sub)}</div>` : ''}
+    </div>`;
+  }
   let body = '';
+  if(dc.length)    body += `<div class="cc-sw-dcwrap"><div class="cc-sw-dc-h">📊 อัตราส่วนใช้กำลัง (D/C · demand ÷ capacity)</div>${dc.map(dcRow).join('')}</div>`;
   if(cits.length)  body += `<ol class="cc-sw-ol">${cits.map(citRow).join('')}</ol>`;
   if(notes.length) body += `<div class="cc-sw-notes"><div class="cc-sw-notes-h">หมายเหตุการออกแบบ</div><ul>${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
   const open = opts.open === false ? '' : ' open';
+  const cnt = [dc.length?dc.length+' ใช้กำลัง':'', cits.length?cits.length+' ขั้นตอน':'', notes.length?notes.length+' หมายเหตุ':''].filter(Boolean).join(' · ');
   return `<details class="cc-card cc-sw"${open} data-showwork="1">
-    <summary class="cc-sw-sum">📖 ดูวิธีทำ (รายการคำนวณ)<span class="cc-sw-count">${cits.length} ขั้นตอน${notes.length?' · '+notes.length+' หมายเหตุ':''}</span></summary>
+    <summary class="cc-sw-sum">📖 ดูวิธีทำ (รายการคำนวณ)<span class="cc-sw-count">${cnt}</span></summary>
     <div class="cc-sw-body">${body}<div class="cc-sw-foot">ทุกค่ามาจาก engine คำนวณ · อ้างอิงมาตรฐาน ว.ส.ท. / มยผ. (มงคล) · ตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง</div></div>
   </details>`;
 };
@@ -7505,7 +7533,8 @@ window.renderShowWork = function(out, opts){
          <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์ลบ (หัวเสา) → เหล็กบน</div>
          <div style="overflow-x:auto"><table class="c-tbl"><thead><tr><th>ที่รองรับ</th><th>−M (ต·ม)</th><th>As<sub>req</sub> (ซม²)</th><th>ρ</th><th>เหล็กบน</th></tr></thead><tbody>${supRows}</tbody></table></div>
          <div class="text-[11px] text-slate-500 mt-3">แรงปฏิกิริยา: ${reac}</div>
-       </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork(o) : ''}`;
+       </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork(o, {dc: ((govSafety!=null && (o.passes || govSafety<0)) ? [{label:'การดัด (วิกฤต · φMn ≥ Mu)', pct: (govSafety<=-99?999:10000/(100+govSafety)), pass: !!o.passes && govSafety>=0, sub:'จากช่วง/หัวเสาที่ใช้กำลังสูงสุด · D/C = 100/(100+margin)'}] : [])}) : ''}`;
+    // ^ Codex P2 (#6): ซ่อน governing D/C เมื่อ design fail แต่ govSafety ยังบวก (failure อยู่ที่ element ไม่มี margin เช่น SectionTooSmall) → กันโชว์ "เขียวผ่าน" หลอกตา · pass ผูกกับ o.passes
     const eb=$('c-excel-btn'); if(eb) eb.onclick=exportContinuousExcel;
     res.style.opacity='1';   // restore after debounced loading dim
   }
@@ -7886,6 +7915,7 @@ window.runDesignAudit = async function runDesignAudit(){
   A('transparency: renderShowWork ทำงาน (parse สูตร+badge code-ref)', (()=>{ try{ const h=window.renderShowWork({citations:['Vc = 0.53·√240 = 9401 กก. · ว.ส.ท. 1008-38 · มงคล Eq 5.7'],notes:['ใช้ ρmin']}); return /data-showwork/.test(h) && /cc-sw-eq/.test(h) && /cc-sw-ref/.test(h) && /หมายเหตุ/.test(h); }catch(e){ return false; } })());
   A('transparency: empty citations+notes → ไม่โชว์กล่องเปล่า', (()=>{ try{ return window.renderShowWork({citations:[],notes:[]})==='' && window.renderShowWork({})===''; }catch(e){ return false; } })());
   A('transparency: ต่อเนื่องโชว์ "ดูวิธีทำ" บนจอ (#c-results [data-showwork])', (()=>{ const d=document.querySelector('#c-results [data-showwork]'); return !!d && d.querySelectorAll('.cc-sw-li').length>0; })());
+  A('transparency: D/C ใช้กำลัง render (bar + pass/fail class)', (()=>{ try{ const ok=window.renderShowWork({citations:[]},{dc:[{label:'ดัด',pct:34,pass:true}]}); const bad=window.renderShowWork({citations:[]},{dc:[{label:'ดัด',pct:101,pass:false}]}); return /cc-sw-dc-bar/.test(ok)&&/cc-sw-ok/.test(ok)&&/ใช้กำลัง 34%/.test(ok)&&/cc-sw-bad/.test(bad)&&/ใช้กำลัง 101%/.test(bad); }catch(e){ return false; } })());
   const passed=checks.filter(c=>c.pass).length, failed=checks.length-passed;
   console.log(`[design-audit] ${passed}/${checks.length} · `+(failed?'⚠ DRIFT: '+checks.filter(c=>!c.pass).map(c=>c.name).join(' | '):'✓ ALL CONSISTENT'));
   if(failed) try{ console.table(checks.filter(c=>!c.pass)); }catch(e){}
