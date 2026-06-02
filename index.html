@@ -7651,6 +7651,19 @@ window.renderShowWork = function(out, opts){
     const paramsCard = `<div class="cc-card p-4"><div class="diagram-label mb-2">📐 Design Parameters · พารามิเตอร์ออกแบบ (วัสดุ)</div><div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-[12px] font-mono"><span class="text-slate-600">β₁</span><span class="text-right text-slate-800">${_b1.toFixed(2)}</span><span class="text-slate-600">ρb</span><span class="text-right text-slate-800">${_rb.toFixed(5)}</span><span class="text-slate-600">ρmin</span><span class="text-right text-slate-800">${_rmin.toFixed(5)}</span><span class="text-slate-600">ρmax</span><span class="text-right text-slate-800">${_rmax.toFixed(5)}</span><span class="text-slate-600">φ (flexure)</span><span class="text-right text-slate-800">0.90</span><span class="text-slate-600">f'c / fy</span><span class="text-right text-slate-800">${o.fc}/${o.fy} ksc</span></div><div class="mt-3 pt-3 border-t border-slate-100 text-[10px] text-slate-500 font-mono">ACI 318-19 §22.2 · ว.ส.ท. 1008-38 · As/ρ ต่อช่วงดูในตาราง</div></div>`;
     const _bw=window.BeamWorkspace;
     const beamHeader=_bw?`<div class="cc-card p-3 mb-3 border-l-4 border-amber-400"><div class="text-[10px] uppercase tracking-wider text-slate-400">รายการคาน</div><div class="font-mono text-[15px] font-semibold text-slate-800">${escHtml(_bw.headerStr(_bw.spanRef(0,o.n_spans,'A',String.fromCharCode(65+o.n_spans))))}</div></div>`:'';
+    // ---- รายการคำนวณละเอียด (show-work) ต่อช่วง/หัวเสา — build จากค่า engine คืน (display-only · parity-safe · ไม่คำนวณซ้ำ) ----
+    const _swCits=[];
+    (o.spans||[]).forEach(s=>{ const lbl=mapLbl(s.label); const bt=s.bottom||{};
+      if(bt.As_required!=null){
+        _swCits.push(`ช่วง ${lbl} (+M) — Mu = ${fmtTon(s.M_pos_tonm)} ต·ม → ρ = ${(bt.rho_final!=null?bt.rho_final.toFixed(5):'—')} → As,req = ρ·b·d = ${(+bt.As_required).toFixed(2)} ซม² → เลือก ${s.bottom_bars||'—'} → φMn ${bt.passes?'≥':'<'} Mu ${bt.passes?'✓':'✗'}`);
+      }
+      ((s.shear&&s.shear.citations)||[]).forEach(c=> _swCits.push(`ช่วง ${lbl} เฉือน — ${c}`));
+    });
+    (o.supports||[]).forEach(s=>{ if(Math.abs(s.M_neg_tonm||0)>=0.005 && s.top){ const lbl=mapLbl(s.label); const tp=s.top;
+      _swCits.push(`หัวเสา ${lbl} (−M) — Mu = ${fmtTon(Math.abs(s.M_neg_tonm))} ต·ม → As,req = ${(tp.As_required!=null?(+tp.As_required).toFixed(2):'—')} ซม² → เลือก ${s.top_bars||'—'} → φMn ${tp.passes?'≥':'<'} Mu ${tp.passes?'✓':'✗'}`);
+    }});
+    if(o.reactions&&o.reactions.length) _swCits.push(`แรงปฏิกิริยา — ${o.reactions.map(x=>mapLbl(x.label)+' = '+fmtTon(x.R_ton)+' ต').join(' · ')}`);
+    _swCits.push(...((o.citations)||[]));   // หลักการวิเคราะห์ (methodology · ต่อท้าย)
     res.innerHTML =
       `${beamHeader}${verdictCard}${metricsCard}<div class="cc-card p-4">
          <div class="flex items-center justify-between mb-3"><div class="diagram-label">ผลออกแบบ · ${o.n_spans} ช่วง</div></div>
@@ -7660,7 +7673,7 @@ window.renderShowWork = function(out, opts){
          <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์ลบ (หัวเสา) → เหล็กบน</div>
          <div style="overflow-x:auto"><table class="c-tbl"><thead><tr><th>ที่รองรับ</th><th>−M (ต·ม)</th><th>As<sub>req</sub> (ซม²)</th><th>ρ</th><th>เหล็กบน</th></tr></thead><tbody>${supRows}</tbody></table></div>
          <div class="text-[11px] text-slate-500 mt-3">แรงปฏิกิริยา: ${reac}</div>
-       </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork(o, {dc: ((govSafety!=null && (o.passes || govSafety<0)) ? [{label:'การดัด (วิกฤต · φMn ≥ Mu)', pct: (govSafety<=-99?999:10000/(100+govSafety)), pass: !!o.passes && govSafety>=0, sub:'จากช่วง/หัวเสาที่ใช้กำลังสูงสุด · D/C = 100/(100+margin)'}] : [])}) : ''}`;
+       </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork({citations:_swCits, notes:o.notes}, {dc: ((govSafety!=null && (o.passes || govSafety<0)) ? [{label:'การดัด (วิกฤต · φMn ≥ Mu)', pct: (govSafety<=-99?999:10000/(100+govSafety)), pass: !!o.passes && govSafety>=0, sub:'จากช่วง/หัวเสาที่ใช้กำลังสูงสุด · D/C = 100/(100+margin)'}] : [])}) : ''}`;
     // ^ Codex P2 (#6): ซ่อน governing D/C เมื่อ design fail แต่ govSafety ยังบวก (failure อยู่ที่ element ไม่มี margin เช่น SectionTooSmall) → กันโชว์ "เขียวผ่าน" หลอกตา · pass ผูกกับ o.passes
     if(window.ccPopulatePrint) try{ window.ccPopulatePrint(); }catch(e){}   // หัวกระดาษพร้อมเสมอ (กัน Ctrl+P beforeprint ไม่ทัน)
     res.style.opacity='1';   // restore after debounced loading dim
