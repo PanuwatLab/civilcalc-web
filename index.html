@@ -506,15 +506,20 @@
 <!-- ========== MAIN ========== -->
 <main class="max-w-none mx-auto px-6 py-6">
 
+  <!-- ============ PRINT-ONLY title block (รายการคำนวณ A4 · populated by preparePrint) ============ -->
+  <div id="cc-print-header" class="cc-print-only" aria-hidden="true"></div>
+
   <!-- ============ MODE TOGGLE (Session 3A) ============ -->
-  <div id="cont-mode-bar" class="flex items-center gap-2 mb-5">
+  <div id="cont-mode-bar" class="cc-print-hide flex items-center gap-2 mb-5">
     <span class="text-[12px] text-slate-500 mr-1">โหมด:</span>
     <button id="mode-single-btn" class="mode-tab mode-tab-active px-4 py-2 rounded-lg text-[13px] font-medium border">คานช่วงเดียว</button>
     <button id="mode-cont-btn" class="mode-tab px-4 py-2 rounded-lg text-[13px] font-medium border">คานต่อเนื่อง (หลายช่วง)</button>
   </div>
 
   <!-- ============ Phase 1 · Beam Meta (เบอร์/prefix/ชั้น/หมายเหตุ · เห็นทั้ง 2 โหมด · optional · ไม่บล็อกคำนวณ) ============ -->
-  <div id="beam-meta-card" class="cc-card p-3 mb-5 flex flex-wrap items-end gap-x-4 gap-y-2">
+  <div id="beam-meta-card" class="cc-print-hide cc-card p-3 mb-5 flex flex-wrap items-end gap-x-4 gap-y-2">
+    <label class="text-[11px] text-slate-500 flex flex-col gap-0.5">โครงการ
+      <input id="bm-project" type="text" maxlength="60" class="input-underline !w-40 text-sm !font-sans" aria-label="ชื่อโครงการ" placeholder="ชื่อโครงการ (สำหรับ PDF)"></label>
     <div class="flex items-end gap-1.5">
       <span class="text-[12px] text-slate-500 mb-1.5">🔖 คาน</span>
       <select id="bm-prefix" class="input-underline !text-[13px] !font-sans" aria-label="ประเภทคาน (prefix)" title="ประเภทคาน: B ทั่วไป · GB คอดิน · RB หลังคา · CB ยึด">
@@ -533,7 +538,7 @@
   <section id="continuous-panel" class="hidden">
     <div class="desktop-grid">
       <!-- input -->
-      <aside class="cc-card p-5 space-y-5 self-start">
+      <aside class="cc-print-hide cc-card p-5 space-y-5 self-start">
         <section>
           <h3 class="text-sm font-semibold text-slate-800 flex items-center gap-2 mb-3"><span>📏</span><span>หน้าตัดคาน (ทั้งคาน)</span></h3>
           <div class="space-y-3">
@@ -675,7 +680,7 @@
   <div class="desktop-grid">
 
     <!-- =================== INPUT PANEL =================== -->
-    <aside class="cc-card p-5 form-disable form-soft-disable space-y-5 self-start">
+    <aside class="cc-print-hide cc-card p-5 form-disable form-soft-disable space-y-5 self-start">
 
       <!-- Presets -->
       <div>
@@ -1403,6 +1408,7 @@
     <!-- Action buttons -->
     <div class="flex items-center justify-center gap-3 mt-6">
       <button id="excel-btn" class="btn btn-accent px-6 py-3 text-sm">📥 ดาวน์โหลด Excel</button>
+      <button id="print-pdf-btn" class="btn btn-ghost px-6 py-3 text-sm border border-slate-200" title="พิมพ์รายการคำนวณเป็น PDF (A4)">🖨️ พิมพ์ PDF</button>
       <button class="btn btn-ghost px-5 py-3 text-sm border border-slate-200">🔁 รีเซ็ต</button>
     </div>
   </section>
@@ -1430,6 +1436,15 @@
       <div class="cc-card p-4"><div class="skeleton h-20"></div></div>
     </div>
   </section>
+
+  <!-- ============ PRINT-ONLY signature block (ช่องเซ็น ก.ว.) ============ -->
+  <div id="cc-print-sign" class="cc-print-only" aria-hidden="true">
+    <div class="cc-psign-row">
+      <div class="cc-psign-box"><div class="cc-psign-line"></div>ผู้คำนวณ / ออกแบบ<br><span>เลขทะเบียน ก.ว. ____________ · วันที่ ________</span></div>
+      <div class="cc-psign-box"><div class="cc-psign-line"></div>ผู้ตรวจสอบ<br><span>เลขทะเบียน ก.ว. ____________ · วันที่ ________</span></div>
+    </div>
+    <div class="cc-psign-foot">รายการคำนวณนี้จัดทำโดยโปรแกรม Civil Calc · ผลเป็น preliminary · ต้องตรวจสอบและรับรองโดยวิศวกรผู้ได้รับใบอนุญาต (ก.ว.) ก่อนใช้งานจริง · อ้างอิงมาตรฐาน ว.ส.ท. / มยผ.</div>
+  </div>
 
 </main>
 
@@ -7160,6 +7175,89 @@ window.BeamWorkspace = (function(){
 })();
 </script>
 
+<!-- ============ PDF · print-CSS (รายการคำนวณ A4 portrait · window.print → Save as PDF · vector คมชัด ไม่ html2canvas) ============ -->
+<style>
+  /* print-only blocks ซ่อนบนจอ · โชว์ตอนพิมพ์ */
+  .cc-print-only{ display:none; }
+  #cc-print-header .cc-ph-title{ font-size:17px; font-weight:700; color:#0f172a; }
+  #cc-print-header .cc-ph-sub{ font-size:12px; color:#475569; margin-top:2px; }
+  #cc-print-header .cc-ph-grid{ display:grid; grid-template-columns:1fr 1fr; gap:2px 18px; margin-top:8px; font-size:11.5px; color:#334155; }
+  #cc-print-header .cc-ph-grid b{ color:#0f172a; }
+  .cc-psign-row{ display:flex; gap:40px; margin-top:8px; }
+  .cc-psign-box{ flex:1; font-size:11.5px; color:#334155; text-align:center; }
+  .cc-psign-line{ border-top:1px solid #334155; margin-bottom:6px; height:34px; }
+  .cc-psign-box span{ font-size:10px; color:#64748b; }
+  .cc-psign-foot{ font-size:9.5px; color:#94a3b8; margin-top:14px; line-height:1.5; }
+
+  @media print {
+    @page { size: A4 portrait; margin: 14mm 12mm 16mm 12mm; }
+    html, body { background:#fff !important; font-family:'Sarabun','TH Sarabun New',sans-serif; }
+    /* ซ่อน chrome ทั้งหมด */
+    header, footer, .cc-print-hide, button, #qa-panel, .skeleton { display:none !important; }
+    /* โชว์ print-only */
+    .cc-print-only { display:block !important; }
+    main { max-width:none !important; padding:0 !important; margin:0 !important; }
+    /* คลาย grid → คอลัมน์เดียว A4 */
+    .desktop-grid, .cc-output-2col { display:block !important; }
+    /* การ์ด: ไม่มีเงา/ขอบหนา · ไม่แตกกลางการ์ด */
+    .cc-card { box-shadow:none !important; border:1px solid #e2e8f0 !important; break-inside:avoid; page-break-inside:avoid; margin-bottom:8px !important; }
+    .cc-sw, details.cc-sw { break-inside:avoid; }
+    /* SVG กราฟ/หน้าตัด: คุมขนาดให้พอดีหน้า */
+    svg { max-width:100% !important; height:auto !important; }
+    /* show-work เปิดเสมอตอนพิมพ์ (เผื่อ user พับไว้ · JS ก็ set open ด้วย) */
+    details.cc-sw > .cc-sw-body { display:block !important; }
+    .cc-sw-sum::before { display:none; }
+    #cc-print-header { margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid #0f172a; }
+    #cc-print-sign { margin-top:16px; padding-top:10px; border-top:1px solid #cbd5e1; break-inside:avoid; }
+    /* ลด animation/transition ตอนพิมพ์ */
+    * { transition:none !important; animation:none !important; }
+  }
+</style>
+<script>
+/* ccPreparePrint() — เตรียม title block + ช่องเซ็น จากโหมด active → เปิด show-work → window.print()
+   print-CSS ที่เหลือจัดการการซ่อน chrome + A4 layout · display-only · ไม่แตะ engine */
+window.ccPreparePrint = function(){
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const BW = window.BeamWorkspace;
+  const cont = document.body.classList.contains('mode-continuous');
+  if(BW && BW.setMode) BW.setMode(cont ? 'continuous' : 'single');
+  const mark = BW ? BW.beamMarkStr() : 'B?';
+  let gridRef = '', bxh = '';
+  if(cont){
+    const ns = (window.__contBeam && window.__contBeam.getSpans) ? window.__contBeam.getSpans().length : 1;
+    gridRef = BW ? BW.spanRef(0, ns, 'A', String.fromCharCode(65+ns)) : '';
+    const cb = $('c-b') ? $('c-b').value : '?', ch = $('c-h') ? $('c-h').value : '?', cfc = $('c-fc') ? $('c-fc').value : null;
+    bxh = `b×h = ${cb}×${ch} ซม.` + (cfc ? ` · f'c=${cfc} ksc` : '');
+  } else {
+    gridRef = BW ? BW.spanRef(0,1,'A','B') : '';
+    const s = window.__session1 && window.__session1.state;
+    if(s) bxh = `b×h = ${s.b}×${s.h} ซม. · f'c=${s.fc} · fy=${s.fy} ksc`;
+  }
+  const proj  = ($('bm-project') && $('bm-project').value.trim()) || '—';
+  const floor = (BW && BW.beam.metadata.floor) || '';
+  const notes = (BW && BW.beam.metadata.notes) || '';
+  let dstr = ''; try{ dstr = new Date().toLocaleDateString('th-TH', {year:'numeric',month:'long',day:'numeric'}); }catch(e){ dstr = ''; }
+  const hdr = $('cc-print-header');
+  if(hdr){
+    hdr.innerHTML =
+      `<div class="cc-ph-title">รายการคำนวณออกแบบคานคอนกรีตเสริมเหล็ก (RC Beam Design)</div>
+       <div class="cc-ph-sub">${esc(cont ? 'คานต่อเนื่อง · วิเคราะห์แม่นยำ (Three-Moment Equation)' : 'คานช่วงเดียว · Simply-supported')}</div>
+       <div class="cc-ph-grid">
+         <div>โครงการ: <b>${esc(proj)}</b></div><div>คาน: <b>${esc(mark)}</b>${gridRef ? ' · '+esc(gridRef) : ''}</div>
+         <div>${esc(bxh)}</div><div>${floor ? 'ชั้น: <b>'+esc(floor)+'</b>' : ''}${notes ? (floor?' · ':'')+esc(notes) : ''}</div>
+         <div>มาตรฐาน: <b>ว.ส.ท. / มยผ. (มงคล)</b></div><div>วันที่: <b>${esc(dstr)}</b></div>
+       </div>`;
+  }
+  document.querySelectorAll('details.cc-sw').forEach(d => d.setAttribute('open',''));   // เปิด show-work ให้พิมพ์ติด
+  setTimeout(() => { try{ window.print(); }catch(e){} }, 80);
+};
+(function(){
+  function wire(){ const b = document.getElementById('print-pdf-btn'); if(b) b.addEventListener('click', window.ccPreparePrint); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire); else wire();
+})();
+</script>
+
 <!-- ============ Transparency · "ดูวิธีทำ (รายการคำนวณ)" — surface engine citations+notes on-screen (Tedds-style · display-only · index-only) ============ -->
 <style>
   .cc-sw{padding:0;overflow:hidden}
@@ -7526,7 +7624,7 @@ window.renderShowWork = function(out, opts){
     const beamHeader=_bw?`<div class="cc-card p-3 mb-3 border-l-4 border-amber-400"><div class="text-[10px] uppercase tracking-wider text-slate-400">รายการคาน</div><div class="font-mono text-[15px] font-semibold text-slate-800">${escHtml(_bw.headerStr(_bw.spanRef(0,o.n_spans,'A',String.fromCharCode(65+o.n_spans))))}</div></div>`:'';
     res.innerHTML =
       `${beamHeader}${verdictCard}${metricsCard}<div class="cc-card p-4">
-         <div class="flex items-center justify-between mb-3"><div class="diagram-label">ผลออกแบบ · ${o.n_spans} ช่วง</div><div class="flex items-center gap-2"><button id="c-excel-btn" class="px-3 py-1 rounded-lg text-[12px] bg-emerald-600 hover:bg-emerald-700 text-white">📥 Excel</button></div></div>
+         <div class="flex items-center justify-between mb-3"><div class="diagram-label">ผลออกแบบ · ${o.n_spans} ช่วง</div><div class="flex items-center gap-2"><button id="c-excel-btn" class="px-3 py-1 rounded-lg text-[12px] bg-emerald-600 hover:bg-emerald-700 text-white">📥 Excel</button><button id="c-print-btn" class="px-3 py-1 rounded-lg text-[12px] border border-slate-300 text-slate-600 hover:bg-slate-50">🖨️ พิมพ์ PDF</button></div></div>
          <div class="text-[11px] text-slate-500 mb-3">${o.method} · b×h = ${o.b}×${o.h} ซม. · f'c=${o.fc} · fy=${o.fy} ksc · combo ${cCombo}</div>
          <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์บวก (กลางช่วง) → เหล็กล่าง + เหล็กปลอก</div>
          <div style="overflow-x:auto"><table class="c-tbl mb-4"><thead><tr><th>ช่วง</th><th>+M (ต·ม)</th><th>As<sub>req</sub> (ซม²)</th><th>ρ</th><th>เหล็กล่าง</th><th>Vu (ต)</th><th>เหล็กปลอก</th></tr></thead><tbody>${spanRows}</tbody></table></div>
@@ -7536,6 +7634,7 @@ window.renderShowWork = function(out, opts){
        </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork(o, {dc: ((govSafety!=null && (o.passes || govSafety<0)) ? [{label:'การดัด (วิกฤต · φMn ≥ Mu)', pct: (govSafety<=-99?999:10000/(100+govSafety)), pass: !!o.passes && govSafety>=0, sub:'จากช่วง/หัวเสาที่ใช้กำลังสูงสุด · D/C = 100/(100+margin)'}] : [])}) : ''}`;
     // ^ Codex P2 (#6): ซ่อน governing D/C เมื่อ design fail แต่ govSafety ยังบวก (failure อยู่ที่ element ไม่มี margin เช่น SectionTooSmall) → กันโชว์ "เขียวผ่าน" หลอกตา · pass ผูกกับ o.passes
     const eb=$('c-excel-btn'); if(eb) eb.onclick=exportContinuousExcel;
+    const pb=$('c-print-btn'); if(pb && window.ccPreparePrint) pb.onclick=window.ccPreparePrint;
     res.style.opacity='1';   // restore after debounced loading dim
   }
 
@@ -7916,6 +8015,8 @@ window.runDesignAudit = async function runDesignAudit(){
   A('transparency: empty citations+notes → ไม่โชว์กล่องเปล่า', (()=>{ try{ return window.renderShowWork({citations:[],notes:[]})==='' && window.renderShowWork({})===''; }catch(e){ return false; } })());
   A('transparency: ต่อเนื่องโชว์ "ดูวิธีทำ" บนจอ (#c-results [data-showwork])', (()=>{ const d=document.querySelector('#c-results [data-showwork]'); return !!d && d.querySelectorAll('.cc-sw-li').length>0; })());
   A('transparency: D/C ใช้กำลัง render (bar + pass/fail class)', (()=>{ try{ const ok=window.renderShowWork({citations:[]},{dc:[{label:'ดัด',pct:34,pass:true}]}); const bad=window.renderShowWork({citations:[]},{dc:[{label:'ดัด',pct:101,pass:false}]}); return /cc-sw-dc-bar/.test(ok)&&/cc-sw-ok/.test(ok)&&/ใช้กำลัง 34%/.test(ok)&&/cc-sw-bad/.test(bad)&&/ใช้กำลัง 101%/.test(bad); }catch(e){ return false; } })());
+  // ---- PDF · print infra guard (print-only blocks ซ่อนบนจอ · ปุ่ม + ฟังก์ชันพร้อม) ----
+  A('pdf: ccPreparePrint พร้อม + print-only blocks ซ่อนบนจอ (display:none)', (()=>{ try{ const h=document.getElementById('cc-print-header'), s=document.getElementById('cc-print-sign'); if(typeof window.ccPreparePrint!=='function'||!h||!s) return false; return getComputedStyle(h).display==='none' && getComputedStyle(s).display==='none'; }catch(e){ return false; } })());
   const passed=checks.filter(c=>c.pass).length, failed=checks.length-passed;
   console.log(`[design-audit] ${passed}/${checks.length} · `+(failed?'⚠ DRIFT: '+checks.filter(c=>!c.pass).map(c=>c.name).join(' | '):'✓ ALL CONSISTENT'));
   if(failed) try{ console.table(checks.filter(c=>!c.pass)); }catch(e){}
