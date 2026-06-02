@@ -7204,7 +7204,9 @@ window.BeamWorkspace = (function(){
     .cc-sw, details.cc-sw { break-inside:avoid; }
     /* SVG กราฟ: เต็มกว้างได้ (landscape) แต่ cap ความสูงให้ประหยัดหน้า */
     svg { max-width:100% !important; height:auto !important; }
-    #c-schematic svg, #c-shear svg, #c-moment svg, #svg-V, #svg-M, #svg-schematic { max-height:135px !important; }
+    /* กราฟ schematic/V/M: คุมด้วย "ความกว้างเต็มเท่ากัน" (ไม่ใช่ max-height) → viewBox 1100 + plot 60-1040 เท่ากัน
+       → แกน x ตรงกันทุกกราฟ ลากเส้นดิ่งโปรเจคค่าได้ (Nu 2026-06-02 · เดิม max-height ทำ aspect ต่าง → กว้างต่าง → x เหลื่อม) */
+    #c-schematic svg, #c-shear svg, #c-moment svg, #svg-beam, #svg-V, #svg-M { width:100% !important; max-width:100% !important; height:auto !important; max-height:none !important; }
     /* หน้าตัดคาน (portrait · rcBeamSection): ขนาดอ่านชัดแต่ไม่เต็มหน้า (Nu 2026-06-02 · 175→300 อ่าน label ได้) */
     .c-sec-row { display:flex !important; flex-wrap:nowrap !important; justify-content:center !important; align-items:flex-start !important; gap:22px !important; }
     .c-sec-row > div { flex:0 1 auto !important; min-width:0 !important; }   /* เรียงข้างกัน · ไม่ wrap (Nu 2026-06-02) */
