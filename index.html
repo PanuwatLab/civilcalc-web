@@ -6255,6 +6255,7 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
       const _esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
       let _hdr='', _bar='';
       if(_bw){
+        if(_bw.setMode) _bw.setMode('single');   // Phase 2 belt: claim โหมดช่วงเดียวก่อนอ่าน/เขียนชื่อกริด (per-mode state)
         _hdr=`<div class="cc-card p-3 mb-3 border-l-4 border-amber-400"><div class="text-[10px] uppercase tracking-wider text-slate-400">รายการคาน</div><div class="font-mono text-[15px] font-semibold text-slate-800">${_esc(_bw.headerStr(_bw.spanRef(0,1,'A','B')))}</div></div>`;
         let _cells='';
         for(let i=0;i<=1;i++){ const def=String.fromCharCode(65+i);
@@ -7045,24 +7046,36 @@ function renderLoadList(host, items, onChange){
    หลักการ: engine เข้าถึง "by index เท่านั้น" — ชื่อ custom เป็น display-only ห้าม query ผลด้วยชื่อ
    โมดูลสะอาดระดับ window · ไม่บอลต์เข้า IIFE เดิม (กันเพิ่ม tangle · ref Web-Arch-Guard) */
 window.BeamWorkspace = (function(){
-  const SCHEMA = 1;
+  const SCHEMA = 2;                          // Phase 2: per-mode grid naming (เดิม gridNames ก้อนเดียว shared → v2 = grids ต่อโหมด)
   const MAX_LEN = 8;                        // cap ความยาวชื่อกริด — enforced ใน setGridName + maxlength + ellipsis (กัน overflow ป้าย SVG)
-  const beam = {                            // Beam object (1 ตัว · Phase 2 = หลายตัว + persist)
+  const MODES = ['single','continuous'];
+  // จักรวาลกริดแยกต่อโหมด (Phase 2 · ปลด cross-mode shared-state):
+  //   single-span = 2 แกนกริดเสมอ (A,B)
+  //   continuous  = reserve 5 (A–E · cap 4 ช่วง) ตั้งแต่ต้น — กัน future-default collision "ภายในต่อเนื่อง" (Codex r8 invariant คงไว้ · scoped ในโหมด)
+  const UNIVERSE = { single: 2, continuous: 5 };
+  let mode = 'single';   // โหมด active · ตั้งโดย setMode() (ผูกกับปุ่มสลับโหมด 7697 + ต้นทาง render แต่ละโหมด) · boot=single ตรง mode-tab-active เริ่มต้น
+
+  const beam = {                            // Beam object (1 ตัว · Phase 2.3 = หลายตัว + persist)
     id: 'beam-1',
     schemaVersion: SCHEMA,
     beamMark: { prefix: 'B', number: '1' }, // → "B1" · prefix ∈ B/GB/RB/CB
     metadata: { floor: '', notes: '' },     // ตัด "ตำแหน่ง" ตาม ฟันธง · optional ทั้งหมด
-    gridNames: {}                           // sparse { gridIndex: "customName" } · ว่าง = ใช้ default
+    // Phase 2: ชื่อกริดแยกต่อโหมด (เดิม gridNames ก้อนเดียว → ชื่อรั่วข้ามโหมด + over-restrict single ตั้ง C-E ไม่ได้)
+    grids: { single: { names:{} }, continuous: { names:{} } }   // names = sparse { gridIndex: "customName" } · ว่าง = ใช้ default
   };
+  // backward-compat: โค้ดเดิม (renderGridBar / single bar / gl / mapLbl) + audit guard อ่าน beam.gridNames[i] ตรงๆ → proxy ไป map ของโหมด active
+  // enumerable:false → JSON.stringify(beam) ไม่ซ้ำกับ grids (Phase 2.2 persist serialize สะอาด · getState ได้ grids ก้อนเดียว)
+  Object.defineProperty(beam, 'gridNames', { enumerable:false, get(){ return beam.grids[mode].names; } });
   const PREFIXES = ['B','GB','RB','CB'];
-  let gridUniverse = 5;   // reserve กริดสูงสุดที่เป็นไปได้ A–E (ต่อเนื่อง cap 4 ช่วง = 5 กริด) ตั้งแต่ต้น · custom ชน default ข้ามโหมดไม่ได้เลย (Codex r8: กัน future-default collision · setGridCount ขยายต่อถ้า cap เปลี่ยน)
 
   const _s = v => (v==null ? '' : String(v)).trim();
   const _safe = v => _s(v).replace(/[<>&"']/g, '');   // strip HTML-dangerous chars (XSS defense · ชื่อ/meta = โค้ดสั้น)
 
-  // ป้ายกริดที่จะแสดง — custom ถ้ามี ไม่งั้น fallback (caller ส่ง default ของโหมดนั้น เช่น gl(i)=A,B,C)
+  function setMode(m){ if (MODES.indexOf(m) !== -1) mode = m; }   // idempotent · enum-validated · route gridName/setGridName/dup ไปโหมดนี้
+
+  // ป้ายกริดที่จะแสดง — custom ของโหมด active ถ้ามี ไม่งั้น fallback (caller ส่ง default ของโหมดนั้น เช่น gl(i)=A,B,C)
   function gridName(i, fallback){
-    const c = beam.gridNames[i];
+    const c = beam.grids[mode].names[i];
     if (c != null && _s(c) !== '') return String(c);
     return (fallback != null) ? fallback : String.fromCharCode(65+i);
   }
@@ -7071,17 +7084,17 @@ window.BeamWorkspace = (function(){
   // others = ชื่อที่ "แสดงจริง" ของกริดอื่น (effective · custom|default) สำหรับเช็คซ้ำข้ามทั้ง custom+default
   function setGridName(i, name, others){
     name = _safe(name).slice(0, MAX_LEN);   // P2: enforce length cap (MAX_LEN live · กัน overflow ป้าย SVG)
-    if (name === '') { delete beam.gridNames[i]; return { ok:true, cleared:true }; }
-    // dup check = effective name (custom||default) ของ "ทุกกริดในจักรวาล" (gridUniverse · ทั้ง 2 โหมด) ยกเว้น i + others ที่ส่งมา
-    // กันชนกับ DEFAULT ของกริด off-screen (Codex r6: single-span ตั้ง A→'C' ชน default กริด C ของต่อเนื่อง → 'C–C' กำกวม)
+    const names = beam.grids[mode].names;
+    if (name === '') { delete names[i]; return { ok:true, cleared:true }; }
+    // dup check = effective (custom||default) + default ของ "ทุกกริดในจักรวาลของโหมดนี้" (per-mode · ไม่ข้ามโหมดอีกต่อไป) ยกเว้น i + others
     const sibs = [];
-    const _N = Math.max(gridUniverse, i + 1);
+    const _N = Math.max(UNIVERSE[mode], i + 1);
     // ใส่ทั้ง effective name (custom||default) และ default letter ของทุก sibling — กัน custom ของ sibling ไป "บัง" default ของมัน
-    // (Codex r7: B→'X' แล้ว C→'B' = B contribute 'X' ไม่ใช่ 'B' → clear B ทีหลังชน 'B'/'B' · invariant: custom ต้องต่างจากทั้ง effective+default ของ sibling)
+    // (Codex r7 invariant คงไว้ · scoped ในโหมด: custom ต้องต่างจากทั้ง effective+default ของทุก sibling → clear-to-default ปลอดภัยอัตโนมัติ)
     for (let k = 0; k < _N; k++) if (k !== i) { sibs.push(gridName(k, String.fromCharCode(65+k))); sibs.push(String.fromCharCode(65+k)); }
     if (Array.isArray(others)) others.forEach(o => { const v = _s(o); if (v) sibs.push(v); });
     if (sibs.map(s => s.toUpperCase()).indexOf(name.toUpperCase()) !== -1) return { ok:false, reason:'duplicate' };  // case-insensitive ('B'≡'b')
-    beam.gridNames[i] = name;
+    names[i] = name;
     return { ok:true };
   }
 
@@ -7105,12 +7118,12 @@ window.BeamWorkspace = (function(){
     return s;
   }
 
-  function setGridCount(n){ if (n > gridUniverse) gridUniverse = n; }   // โหมดเรนเดอร์กริดกี่จุด → ขยายจักรวาล (เช็ค dup ข้ามโหมด)
+  function setGridCount(n){ if (n > UNIVERSE.continuous) UNIVERSE.continuous = n; }   // ต่อเนื่องเรนเดอร์กี่จุด → ขยายจักรวาล "ของต่อเนื่อง" เผื่อ cap ช่วงเพิ่ม (single คงที่ 2)
   return {
-    SCHEMA, MAX_LEN, PREFIXES, beam,
-    gridName, setGridName, setGridCount, beamMarkStr, setBeamMark, setMeta, spanRef, headerStr,
-    getState: () => JSON.parse(JSON.stringify(beam)),
-    reset(){ beam.gridNames={}; beam.beamMark={prefix:'B',number:'1'}; beam.metadata={floor:'',notes:''}; gridUniverse=5; }
+    SCHEMA, MAX_LEN, PREFIXES, MODES, beam,
+    gridName, setGridName, setGridCount, setMode, beamMarkStr, setBeamMark, setMeta, spanRef, headerStr,
+    getState: () => JSON.parse(JSON.stringify(beam)),   // enumerable:false gridNames ถูกข้าม → ได้ {id,schemaVersion,beamMark,metadata,grids}
+    reset(){ beam.grids={ single:{names:{}}, continuous:{names:{}} }; beam.beamMark={prefix:'B',number:'1'}; beam.metadata={floor:'',notes:''}; UNIVERSE.continuous=5; mode='single'; }
   };
 })();
 </script>
@@ -7505,7 +7518,8 @@ window.BeamWorkspace = (function(){
     });
     if(typeof window.enhanceA11y==='function') window.enhanceA11y(host);
   }
-  function refreshNaming(){ if(!lastResult) return; renderSchematic(lastResult); renderResults(lastResult); renderGridBar(lastResult); }
+  function refreshNaming(){ if(window.BeamWorkspace) window.BeamWorkspace.setMode('continuous');   // belt: claim โหมดต่อเนื่องก่อน re-render labels (กัน mode สลับค้าง)
+    if(!lastResult) return; renderSchematic(lastResult); renderResults(lastResult); renderGridBar(lastResult); }
 
   // ---- 1) BEAM SCHEMATIC (loads) ----
   function renderSchematic(o){
@@ -7695,6 +7709,7 @@ window.BeamWorkspace = (function(){
 
   // ---- mode toggle ----
   function setMode(cont){
+    if(window.BeamWorkspace) window.BeamWorkspace.setMode(cont?'continuous':'single');   // Phase 2: route grid-naming state ไปโหมดที่ active (จุดสลับโหมดจุดเดียว · ครอบทั้งปุ่ม + audit __contBeam.setMode)
     document.body.classList.toggle('mode-continuous', cont);
     $('continuous-panel').classList.toggle('hidden', !cont);
     $('mode-cont-btn').classList.toggle('mode-tab-active', cont);
@@ -7810,6 +7825,9 @@ window.runDesignAudit = async function runDesignAudit(){
   A('naming: header cross-ref รูปแบบ "คาน … · ช่วงกริด …"', (()=>{ try{ const bw=window.BeamWorkspace; return /^คาน .+· ช่วงกริด /.test(bw.headerStr(bw.spanRef(0,1,'A','B'))); }catch(e){ return false; } })());
   A('naming: ต่อเนื่อง มีแถบตั้งชื่อกริด (#c-grid-bar)', (()=>{ const b=document.getElementById('c-grid-bar'); return !!b && b.querySelectorAll('.cc-grid-input').length>0; })());
   A('naming: ชื่อกริด XSS-safe (strip <>&)', (()=>{ try{ const bw=window.BeamWorkspace; bw.setGridName(999,'<b>&x'); const v=bw.beam.gridNames[999]; delete bw.beam.gridNames[999]; return v==='bx'; }catch(e){ return false; } })());
+  // ---- Phase 2 · per-mode grid state guards (drift checker · display-only · index-only) ----
+  A('naming: per-mode isolation — ชื่อกริดช่วงเดียวไม่รั่วไปต่อเนื่อง', (()=>{ try{ const bw=window.BeamWorkspace; bw.setMode('single'); bw.setGridName(1,'ZZ'); const leaked=bw.beam.grids.continuous.names[1]; delete bw.beam.grids.single.names[1]; bw.setMode('single'); return (leaked==null||leaked===''); }catch(e){ return false; } })());
+  A('naming: ช่วงเดียวตั้งชื่อ "C" ได้ (ปลด over-restriction · per-mode)', (()=>{ try{ const bw=window.BeamWorkspace; bw.setMode('single'); const r=bw.setGridName(1,'C'); delete bw.beam.grids.single.names[1]; return !!(r&&r.ok===true); }catch(e){ return false; } })());
   const passed=checks.filter(c=>c.pass).length, failed=checks.length-passed;
   console.log(`[design-audit] ${passed}/${checks.length} · `+(failed?'⚠ DRIFT: '+checks.filter(c=>!c.pass).map(c=>c.name).join(' | '):'✓ ALL CONSISTENT'));
   if(failed) try{ console.table(checks.filter(c=>!c.pass)); }catch(e){}
