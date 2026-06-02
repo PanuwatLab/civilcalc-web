@@ -7255,7 +7255,8 @@ window.ccPopulatePrint = function(){
     const ns = (window.__contBeam && window.__contBeam.getSpans) ? window.__contBeam.getSpans().length : 1;
     gridRef = BW ? BW.spanRef(0, ns, 'A', String.fromCharCode(65+ns)) : '';
     const cb = $('c-b') ? $('c-b').value : '?', ch = $('c-h') ? $('c-h').value : '?', cfc = $('c-fc') ? $('c-fc').value : null;
-    bxh = `b×h = ${cb}×${ch} ซม.` + (cfc ? ` · f'c=${cfc} ksc` : '');
+    const cfy = (window.__contBeam && window.__contBeam.getFy) ? window.__contBeam.getFy() : null;   // Codex P2 #7: บันทึก fy ในหัวกระดาษต่อเนื่อง (เหมือนช่วงเดียว)
+    bxh = `b×h = ${cb}×${ch} ซม.` + (cfc ? ` · f'c=${cfc}` : '') + (cfy ? ` · fy=${cfy} ksc` : '');
   } else {
     gridRef = BW ? BW.spanRef(0,1,'A','B') : '';
     const s = window.__session1 && window.__session1.state;
@@ -7984,7 +7985,8 @@ window.renderShowWork = function(out, opts){
     }
     renderSpanInputs(); renderCantInputs();
     window.__contBeam = { calc:calcContinuous, setMode, getSpans:()=>spans, setSpans:s=>{spans=s.map(x=>({pts:[],...x}));renderSpanInputs();},
-      setCant:(L,R)=>{cantL=L;cantR=R;if(cbL)cbL.checked=!!L;if(cbR)cbR.checked=!!R;renderCantInputs();}, refreshNaming };
+      setCant:(L,R)=>{cantL=L;cantR=R;if(cbL)cbL.checked=!!L;if(cbR)cbR.checked=!!R;renderCantInputs();}, refreshNaming,
+      getFy:()=>cFy, getCombo:()=>cCombo };   // Codex P2 #7: expose fy/combo ให้หัวกระดาษ PDF บันทึก grade เหล็ก
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })();
