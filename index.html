@@ -493,7 +493,7 @@
 </header>
 
 <!-- ========== DISCLAIMER ========== -->
-<div class="bg-amber-50 border-l-4 border-amber-500">
+<div class="cc-print-hide bg-amber-50 border-l-4 border-amber-500">
   <div class="max-w-none mx-auto px-6 py-2.5 flex items-center justify-between gap-3">
     <div class="flex items-center gap-2 text-amber-900 text-sm">
       <span class="text-base">⚠️</span>
@@ -1257,8 +1257,8 @@
 
     <div class="result-grid">
 
-      <!-- Verdict -->
-      <div class="cc-card p-4 flex flex-col gap-3">
+      <!-- Verdict (เก่า · ถูกแทนด้วยสรุปใหม่ #ss-section-summary · ซ่อนตอนพิมพ์ กันค่า stale leak) -->
+      <div class="cc-card cc-print-hide p-4 flex flex-col gap-3">
         <div class="diagram-label">Verdict</div>
 
         <div class="show-pass">
@@ -6275,7 +6275,7 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
         let _cells='';
         for(let i=0;i<=1;i++){ const def=String.fromCharCode(65+i);
           _cells+=`<input class="ss-grid-input" data-grid="${i}" value="${_esc(_bw.beam.gridNames[i]||'')}" placeholder="${def}" maxlength="8" aria-label="ชื่อกริดจุดที่ ${i+1} (ค่าเริ่มต้น ${def})" title="แก้ชื่อกริด · ค่าเริ่มต้น ${def} · ว่าง=คืนค่าเริ่มต้น" style="width:48px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px 2px;background:#fff;color:#1e293b;text-overflow:ellipsis;overflow:hidden">`; }
-        _bar=`<div class="flex items-center gap-2 flex-wrap mb-3"><span class="text-[11px] text-slate-500 font-medium">🏷️ ชื่อกริด</span><div class="flex items-center gap-1.5">${_cells}</div><span class="text-[10px] text-slate-400">แก้ได้ · ว่าง=ค่าเริ่มต้น</span></div>`;
+        _bar=`<div class="cc-print-hide flex items-center gap-2 flex-wrap mb-3"><span class="text-[11px] text-slate-500 font-medium">🏷️ ชื่อกริด</span><div class="flex items-center gap-1.5">${_cells}</div><span class="text-[10px] text-slate-400">แก้ได้ · ว่าง=ค่าเริ่มต้น</span></div>`;
       }
       let html = _hdr + _bar + `
         <div class="text-[12px] text-slate-500 mb-2">วิเคราะห์คานช่วงเดียว (simply-supported) · b×h = ${out.input.b}×${out.input.h} ซม. · f'c=${out.input.fc} · fy=${out.input.fy} ksc</div>
@@ -7192,8 +7192,8 @@ window.BeamWorkspace = (function(){
   @media print {
     @page { size: A4 portrait; margin: 14mm 12mm 16mm 12mm; }
     html, body { background:#fff !important; font-family:'Sarabun','TH Sarabun New',sans-serif; }
-    /* ซ่อน chrome ทั้งหมด */
-    header, footer, .cc-print-hide, button, #qa-panel, .skeleton { display:none !important; }
+    /* ซ่อน chrome ทั้งหมด + input/grid-naming bar (แก้ค่าไม่ได้ตอนพิมพ์ · ชื่อกริดโชว์ในหัวผลแล้ว) */
+    header, footer, .cc-print-hide, button, input, select, #c-grid-bar, #qa-panel, .skeleton { display:none !important; }
     /* โชว์ print-only */
     .cc-print-only { display:block !important; }
     main { max-width:none !important; padding:0 !important; margin:0 !important; }
@@ -7214,9 +7214,10 @@ window.BeamWorkspace = (function(){
   }
 </style>
 <script>
-/* ccPreparePrint() — เตรียม title block + ช่องเซ็น จากโหมด active → เปิด show-work → window.print()
-   print-CSS ที่เหลือจัดการการซ่อน chrome + A4 layout · display-only · ไม่แตะ engine */
-window.ccPreparePrint = function(){
+/* ccPopulatePrint() — เตรียม title block + ช่องเซ็น จากโหมด active + เปิด show-work (ไม่ print)
+   เรียกทั้งจากปุ่ม "พิมพ์ PDF" และ event beforeprint (รองรับ Ctrl+P ตรงๆ ด้วย)
+   ccPreparePrint() = populate + window.print() · print-CSS จัดการซ่อน chrome + A4 · display-only · ไม่แตะ engine */
+window.ccPopulatePrint = function(){
   const $ = id => document.getElementById(id);
   const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const BW = window.BeamWorkspace;
@@ -7250,8 +7251,10 @@ window.ccPreparePrint = function(){
        </div>`;
   }
   document.querySelectorAll('details.cc-sw').forEach(d => d.setAttribute('open',''));   // เปิด show-work ให้พิมพ์ติด
-  setTimeout(() => { try{ window.print(); }catch(e){} }, 80);
 };
+window.ccPreparePrint = function(){ window.ccPopulatePrint(); setTimeout(() => { try{ window.print(); }catch(e){} }, 80); };
+// รองรับ Ctrl+P / เมนู Print ของเบราว์เซอร์ (ไม่ผ่านปุ่ม) → populate title block อัตโนมัติ
+window.addEventListener('beforeprint', function(){ try{ window.ccPopulatePrint(); }catch(e){} });
 (function(){
   function wire(){ const b = document.getElementById('print-pdf-btn'); if(b) b.addEventListener('click', window.ccPreparePrint); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire); else wire();
