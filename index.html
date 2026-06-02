@@ -7279,9 +7279,11 @@ window.ccPopulatePrint = function(){
   }
 };
 window.__ccOpenShowWork = function(){ document.querySelectorAll('details.cc-sw').forEach(d => d.setAttribute('open','')); };
-window.ccPreparePrint = function(){ window.ccPopulatePrint(); window.__ccOpenShowWork(); setTimeout(() => { try{ window.print(); }catch(e){} }, 80); };
+// flush continuous recalc ที่ค้าง debounce (350ms) ก่อนพิมพ์ — กันหัวกระดาษ b/h/fc/fy ใหม่ vs ตาราง/กราฟค่าเก่า (Codex P2 #7)
+window.__ccFlushBeforePrint = function(){ try{ if(document.body.classList.contains('mode-continuous') && window.__contBeam && window.__contBeam.flushCalc) window.__contBeam.flushCalc(); }catch(e){} };
+window.ccPreparePrint = function(){ window.__ccFlushBeforePrint(); window.ccPopulatePrint(); window.__ccOpenShowWork(); setTimeout(() => { try{ window.print(); }catch(e){} }, 80); };
 // รองรับ Ctrl+P / เมนู Print (ไม่ผ่านปุ่ม) + populate ทุกครั้งหลัง render (กัน beforeprint ไม่ fire ทัน → หัวกระดาษหาย)
-window.addEventListener('beforeprint', function(){ try{ window.ccPopulatePrint(); window.__ccOpenShowWork(); }catch(e){} });
+window.addEventListener('beforeprint', function(){ try{ window.__ccFlushBeforePrint(); window.ccPopulatePrint(); window.__ccOpenShowWork(); }catch(e){} });
 (function(){
   function wire(){ const b = document.getElementById('print-pdf-btn'); if(b) b.addEventListener('click', window.ccPreparePrint); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire); else wire();
@@ -7986,7 +7988,8 @@ window.renderShowWork = function(out, opts){
     renderSpanInputs(); renderCantInputs();
     window.__contBeam = { calc:calcContinuous, setMode, getSpans:()=>spans, setSpans:s=>{spans=s.map(x=>({pts:[],...x}));renderSpanInputs();},
       setCant:(L,R)=>{cantL=L;cantR=R;if(cbL)cbL.checked=!!L;if(cbR)cbR.checked=!!R;renderCantInputs();}, refreshNaming,
-      getFy:()=>cFy, getCombo:()=>cCombo };   // Codex P2 #7: expose fy/combo ให้หัวกระดาษ PDF บันทึก grade เหล็ก
+      getFy:()=>cFy, getCombo:()=>cCombo,   // Codex P2 #7: expose fy/combo ให้หัวกระดาษ PDF บันทึก grade เหล็ก
+      flushCalc:()=>{ clearTimeout(_calcTimer); calcContinuous(); } };   // Codex P2 #7: flush debounce ก่อนพิมพ์ (กันหัวกระดาษใหม่ vs ตาราง/กราฟเก่า)
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', wire); else wire();
 })();
