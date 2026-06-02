@@ -6279,6 +6279,7 @@ _json.dumps(_ok, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', st
           </div>
           <p class="text-[10px] text-slate-400 mt-2">รูปแสดงเหล็กตามจำนวนจริง · ขอปลอก 135°</p>`;
       }
+      html += (window.renderShowWork ? window.renderShowWork(out) : '');   // 📖 ดูวิธีทำ (citations+notes ของ engine · display-only)
       host.innerHTML = html;
       // wire single-span grid-naming bar (A/B) → BeamWorkspace + refresh (display-only · no recompute)
       const _bw2=window.BeamWorkspace;
@@ -7154,6 +7155,59 @@ window.BeamWorkspace = (function(){
 })();
 </script>
 
+<!-- ============ Transparency · "ดูวิธีทำ (รายการคำนวณ)" — surface engine citations+notes on-screen (Tedds-style · display-only · index-only) ============ -->
+<style>
+  .cc-sw{padding:0;overflow:hidden}
+  .cc-sw-sum{cursor:pointer;padding:11px 16px;font-size:13px;font-weight:600;color:#334155;list-style:none;display:flex;align-items:center;gap:8px;user-select:none}
+  .cc-sw-sum::-webkit-details-marker{display:none}
+  .cc-sw-sum::before{content:'▸';color:#94a3b8;transition:transform .15s ease;font-size:11px}
+  .cc-sw[open] .cc-sw-sum::before{transform:rotate(90deg)}
+  .cc-sw-count{font-weight:400;font-size:11px;color:#94a3b8;margin-left:auto}
+  .cc-sw-body{padding:2px 16px 14px}
+  .cc-sw-ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:7px}
+  .cc-sw-li{font-size:12px;line-height:1.65;color:#475569}
+  .cc-sw-eq{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:#1e293b;background:#f8fafc;border:1px solid #f1f5f9;padding:1px 5px;border-radius:4px;word-break:break-word}
+  .cc-sw-extra{color:#64748b;font-size:11px}
+  .cc-sw-ref{display:inline-block;font-size:10px;color:#475569;background:#eef2f7;border:1px solid #e2e8f0;border-radius:4px;padding:0 5px;margin-left:2px;white-space:nowrap}
+  .cc-sw-notes{margin-top:11px;padding-top:9px;border-top:1px dashed #e2e8f0}
+  .cc-sw-notes-h{font-size:11px;font-weight:600;color:#64748b;margin-bottom:4px}
+  .cc-sw-notes ul{margin:0;padding-left:18px}
+  .cc-sw-notes li{font-size:11.5px;color:#64748b;line-height:1.55}
+  .cc-sw-foot{margin-top:12px;font-size:10px;color:#94a3b8;line-height:1.5;border-top:1px solid #f1f5f9;padding-top:8px}
+</style>
+<script>
+/* renderShowWork(out, opts) → HTML string ของกล่อง "ดูวิธีทำ" · ใช้ร่วม 2 โหมด
+   หลักการ: surface เฉพาะ engine citations[]+notes[] (สตริง "สูตร → แทนค่า → ผล → อ้าง code" ที่ engine สร้างเอง)
+   = display-only · ไม่คำนวณซ้ำ · parity-safe 100% (เป็นสตริงของ engine) · escHtml กัน XSS */
+window.renderShowWork = function(out, opts){
+  opts = opts || {};
+  const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const cits  = Array.isArray(out && out.citations) ? out.citations.filter(c => String(c||'').trim()) : [];
+  const notes = Array.isArray(out && out.notes)     ? out.notes.filter(n => String(n||'').trim())     : [];
+  if(!cits.length && !notes.length) return '';   // ไม่มีอะไร → ไม่โชว์กล่องเปล่า
+  // heuristic: split ที่ " · " แรก → หัว = สูตร/ค่า (mono · hero) · หาง = code-ref + คำอธิบาย (ref-token ทำเป็น badge)
+  // กัน over-split: ไม่แตกทุก " · " (บาง citation มี " · " ในวงเล็บ) · escape ก่อนแล้วค่อย wrap badge
+  const REFTOK = /(ว\.ส\.ท\.\s*[\d฀-๿\-]+|มยผ\.?\s*[\d\-]+|ACI\s*318(?:-\d+)?|EIT\s*[\d\-]+|(?:มงคล|DRMK)\s*(?:Eq\.?|Equation|Figure|Fig\.?|Section|Table|รูป|หน้า|p\.)\s*[\d.]+[฀-๿]?)/g;
+  function citRow(cit){
+    const s = String(cit);
+    const i = s.indexOf(' · ');
+    const head = i < 0 ? s : s.slice(0, i);
+    const tail = i < 0 ? '' : s.slice(i + 3);
+    let h = `<code class="cc-sw-eq">${esc(head)}</code>`;
+    if(tail) h += ` <span class="cc-sw-extra">${esc(tail).replace(REFTOK, '<span class="cc-sw-ref">$1</span>')}</span>`;
+    return `<li class="cc-sw-li">${h}</li>`;
+  }
+  let body = '';
+  if(cits.length)  body += `<ol class="cc-sw-ol">${cits.map(citRow).join('')}</ol>`;
+  if(notes.length) body += `<div class="cc-sw-notes"><div class="cc-sw-notes-h">หมายเหตุการออกแบบ</div><ul>${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>`;
+  const open = opts.open === false ? '' : ' open';
+  return `<details class="cc-card cc-sw"${open} data-showwork="1">
+    <summary class="cc-sw-sum">📖 ดูวิธีทำ (รายการคำนวณ)<span class="cc-sw-count">${cits.length} ขั้นตอน${notes.length?' · '+notes.length+' หมายเหตุ':''}</span></summary>
+    <div class="cc-sw-body">${body}<div class="cc-sw-foot">ทุกค่ามาจาก engine คำนวณ · อ้างอิงมาตรฐาน ว.ส.ท. / มยผ. (มงคล) · ตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง</div></div>
+  </details>`;
+};
+</script>
+
 <!-- ============ Session 3A · continuous-beam UI logic ============ -->
 <script>
 (function(){
@@ -7451,7 +7505,7 @@ window.BeamWorkspace = (function(){
          <div class="text-[12px] font-semibold text-slate-700 mb-1">โมเมนต์ลบ (หัวเสา) → เหล็กบน</div>
          <div style="overflow-x:auto"><table class="c-tbl"><thead><tr><th>ที่รองรับ</th><th>−M (ต·ม)</th><th>As<sub>req</sub> (ซม²)</th><th>ρ</th><th>เหล็กบน</th></tr></thead><tbody>${supRows}</tbody></table></div>
          <div class="text-[11px] text-slate-500 mt-3">แรงปฏิกิริยา: ${reac}</div>
-       </div>${paramsCard}${cantBlock}${rec}${secCard}`;
+       </div>${paramsCard}${cantBlock}${rec}${secCard}${window.renderShowWork ? window.renderShowWork(o) : ''}`;
     const eb=$('c-excel-btn'); if(eb) eb.onclick=exportContinuousExcel;
     res.style.opacity='1';   // restore after debounced loading dim
   }
@@ -7828,6 +7882,10 @@ window.runDesignAudit = async function runDesignAudit(){
   // ---- Phase 2 · per-mode grid state guards (drift checker · display-only · index-only) ----
   A('naming: per-mode isolation — ชื่อกริดช่วงเดียวไม่รั่วไปต่อเนื่อง', (()=>{ try{ const bw=window.BeamWorkspace; bw.setMode('single'); bw.setGridName(1,'ZZ'); const leaked=bw.beam.grids.continuous.names[1]; delete bw.beam.grids.single.names[1]; bw.setMode('single'); return (leaked==null||leaked===''); }catch(e){ return false; } })());
   A('naming: ช่วงเดียวตั้งชื่อ "C" ได้ (ปลด over-restriction · per-mode)', (()=>{ try{ const bw=window.BeamWorkspace; bw.setMode('single'); const r=bw.setGridName(1,'C'); delete bw.beam.grids.single.names[1]; return !!(r&&r.ok===true); }catch(e){ return false; } })());
+  // ---- Transparency · show-work guards (display-only · parity-safe surface ของ engine citations) ----
+  A('transparency: renderShowWork ทำงาน (parse สูตร+badge code-ref)', (()=>{ try{ const h=window.renderShowWork({citations:['Vc = 0.53·√240 = 9401 กก. · ว.ส.ท. 1008-38 · มงคล Eq 5.7'],notes:['ใช้ ρmin']}); return /data-showwork/.test(h) && /cc-sw-eq/.test(h) && /cc-sw-ref/.test(h) && /หมายเหตุ/.test(h); }catch(e){ return false; } })());
+  A('transparency: empty citations+notes → ไม่โชว์กล่องเปล่า', (()=>{ try{ return window.renderShowWork({citations:[],notes:[]})==='' && window.renderShowWork({})===''; }catch(e){ return false; } })());
+  A('transparency: ต่อเนื่องโชว์ "ดูวิธีทำ" บนจอ (#c-results [data-showwork])', (()=>{ const d=document.querySelector('#c-results [data-showwork]'); return !!d && d.querySelectorAll('.cc-sw-li').length>0; })());
   const passed=checks.filter(c=>c.pass).length, failed=checks.length-passed;
   console.log(`[design-audit] ${passed}/${checks.length} · `+(failed?'⚠ DRIFT: '+checks.filter(c=>!c.pass).map(c=>c.name).join(' | '):'✓ ALL CONSISTENT'));
   if(failed) try{ console.table(checks.filter(c=>!c.pass)); }catch(e){}
