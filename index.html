@@ -7206,8 +7206,9 @@ window.BeamWorkspace = (function(){
     svg { max-width:100% !important; height:auto !important; }
     #c-schematic svg, #c-shear svg, #c-moment svg, #svg-V, #svg-M, #svg-schematic { max-height:135px !important; }
     /* หน้าตัดคาน (portrait · rcBeamSection): ขนาดอ่านชัดแต่ไม่เต็มหน้า (Nu 2026-06-02 · 175→300 อ่าน label ได้) */
-    .c-sec-row svg { max-height:450px !important; width:auto !important; max-width:48% !important; }
-    .c-sec-row { gap:22px !important; }
+    .c-sec-row { display:flex !important; flex-wrap:nowrap !important; justify-content:center !important; align-items:flex-start !important; gap:22px !important; }
+    .c-sec-row > div { flex:1 1 0 !important; min-width:0 !important; max-width:50% !important; }   /* บังคับเรียงข้างกัน · ไม่ wrap (Nu 2026-06-02) */
+    .c-sec-row svg { max-height:450px !important; width:auto !important; max-width:100% !important; }
     /* กระชับการ์ด/ระยะ → รวมหน้าประหยัดสุด */
     .cc-card { padding:9px 11px !important; margin-bottom:6px !important; }
     .diagram-label { margin:2px 0 !important; }
