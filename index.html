@@ -7656,11 +7656,17 @@ window.renderShowWork = function(out, opts){
     (o.spans||[]).forEach(s=>{ const lbl=mapLbl(s.label); const bt=s.bottom||{};
       if(bt.As_required!=null){
         _swCits.push(`ช่วง ${lbl} (+M) — Mu = ${fmtTon(s.M_pos_tonm)} ต·ม → ρ = ${(bt.rho_final!=null?bt.rho_final.toFixed(5):'—')} → As,req = ρ·b·d = ${(+bt.As_required).toFixed(2)} ซม² → เลือก ${s.bottom_bars||'—'} → φMn ${bt.passes?'≥':'<'} Mu ${bt.passes?'✓':'✗'}`);
+      } else if(bt.passes===false){   // Codex P2: ช่วง fail (SectionTooSmall · As ว่าง) → ต้องโชว์ช่วง+เหตุผล (ไม่ข้าม)
+        _swCits.push(`ช่วง ${lbl} (+M) — Mu = ${fmtTon(s.M_pos_tonm)} ต·ม → ❌ ไม่ผ่าน: ${bt.note||'หน้าตัดไม่พอสำหรับ singly-reinforced · ต้องขยาย b/h หรือ f′c'}`);
       }
       ((s.shear&&s.shear.citations)||[]).forEach(c=> _swCits.push(`ช่วง ${lbl} เฉือน — ${c}`));
     });
     (o.supports||[]).forEach(s=>{ if(Math.abs(s.M_neg_tonm||0)>=0.005 && s.top){ const lbl=mapLbl(s.label); const tp=s.top;
-      _swCits.push(`หัวเสา ${lbl} (−M) — Mu = ${fmtTon(Math.abs(s.M_neg_tonm))} ต·ม → As,req = ${(tp.As_required!=null?(+tp.As_required).toFixed(2):'—')} ซม² → เลือก ${s.top_bars||'—'} → φMn ${tp.passes?'≥':'<'} Mu ${tp.passes?'✓':'✗'}`);
+      if(tp.As_required!=null){
+        _swCits.push(`หัวเสา ${lbl} (−M) — Mu = ${fmtTon(Math.abs(s.M_neg_tonm))} ต·ม → As,req = ${(+tp.As_required).toFixed(2)} ซม² → เลือก ${s.top_bars||'—'} → φMn ${tp.passes?'≥':'<'} Mu ${tp.passes?'✓':'✗'}`);
+      } else if(tp.passes===false){   // Codex P2: หัวเสา fail → โชว์เหตุผล
+        _swCits.push(`หัวเสา ${lbl} (−M) — Mu = ${fmtTon(Math.abs(s.M_neg_tonm))} ต·ม → ❌ ไม่ผ่าน: ${tp.note||'หน้าตัดไม่พอ · ต้องขยาย b/h หรือ f′c'}`);
+      }
     }});
     if(o.reactions&&o.reactions.length) _swCits.push(`แรงปฏิกิริยา — ${o.reactions.map(x=>mapLbl(x.label)+' = '+fmtTon(x.R_ton)+' ต').join(' · ')}`);
     _swCits.push(...((o.citations)||[]));   // หลักการวิเคราะห์ (methodology · ต่อท้าย)
