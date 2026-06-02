@@ -7193,7 +7193,7 @@ window.BeamWorkspace = (function(){
     @page { size: A4 portrait; margin: 14mm 12mm 16mm 12mm; }
     html, body { background:#fff !important; font-family:'Sarabun','TH Sarabun New',sans-serif; }
     /* ซ่อน chrome ทั้งหมด + input/grid-naming bar (แก้ค่าไม่ได้ตอนพิมพ์ · ชื่อกริดโชว์ในหัวผลแล้ว) */
-    header, footer, .cc-print-hide, button, input, select, #c-grid-bar, #qa-panel, .skeleton { display:none !important; }
+    header, footer, .cc-print-hide, button, input, select, #c-grid-bar, #cross-section, #qa-panel, .skeleton { display:none !important; }
     /* โชว์ print-only */
     .cc-print-only { display:block !important; }
     main { max-width:none !important; padding:0 !important; margin:0 !important; }
@@ -7207,8 +7207,10 @@ window.BeamWorkspace = (function(){
     #c-schematic svg, #c-shear svg, #c-moment svg, #svg-V, #svg-M, #svg-schematic { max-height:135px !important; }
     /* หน้าตัดคาน (portrait · rcBeamSection): ขนาดอ่านชัดแต่ไม่เต็มหน้า (Nu 2026-06-02 · 175→300 อ่าน label ได้) */
     .c-sec-row { display:flex !important; flex-wrap:nowrap !important; justify-content:center !important; align-items:flex-start !important; gap:22px !important; }
-    .c-sec-row > div { flex:1 1 0 !important; min-width:0 !important; max-width:50% !important; }   /* บังคับเรียงข้างกัน · ไม่ wrap (Nu 2026-06-02) */
-    .c-sec-row svg { max-height:270px !important; width:auto !important; max-width:100% !important; }
+    .c-sec-row > div { flex:0 1 auto !important; min-width:0 !important; }   /* เรียงข้างกัน · ไม่ wrap (Nu 2026-06-02) */
+    /* สเกลคงที่ทุกคาน (zoom เดียวกัน) → กราฟฟิก+text "ชี้เหล็ก" สเกลเท่ากันทั้ง single/continuous
+       (natural ทุกคานถูกสร้างด้วย scale:0.5 เท่ากัน · เดิม max-height normalize ทำให้คานสูงกว่า text เล็กกว่า) */
+    .c-sec-row svg { zoom:0.61 !important; width:auto !important; height:auto !important; max-width:none !important; max-height:none !important; }
     /* กระชับการ์ด/ระยะ → รวมหน้าประหยัดสุด */
     .cc-card { padding:9px 11px !important; margin-bottom:6px !important; }
     .diagram-label { margin:2px 0 !important; }
