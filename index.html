@@ -1157,6 +1157,45 @@
     return { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mmax), xMmax, RA, RB };
   }
 
+  /* ── continuous analysis via REAL engine (three-moment) · responds to dragged loads ──
+     แปลงหน่วย: ccModel กก./กก.·ม ↔ engine kN ภายใน (1 kgf = 1/KGF_PER_KN kN)
+     คืนรูปเดียวกับ analyzeSingle (+ marks +M/−M) · null = engine ยังไม่พร้อม/พลาด → ใช้ fallback */
+  const KGF_PER_KN = 101.9716;
+  function analyzeContinuous() {
+    if (!(window.__civilCalc && window.__civilCalc.ready)) return null;
+    const g = geom();
+    const dl = MOCK.cont.DL / KGF_PER_KN, ll = MOCK.cont.LL / KGF_PER_KN;  // kg/m → kN/m (UDL ยัง mock)
+    const spans = g.spans.map(L => ({ L, DL: dl, LL: ll, point_loads: [] }));
+    // map global point loads → per-span (x จากปลายซ้ายของช่วง · P กก.→kN)
+    ccModel.points.forEach(p => {
+      let si = 0;
+      for (let k = 0; k < g.spans.length; k++) { if (p.x >= g.nodes[k] - 1e-9 && p.x <= g.nodes[k + 1] + 1e-9) { si = k; break; } si = k; }
+      const xloc = Math.max(0, Math.min(g.spans[si], p.x - g.nodes[si]));
+      spans[si].point_loads.push({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: p.P / KGF_PER_KN, x: xloc });
+    });
+    let res;
+    try { res = window.__civilCalc.designContinuous({ b: MOCK.cont.b, h: MOCK.cont.h, fc: MOCK.cont.fc, fy: MOCK.cont.fy, spans, load_combo: '1.4D+1.7L' }); }
+    catch (e) { console.warn('[civilcalc] continuous engine call failed', e); return null; }
+    if (!res || !res.ok || !res.out || !res.out.diagram) return null;
+    const d = res.out.diagram;
+    const xs = d.x.slice(), V = d.V_ton.map(v => v * 1000), M = d.M_tonm.map(v => v * 1000);  // ton→kg · t·m→kg·m
+    let Vmax = 0; V.forEach(v => { if (Math.abs(v) > Vmax) Vmax = Math.abs(v); });
+    // marks: +M สูงสุดต่อช่วง · −M ต่ำสุดที่หัวเสาภายใน (จาก array จริง)
+    const marks = [];
+    let Mpk = 1;
+    g.spans.forEach((sp, si) => {
+      let best = -Infinity, bx = (g.nodes[si] + g.nodes[si + 1]) / 2;
+      for (let i = 0; i < xs.length; i++) { if (xs[i] >= g.nodes[si] - 1e-9 && xs[i] <= g.nodes[si + 1] + 1e-9 && M[i] > best) { best = M[i]; bx = xs[i]; } }
+      if (best > 1) { marks.push({ x: bx, val: best, type: 'pos' }); Mpk = Math.max(Mpk, best); }
+    });
+    for (let k = 1; k < g.nodes.length - 1; k++) {
+      let worst = Infinity, wx = g.nodes[k];
+      for (let i = 0; i < xs.length; i++) { if (Math.abs(xs[i] - g.nodes[k]) < (g.total / 400) && M[i] < worst) { worst = M[i]; wx = xs[i]; } }
+      if (worst < -1) { marks.push({ x: wx, val: -worst, type: 'neg' }); Mpk = Math.max(Mpk, -worst); }
+    }
+    return { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mpk), marks, out: res.out };
+  }
+
   /* ════════════════ CORE · ccCanvas (Revit-style interactive beam) ════════════════
      กริด A/B/C · dimension แก้ได้ · glyph โหลดลากได้ (snap 0.1 ม) → เขียนกลับ ccModel */
   const ccCanvas = {
@@ -1372,32 +1411,47 @@
         marks.push({ x: X(a.xMmax), y: mAxis + Mmax * msc, val: Mmax, type: 'pos' });
         if (Mmin < -1) marks.push({ x: X(xMmin), y: mAxis + Mmin * msc, val: -Mmin, type: 'neg' });
       } else {
-        // continuous — smooth parabola per span through (yL, midSag, yR); proportional scale
-        const n = g.spans.length; Vmax = MOCK.cont.Vu;
-        const nodeHog = g.nodes.map((nx, i) => (i === 0 || i === g.nodes.length - 1) ? 0 : (spanMoments(i - 1, n).negR || 8800));
-        let maxSag = 1; g.spans.forEach((sp, si) => { maxSag = Math.max(maxSag, spanMoments(si, n).pos); });
-        const maxHog = Math.max(1, ...nodeHog);
-        Mmax = Math.max(maxSag, maxHog);
-        const msc = Math.min(momDown / maxSag, momUp / maxHog);   // one scale → magnitudes stay proportional
-        const lp = [], fp = [], vpts = [];
-        g.spans.forEach((sp, si) => {
-          const x0 = g.nodes[si], yL = -nodeHog[si], yR = -nodeHog[si + 1], Pp = spanMoments(si, n).pos;
-          // parabola coeffs (value space): M(t)=a t² + b t + c, M(0)=yL, M(.5)=Pp, M(1)=yR
-          const a2 = -4 * Pp + 2 * yL + 2 * yR, b2 = 4 * Pp - 3 * yL - yR, c2 = yL;
-          const steps = 30;
-          for (let k = (si > 0 ? 1 : 0); k <= steps; k++) {       // skip shared node to keep one smooth path
-            const t = k / steps, v = a2 * t * t + b2 * t + c2, x = x0 + t * sp, py = mAxis + v * msc;
-            lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`);
-          }
-          marks.push({ x: X((g.nodes[si] + g.nodes[si + 1]) / 2), y: mAxis + Pp * msc, val: Pp, type: 'pos' });
-          // shear: linear within span, jump at supports
-          vpts.push([X(x0), vMid - vH * 0.34], [X(g.nodes[si + 1]), vMid + vH * 0.34]);
-        });
-        g.nodes.forEach((nx, i) => { if (nodeHog[i] > 0) marks.push({ x: X(nx), y: mAxis - nodeHog[i] * msc, val: nodeHog[i], type: 'neg' }); });
-        mLine = lp.join(' ');
-        mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
-        vLine = vpts.map(([x, y]) => `${x},${y}`).join(' ');
-        vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+        const ac = analyzeContinuous();
+        if (ac) {
+          // ── REAL engine (three-moment) · interactive · responds to dragged loads (Phase 2) ──
+          Vmax = ac.Vmax || 1;
+          let maxPos = 1, maxNeg = 1;
+          ac.M.forEach(mm => { if (mm > maxPos) maxPos = mm; if (-mm > maxNeg) maxNeg = -mm; });
+          Mmax = Math.max(maxPos, maxNeg);
+          const vsc = (vH * 0.42) / Vmax, msc = Math.min(momDown / maxPos, momUp / maxNeg);
+          vLine = ac.xs.map((x, i) => `${X(x)},${(vMid - ac.V[i] * vsc).toFixed(1)}`).join(' ');
+          vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+          const lp = [], fp = [];
+          ac.xs.forEach((x, i) => { const py = mAxis + ac.M[i] * msc; lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`); });
+          mLine = lp.join(' ');
+          mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
+          ac.marks.forEach(mk => marks.push({ x: X(mk.x), y: mAxis + (mk.type === 'neg' ? -mk.val : mk.val) * msc, val: mk.val, type: mk.type }));
+        } else {
+          // ── fallback (engine ยังไม่พร้อม) · parabola ประมาณจาก spanMoments ──
+          const n = g.spans.length; Vmax = MOCK.cont.Vu;
+          const nodeHog = g.nodes.map((nx, i) => (i === 0 || i === g.nodes.length - 1) ? 0 : (spanMoments(i - 1, n).negR || 8800));
+          let maxSag = 1; g.spans.forEach((sp, si) => { maxSag = Math.max(maxSag, spanMoments(si, n).pos); });
+          const maxHog = Math.max(1, ...nodeHog);
+          Mmax = Math.max(maxSag, maxHog);
+          const msc = Math.min(momDown / maxSag, momUp / maxHog);
+          const lp = [], fp = [], vpts = [];
+          g.spans.forEach((sp, si) => {
+            const x0 = g.nodes[si], yL = -nodeHog[si], yR = -nodeHog[si + 1], Pp = spanMoments(si, n).pos;
+            const a2 = -4 * Pp + 2 * yL + 2 * yR, b2 = 4 * Pp - 3 * yL - yR, c2 = yL;
+            const steps = 30;
+            for (let k = (si > 0 ? 1 : 0); k <= steps; k++) {
+              const t = k / steps, v = a2 * t * t + b2 * t + c2, x = x0 + t * sp, py = mAxis + v * msc;
+              lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`);
+            }
+            marks.push({ x: X((g.nodes[si] + g.nodes[si + 1]) / 2), y: mAxis + Pp * msc, val: Pp, type: 'pos' });
+            vpts.push([X(x0), vMid - vH * 0.34], [X(g.nodes[si + 1]), vMid + vH * 0.34]);
+          });
+          g.nodes.forEach((nx, i) => { if (nodeHog[i] > 0) marks.push({ x: X(nx), y: mAxis - nodeHog[i] * msc, val: nodeHog[i], type: 'neg' }); });
+          mLine = lp.join(' ');
+          mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
+          vLine = vpts.map(([x, y]) => `${x},${y}`).join(' ');
+          vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+        }
       }
 
       // ── V band ──
