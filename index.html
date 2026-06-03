@@ -687,9 +687,9 @@
       <div class="print-block border border-[#cbd5e1] rounded p-4 grid grid-cols-2 gap-x-8 gap-y-1 text-[12px] mono">
         <div><span class="text-ink-muted">โครงการ:</span> <span id="pt_proj">อาคารพักอาศัย 2 ชั้น — คาน B1</span></div>
         <div><span class="text-ink-muted">มาตรฐาน:</span> ว.ส.ท. (SDM/USD)</div>
-        <div><span class="text-ink-muted">องค์อาคาร:</span> คาน B1 (ช่วงเดียว)</div>
-        <div><span class="text-ink-muted">b×h:</span> 25×50 ซม</div>
-        <div><span class="text-ink-muted">f'c:</span> 240 ksc · <span class="text-ink-muted">fy:</span> 4000 ksc</div>
+        <div><span class="text-ink-muted">องค์อาคาร:</span> <span id="pt_member">คาน B1 (ช่วงเดียว)</span></div>
+        <div><span class="text-ink-muted">b×h:</span> <span id="pt_bh">25×50</span> ซม</div>
+        <div><span class="text-ink-muted">f'c:</span> <span id="pt_fc">240</span> ksc · <span class="text-ink-muted">fy:</span> <span id="pt_fy">4000</span> ksc</div>
         <div><span class="text-ink-muted">วันที่:</span> <span id="pt_date"></span></div>
       </div>
       <div class="print-block mt-10 flex justify-end gap-16 text-[12px]">
@@ -992,6 +992,12 @@
     // live summary (geometry-driven parts are live; design figures stay mock)
     $('#ls_bh').textContent = P.b + '×' + P.h;
     $('#ls_d').textContent = d.toFixed(1);
+    // print title block · populate from live inputs (Codex P2 · กันหัว PDF ผิด)
+    const modeLbl = state.mode === 'cont' ? 'ต่อเนื่อง' : 'ช่วงเดียว';
+    const ptm = $('#pt_member'); if (ptm) ptm.textContent = 'คาน B1 (' + modeLbl + ')';
+    const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h;
+    const ptfc = $('#pt_fc'); if (ptfc) ptfc.textContent = String(P.fc);
+    const ptfy = $('#pt_fy'); if (ptfy) ptfy.textContent = String(fy);
   }
 
   function initStep1() {
@@ -1903,8 +1909,13 @@
     renderWork();
     if (state.step === 3) { drawMainSections(); if (state.ctab === 'detail') drawDetailing(); }
     // continuous live summary tweaks (b×h via JS; Wu/Mu set inside drawStep2 via ccUnits)
-    if (state.mode === 'cont') $('#ls_bh').textContent = MOCK.cont.b + '×' + MOCK.cont.h;
-    else $('#ls_bh').textContent = P.b + '×' + P.h;
+    if (state.mode === 'cont') {
+      $('#ls_bh').textContent = MOCK.cont.b + '×' + MOCK.cont.h;
+      const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = MOCK.cont.b + '×' + MOCK.cont.h;
+    } else {
+      $('#ls_bh').textContent = P.b + '×' + P.h;
+      const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h;
+    }
     updateNav();
   }
 
