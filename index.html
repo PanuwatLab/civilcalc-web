@@ -2397,6 +2397,19 @@ class PointLoad:
 
 
 @dataclass
+class PartialUDL:
+    """Partial uniformly-distributed load over a sub-segment [x1, x2] of the span.
+
+    Additional to the full-span UDL (DL/LL) · simply-supported only (this PR).
+    Sign: w > 0 downward (gravity). w in kN/m · x1, x2 in m (0 ≤ x1 < x2 ≤ L).
+    """
+    kind: str       # "DL" or "LL" · drives load combo factor
+    w: float        # intensity in kN/m (downward · per metre over [x1,x2])
+    x1: float       # segment start from left support (m)
+    x2: float       # segment end from left support (m)
+
+
+@dataclass
 class BeamInput:
     """Input for singly-reinforced RC beam design.
 
@@ -2416,6 +2429,7 @@ class BeamInput:
     load_combo: LoadCombo = LoadCombo.ACI_MODERN
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
     stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
+    partial_udls: list = field(default_factory=list)   # list[PartialUDL] · simply-supported
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -2681,21 +2695,96 @@ def _factor_point_loads(
     return result
 
 
+def _factor_partial_udls(
+    partial_udls: list, combo: LoadCombo
+) -> list[tuple[float, float, float, str]]:
+    """Apply load combo factor to partial UDLs · return [(w_kN_m, x1, x2, kind), ...].
+
+    Accepts PartialUDL dataclass or dict {kind,w,x1,x2}. Validates x1 < x2.
+    """
+    if not partial_udls:
+        return []
+    if combo == LoadCombo.ACI_MODERN:
+        f_DL, f_LL = LOAD_FACTOR_DEAD, LOAD_FACTOR_LIVE
+    elif combo == LoadCombo.ACI_LEGACY:
+        f_DL, f_LL = LOAD_FACTOR_DEAD_LEGACY, LOAD_FACTOR_LIVE_LEGACY
+    else:
+        raise InvalidInputError(f"Unknown load combo: {combo}")
+    result: list[tuple[float, float, float, str]] = []
+    for s in partial_udls:
+        kind = s.kind if isinstance(s, PartialUDL) else s["kind"]
+        w = float(s.w if isinstance(s, PartialUDL) else s["w"])
+        x1 = float(s.x1 if isinstance(s, PartialUDL) else s["x1"])
+        x2 = float(s.x2 if isinstance(s, PartialUDL) else s["x2"])
+        if kind not in ("DL", "LL"):
+            raise InvalidInputError(f"Partial UDL: kind ต้องเป็น 'DL' หรือ 'LL' (ได้ '{kind}')")
+        if not math.isfinite(w) or w <= 0:
+            raise InvalidInputError(f"Partial UDL: w ต้องเป็นบวกและจำกัด (ได้ {w})")
+        if not math.isfinite(x1) or not math.isfinite(x2):
+            raise InvalidInputError(f"Partial UDL: x1/x2 ต้องเป็นตัวเลขจำกัด (ได้ x1={x1}, x2={x2})")
+        if x2 <= x1 + FLOAT_TOL:
+            raise InvalidInputError(f"Partial UDL: x2 ({x2}) ต้อง > x1 ({x1})")
+        factor = f_DL if kind == "DL" else f_LL
+        result.append((factor * w, x1, x2, kind))
+    return result
+
+
+# --- Partial-UDL statics helpers (segment = (w_kN_m, x1, x2, kind)) ---
+
+def _partial_reactions(partials: list, L: float) -> tuple[float, float]:
+    """Reaction contributions (R_A_add, R_B_add) from partial UDLs · kN.
+
+    Each segment ≡ resultant W = w·(x2−x1) acting at centroid xc = (x1+x2)/2.
+    R_B = Σ W·xc/L · R_A = Σ W·(L−xc)/L (moment balance · same as a point load at xc).
+    """
+    R_A = R_B = 0.0
+    for w, x1, x2, _ in partials or []:
+        W = w * (x2 - x1)
+        xc = (x1 + x2) / 2.0
+        R_B += W * xc / L
+        R_A += W * (L - xc) / L
+    return R_A, R_B
+
+
+def _partial_shear_left(x: float, partials: list) -> float:
+    """Total partial-UDL load to the LEFT of section x · kN (to subtract from V)."""
+    total = 0.0
+    for w, x1, x2, _ in partials or []:
+        xr = min(x, x2)
+        if xr > x1:
+            total += w * (xr - x1)
+    return total
+
+
+def _partial_moment_left(x: float, partials: list) -> float:
+    """Moment about section x of partial-UDL load to its left · kN·m (to subtract from M)."""
+    total = 0.0
+    for w, x1, x2, _ in partials or []:
+        xr = min(x, x2)
+        if xr > x1:
+            W_seg = w * (xr - x1)
+            c = (x1 + xr) / 2.0
+            total += W_seg * (x - c)
+    return total
+
+
 def compute_reactions_ss(
-    Wu: float, L: float, factored_points: list[tuple[float, float, str]]
+    Wu: float, L: float, factored_points: list[tuple[float, float, str]],
+    partials: list | None = None,
 ) -> tuple[float, float]:
     """Reactions R_A (left) and R_B (right) for simply-supported beam · kN.
 
-    R_A = Wu·L/2 + Σ Pu_i·(L − x_i)/L      (sum of moment about B)
-    R_B = Wu·L/2 + Σ Pu_i·x_i/L            (sum of moment about A)
-    Verifies R_A + R_B = Wu·L + Σ Pu within FLOAT_TOL (statics check).
+    R_A = Wu·L/2 + Σ Pu_i·(L − x_i)/L  + partial-UDL contribution
+    R_B = Wu·L/2 + Σ Pu_i·x_i/L        + partial-UDL contribution
+    Verifies R_A + R_B = Wu·L + Σ Pu + Σ W_partial within FLOAT_TOL.
     """
     R_A = Wu * L / 2.0
     R_B = Wu * L / 2.0
     for Pu, x, _ in factored_points:
         R_A += Pu * (L - x) / L
         R_B += Pu * x / L
-    return R_A, R_B
+    pa, pb = _partial_reactions(partials, L)
+    return R_A + pa, R_B + pb
 
 
 def compute_shear_at(
@@ -2703,16 +2792,18 @@ def compute_shear_at(
     R_A: float,
     Wu: float,
     factored_points: list[tuple[float, float, str]],
+    partials: list | None = None,
 ) -> float:
     """Shear at section x · kN (downward positive load convention).
 
-    V(x) = R_A − Wu·x − Σ Pu_i  (for x_i strictly < x)
+    V(x) = R_A − Wu·x − Σ Pu_i (x_i < x) − Σ partial-UDL load left of x
     Section is taken on the LEFT side · sign per Thai convention (positive shear sags beam).
     """
     V = R_A - Wu * x
     for Pu, x_i, _ in factored_points:
         if x_i < x - FLOAT_TOL:
             V -= Pu
+    V -= _partial_shear_left(x, partials)
     return V
 
 
@@ -2721,15 +2812,17 @@ def compute_moment_at(
     R_A: float,
     Wu: float,
     factored_points: list[tuple[float, float, str]],
+    partials: list | None = None,
 ) -> float:
     """Bending moment at section x · kN·m (positive = sagging · tension at bottom).
 
-    M(x) = R_A·x − Wu·x²/2 − Σ Pu_i·(x − x_i)  (for x_i < x)
+    M(x) = R_A·x − Wu·x²/2 − Σ Pu_i·(x − x_i) (x_i < x) − Σ partial-UDL moment left of x
     """
     M = R_A * x - Wu * x * x / 2.0
     for Pu, x_i, _ in factored_points:
         if x_i < x - FLOAT_TOL:
             M -= Pu * (x - x_i)
+    M -= _partial_moment_left(x, partials)
     return M
 
 
@@ -2739,6 +2832,7 @@ def compute_envelope_ss(
     factored_points: list[tuple[float, float, str]],
     n_samples: int = 201,
     eps: float = 1e-5,
+    partials: list | None = None,
 ) -> dict:
     """Compute V/M envelope for simply-supported beam with UDL + point loads.
 
@@ -2752,7 +2846,7 @@ def compute_envelope_ss(
       M_max:    float         (positive max · sagging · kN·m)
       x_at_M_max: float       (m · usually mid-span or at a point load · NOT necessarily L/2)
     """
-    R_A, R_B = compute_reactions_ss(Wu, L, factored_points)
+    R_A, R_B = compute_reactions_ss(Wu, L, factored_points, partials)
 
     # Build x grid: uniform + boundary + point ± ε (to capture V jumps cleanly)
     x_set: set[float] = set()
@@ -2768,10 +2862,17 @@ def compute_envelope_ss(
         x_set.add(max(0.0, x_safe - eps))
         x_set.add(min(L, x_safe + eps))
         x_set.add(x_safe)
+    # partial-UDL endpoints: V has slope-breaks (not jumps) but M_max can sit at x2
+    for _, x1, x2, _ in (partials or []):
+        for xb in (x1, x2):
+            xs = max(0.0, min(L, xb))
+            x_set.add(xs)
+            x_set.add(max(0.0, xs - eps))
+            x_set.add(min(L, xs + eps))
     x_grid = sorted(x_set)
 
-    V_grid = [compute_shear_at(x, R_A, Wu, factored_points) for x in x_grid]
-    M_grid = [compute_moment_at(x, R_A, Wu, factored_points) for x in x_grid]
+    V_grid = [compute_shear_at(x, R_A, Wu, factored_points, partials) for x in x_grid]
+    M_grid = [compute_moment_at(x, R_A, Wu, factored_points, partials) for x in x_grid]
 
     # V_max = max |V(x)|
     V_max = 0.0
@@ -2781,13 +2882,30 @@ def compute_envelope_ss(
             V_max = V
             x_at_V_max = x
 
-    # M_max = max sagging (positive) value
+    # Zero-shear crossings = local M extrema. V is piecewise-linear between grid
+    # points (breakpoints at supports/points/partial-endpoints already in grid),
+    # so linear interpolation of the V=0 root is EXACT within each segment.
+    # Without this, M_max can fall between samples (partial-UDL peak · Codex P2).
+    zero_x: list[float] = []
+    for i in range(len(x_grid) - 1):
+        v0, v1 = V_grid[i], V_grid[i + 1]
+        if (v0 > 0.0 and v1 < 0.0) or (v0 < 0.0 and v1 > 0.0):
+            dx = x_grid[i + 1] - x_grid[i]
+            if dx > 0:
+                zero_x.append(x_grid[i] + dx * v0 / (v0 - v1))
+
+    # M_max = max sagging (positive) value · include zero-shear roots
     M_max = 0.0
     x_at_M_max = L / 2.0  # fallback
     for x, M in zip(x_grid, M_grid):
         if M > M_max:
             M_max = M
             x_at_M_max = x
+    for x0 in zero_x:
+        M0 = compute_moment_at(x0, R_A, Wu, factored_points, partials)
+        if M0 > M_max:
+            M_max = M0
+            x_at_M_max = x0
 
     return {
         "R_A": R_A,
@@ -2898,6 +3016,7 @@ def compute_Vc_ksc(fc_ksc: float, b_cm: float, d_cm: float) -> float:
 def compute_Vu_at_d(
     d_cm: float, L_m: float, Wu_kN_m: float,
     R_A_kN: float, factored_points: list[tuple[float, float, str]] | None,
+    partials: list | None = None,
 ) -> tuple[float, float]:
     """Critical shear for design = max(|Vu(x=d)|, |Vu(x=L-d)|) · kN.
 
@@ -2917,6 +3036,7 @@ def compute_Vu_at_d(
         for Pu, x_i, _ in pts:
             if x_i < x - FLOAT_TOL:
                 V -= Pu
+        V -= _partial_shear_left(x, partials)
         return V
 
     V_at_d_left = V_left(d_m)
@@ -2969,6 +3089,7 @@ def design_shear(
     phi: float = PHI_SHEAR,
     vu_design_override_kN: float | None = None,
     n_legs: int = 2,
+    partials: list | None = None,
 ) -> dict:
     """End-to-end shear design · returns a structured dict.
 
@@ -3005,7 +3126,7 @@ def design_shear(
         Vu_at_d_kN, x_critical_m = abs(vu_design_override_kN), 0.0
     else:
         Vu_at_d_kN, x_critical_m = compute_Vu_at_d(
-            d_cm, L_m, Wu_kN_m, R_A_kN, factored_points
+            d_cm, L_m, Wu_kN_m, R_A_kN, factored_points, partials
         )
 
     # 2. Vc (Thai simplified)
@@ -3130,10 +3251,10 @@ def design_shear(
         # S1 zone length: distance from support where Vu drops below 0.5·φVc (closer point)
         # then round UP to nearest 25 cm (Gemini Q3 constructability) + symmetric apply
         L_S1_left = _shear_zone_length(
-            "left", Wu_kN_m, L_m, R_A_kN, R_B_kN, factored_points, half_phi_Vc
+            "left", Wu_kN_m, L_m, R_A_kN, R_B_kN, factored_points, half_phi_Vc, partials
         )
         L_S1_right = _shear_zone_length(
-            "right", Wu_kN_m, L_m, R_A_kN, R_B_kN, factored_points, half_phi_Vc
+            "right", Wu_kN_m, L_m, R_A_kN, R_B_kN, factored_points, half_phi_Vc, partials
         )
         L_S1_worst_m = max(L_S1_left, L_S1_right)
         # Round UP to nearest 25 cm
@@ -3225,6 +3346,7 @@ def _shear_zone_length(
     R_A_kN: float, R_B_kN: float,
     factored_points: list[tuple[float, float, str]] | None,
     threshold_kN: float,
+    partials: list | None = None,
 ) -> float:
     """Find distance from support where |Vu(x)| drops below threshold_kN (m).
 
@@ -3240,6 +3362,7 @@ def _shear_zone_length(
             for Pu, x_i, _ in pts:
                 if x_i < x - FLOAT_TOL:
                     V -= Pu
+            V -= _partial_shear_left(x, partials)
             if abs(V) <= threshold_kN:
                 return x
         return L_m / 2.0
@@ -3251,6 +3374,7 @@ def _shear_zone_length(
             for Pu, x_i, _ in pts:
                 if x_i < x - FLOAT_TOL:
                     V -= Pu
+            V -= _partial_shear_left(x, partials)
             if abs(V) <= threshold_kN:
                 return L_m - x
         return L_m / 2.0
@@ -3513,11 +3637,22 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     # Step 2-2.5 · Compute loads (UDL + point loads · Session 2)
     out.Wu = compute_Wu(inp.DL, inp.LL, inp.load_combo)
     factored_points = _factor_point_loads(inp.point_loads, inp.load_combo)
+    factored_partials = _factor_partial_udls(inp.partial_udls, inp.load_combo)
+    if factored_partials and inp.support != SupportType.SIMPLY_SUPPORTED:
+        raise InvalidInputError(
+            f"Partial UDL รองรับเฉพาะคานช่วงเดียว (simply-supported) · "
+            f"ได้ support = {inp.support.value}"
+        )
+    for _w, _x1, _x2, _k in factored_partials:
+        if _x1 < -FLOAT_TOL or _x2 > inp.L + FLOAT_TOL:
+            raise InvalidInputError(
+                f"Partial UDL ช่วง [{_x1}, {_x2}] ต้องอยู่ใน [0, L={inp.L}] m"
+            )
     out.point_loads_factored = [
         {"Pu": Pu, "x": x, "kind": kind} for Pu, x, kind in factored_points
     ]
-    if factored_points and inp.support == SupportType.SIMPLY_SUPPORTED:
-        env = compute_envelope_ss(out.Wu, inp.L, factored_points)
+    if (factored_points or factored_partials) and inp.support == SupportType.SIMPLY_SUPPORTED:
+        env = compute_envelope_ss(out.Wu, inp.L, factored_points, partials=factored_partials)
         out.Mu = env["M_max"]
         out.Vu = env["V_max"]
         out.R_A = env["R_A"]
@@ -3601,6 +3736,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC,
                 phi=PHI_SHEAR,
                 n_legs=inp.stirrup_legs,
+                partials=factored_partials,
             )
             out.passes_shear = bool(out.stirrup_design.get("passes", False))
             # Merge shear citations into main list
@@ -3644,6 +3780,14 @@ def design_beam(inp: BeamInput) -> BeamOutput:
         flex_citations.append(
             f"Point load envelope · {len(factored_points)} จุด · M_max @ x={out.x_at_M_max:.3f} m "
             f"· R_A={out.R_A:.2f} kN · R_B={out.R_B:.2f} kN · superposition + statics (μงคล Ch.2)"
+        )
+    if factored_partials:
+        _segs = " · ".join(
+            f"w={_w:.2f} kN/m บน [{_x1:.2f},{_x2:.2f}] m" for _w, _x1, _x2, _k in factored_partials
+        )
+        flex_citations.append(
+            f"Partial UDL · {len(factored_partials)} ชุด ({_segs}) · "
+            f"resultant W=w·(x2−x1) ที่ centroid · superposition + statics (มงคล Ch.2)"
         )
     out.citations = flex_citations + list(out.citations)
 
