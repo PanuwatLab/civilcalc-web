@@ -240,6 +240,39 @@ if sd4 and "Vc_kN" in sd4:
 print()
 
 # =====================================================================
+# LAYER F — Double stirrups (n_legs · 2ป) · engine PR 2026-06-03
+# =====================================================================
+print("="*68)
+print("LAYER F · Double stirrups (n_legs = 4 / 2ป)")
+print("="*68)
+# DESIGN_STIRRUP case (Vu > phiVc, below crush cap): Wu=80 L=5 b=30 d=45 fc=240
+_sh = dict(Wu_kN_m=80.0, L_m=5.0, R_A_kN=200.0, R_B_kN=200.0,
+           factored_points=None, b_cm=30, d_cm=45, fc_ksc=240)
+sd2 = calc.design_shear(**_sh, n_legs=2)
+sd4 = calc.design_shear(**_sh, n_legs=4)
+chk_true("F0 both DESIGN_STIRRUP branch",
+         sd2["branch"] == "DESIGN_STIRRUP" and sd4["branch"] == "DESIGN_STIRRUP",
+         f"(2leg={sd2['branch']} 4leg={sd4['branch']})")
+chk("F1 A_v(4 legs) == 2x A_v(2 legs)", sd4["A_v_cm2"], 2.0 * sd2["A_v_cm2"], abs_tol=1e-6)
+chk_true("F2 double-stirrup spacing S1 >= single (more area → wider)",
+         sd4["S1_cm"] >= sd2["S1_cm"] - 1e-9,
+         f"(S1 2leg={sd2['S1_cm']} 4leg={sd4['S1_cm']})")
+chk_true("F3 notation tags 2ป for double", "2ป" in sd4["shop_drawing_notation"],
+         f"('{sd4['shop_drawing_notation']}')")
+chk_true("F3b single-stirrup notation has NO ป-prefix (regression)",
+         "ป-" not in sd2["shop_drawing_notation"],
+         f"('{sd2['shop_drawing_notation']}')")
+chk_eq("F4 n_legs/n_stirrups echoed", (sd4["n_legs"], sd4["n_stirrups"]), (4, 2))
+chk_true("F5 double still passes shear", sd4["passes"] is True)
+expect_raise("F6 invalid n_legs=3 raises InvalidInputError",
+             lambda: calc.design_shear(**_sh, n_legs=3),
+             calc.InvalidInputError)
+# F7 · end-to-end via BeamInput.stirrup_legs
+o_sl = calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=30,LL=25,stirrup_legs=4))
+chk_eq("F7 design_beam threads stirrup_legs=4", o_sl.stirrup_design.get("n_legs"), 4)
+print()
+
+# =====================================================================
 print("="*68)
 print(f"RESULT: {len(PASS)} PASS / {len(FAIL)} FAIL  (total {len(PASS)+len(FAIL)})")
 if FAIL:

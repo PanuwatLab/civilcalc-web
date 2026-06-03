@@ -2413,6 +2413,7 @@ class BeamInput:
     cover: float = 3.0                # concrete cover (cm · default 3.0 for indoor)
     d_stirrup: float = 0.9            # stirrup diameter (cm · RB9 typical)
     db_assume: float = 1.6            # assumed main bar diameter for d-calc (cm · DB16 typical)
+    stirrup_legs: int = 2             # vertical stirrup legs · 2 = single (1ป) · 4 = double (2ป)
     load_combo: LoadCombo = LoadCombo.ACI_MODERN
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
 
@@ -2834,6 +2835,15 @@ _STIRRUP_2LEG_AV_CM2: dict[str, float] = {
 _STIRRUP_DIA_CM: dict[str, float] = {"RB6": 0.6, "RB9": 0.9, "DB10": 1.0}
 
 
+def _av_legs(bar: str, n_legs: int = 2) -> float:
+    """Total stirrup shear area A_v for `n_legs` legs of `bar`.
+
+    Base table `_STIRRUP_2LEG_AV_CM2` is the 2-leg (single closed stirrup · 1ป) area.
+    n_legs=2 → single stirrup (1ป) · n_legs=4 → double stirrup (2ป · 4 legs) → 2× area.
+    """
+    return _STIRRUP_2LEG_AV_CM2[bar] * (n_legs / 2.0)
+
+
 # Practical Thai shop-drawing spacing values · floor-to-2.5cm grid + "killer pairs"
 _PRACTICAL_SPACINGS_CM = [5.0, 7.5, 10.0, 12.5, 15.0, 17.5, 20.0, 22.5, 25.0, 27.5, 30.0]
 # Killer pairs (S1, S2) ordered by tightness — used to nudge solver toward common combos
@@ -2958,6 +2968,7 @@ def design_shear(
     fyt_ksc: float = _FYT_STIRRUP_DEFAULT_KSC,
     phi: float = PHI_SHEAR,
     vu_design_override_kN: float | None = None,
+    n_legs: int = 2,
 ) -> dict:
     """End-to-end shear design · returns a structured dict.
 
@@ -2981,6 +2992,11 @@ def design_shear(
     """
     notes: list[str] = []
     citations: list[str] = []
+
+    # 0. Stirrup legs · 2 = single closed stirrup (1ป) · 4 = double stirrup (2ป)
+    if n_legs not in (2, 4):
+        raise InvalidInputError(f"n_legs = {n_legs} · รองรับเฉพาะ 2 (1ป) หรือ 4 (2ป)")
+    n_stirrups = n_legs // 2
 
     # 1. Critical shear · normally at distance d from support (Gemini Q4b).
     #    Cantilever passes vu_design_override = Vu at FACE (no d-reduction · Gemini Q3:
@@ -3021,7 +3037,7 @@ def design_shear(
         # No stirrup theoretically required · recommend minimum for detailing
         branch = "NO_STIRRUP"
         bar = "RB9"
-        A_v = _STIRRUP_2LEG_AV_CM2[bar]
+        A_v = _av_legs(bar, n_legs)
         s_final_S1 = 30.0   # constructability default
         s_final_S2 = 30.0
         L_S1_cm = 0.0
@@ -3037,7 +3053,7 @@ def design_shear(
         # Minimum stirrup required · Vs ≈ 0 · use A_v,min spacing limit
         branch = "MIN_STIRRUP"
         bar = "RB9"
-        A_v = _STIRRUP_2LEG_AV_CM2[bar]
+        A_v = _av_legs(bar, n_legs)
         s_min_av = _s_max_av_min(fc_ksc, b_cm, fyt_ksc, A_v)
         s_max_code = min(d_cm / 2.0, 60.0)
         s_chosen = min(s_min_av, s_max_code)
@@ -3079,7 +3095,7 @@ def design_shear(
 
         # Try RB9 first (Thai default), fallback DB10 if spacing < 5 cm
         bar = "RB9"
-        A_v = _STIRRUP_2LEG_AV_CM2[bar]
+        A_v = _av_legs(bar, n_legs)
         # s_S1 from Vs equation (close zone · governed by Vu_at_d)
         # s = A_v · fyt · d / Vs_req   (Vs in kg · units balance: cm² · ksc · cm / kg = cm)
         s_req_S1_cm = A_v * fyt_ksc * d_cm / Vs_req_kg if Vs_req_kg > 0 else s_max_code
@@ -3095,7 +3111,7 @@ def design_shear(
         # Fallback DB10 if spacing tighter than 5 cm
         if s_S1_final < 5.0 - FLOAT_TOL:
             bar = "DB10"
-            A_v = _STIRRUP_2LEG_AV_CM2[bar]
+            A_v = _av_legs(bar, n_legs)
             s_req_S1_cm = A_v * fyt_ksc * d_cm / Vs_req_kg if Vs_req_kg > 0 else s_max_code
             s_req_S2_cm = min(_s_max_av_min(fc_ksc, b_cm, fyt_ksc, A_v), s_max_code)
             s_S1_capped = min(s_req_S1_cm, s_max_code)
@@ -3152,16 +3168,21 @@ def design_shear(
     is_uniform = (branch in ("NO_STIRRUP", "MIN_STIRRUP")) or (
         branch == "DESIGN_STIRRUP" and abs(s_final_S1 - s_final_S2) < 0.1
     )
+    # Leg prefix · "2ป-" for double stirrup (4 legs) · "" for single (default · zero-regression)
+    leg_pfx = f"{n_stirrups}ป-" if n_stirrups > 1 else ""
+    bar_lbl = f"{leg_pfx}{bar}"
     if branch == "NO_STIRRUP":
-        shop = f"{bar} @ {_fmt_spacing_m(s_final_S1)} m (detailing min · ทั้งคาน)"
+        shop = f"{bar_lbl} @ {_fmt_spacing_m(s_final_S1)} m (detailing min · ทั้งคาน)"
     elif is_uniform:
-        shop = f"{bar} @ {_fmt_spacing_m(s_final_S1)} m (ทั้งคาน)"
+        shop = f"{bar_lbl} @ {_fmt_spacing_m(s_final_S1)} m (ทั้งคาน)"
     else:
-        shop = f"{bar} @ {_fmt_spacing_m(s_final_S1)} (S1) · {bar} @ {_fmt_spacing_m(s_final_S2)} (S2)"
+        shop = f"{bar_lbl} @ {_fmt_spacing_m(s_final_S1)} (S1) · {bar_lbl} @ {_fmt_spacing_m(s_final_S2)} (S2)"
 
     return {
         "branch": branch,
         "bar": bar,
+        "n_legs": n_legs,
+        "n_stirrups": n_stirrups,
         "uniform": is_uniform,
         "A_v_cm2": A_v,
         "S1_cm": s_final_S1,
@@ -3579,6 +3600,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 fc_ksc=inp.fc,
                 fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC,
                 phi=PHI_SHEAR,
+                n_legs=inp.stirrup_legs,
             )
             out.passes_shear = bool(out.stirrup_design.get("passes", False))
             # Merge shear citations into main list
