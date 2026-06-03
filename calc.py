@@ -166,9 +166,9 @@ class BeamInput:
     cover: float = 3.0                # concrete cover (cm · default 3.0 for indoor)
     d_stirrup: float = 0.9            # stirrup diameter (cm · RB9 typical)
     db_assume: float = 1.6            # assumed main bar diameter for d-calc (cm · DB16 typical)
-    stirrup_legs: int = 2             # vertical stirrup legs · 2 = single (1ป) · 4 = double (2ป)
     load_combo: LoadCombo = LoadCombo.ACI_MODERN
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
+    stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
 
     def to_dict(self) -> dict:
         d = asdict(self)
