@@ -1186,7 +1186,8 @@
       for (let j = 0; j < N; j++) addPt(x0 + seg * (j + 0.5), Peach, 'LL');
     });
     let res;
-    try { res = window.__civilCalc.designContinuous({ b: MOCK.cont.b, h: MOCK.cont.h, fc: MOCK.cont.fc, fy: MOCK.cont.fy, spans, load_combo: '1.4D+1.7L' }); }
+    // section/material = ค่า live จาก Step 1 (P) เหมือนช่วงเดียว · UDL ยัง mock (Phase 2c)
+    try { res = window.__civilCalc.designContinuous({ b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, spans, load_combo: '1.4D+1.7L' }); }
     catch (e) { console.warn('[civilcalc] continuous engine call failed', e); return null; }
     if (!res || !res.ok || !res.out || !res.out.diagram) return null;
     const d = res.out.diagram;
@@ -1247,7 +1248,7 @@
         Mu: o.Mu * K, Vu: o.Vu * K, RA: o.R_A * K, RB: o.R_B * K,
         As_req: o.As_required, As_prov: o.rebar ? o.rebar.As_provided : 0,
         rebarMain: o.rebar ? o.rebar.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '—',
-        d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
+        b: P.b, h: P.h, d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
         pass: !!o.passes, citations: o.citations || [],
       };
     } else {
@@ -1268,7 +1269,7 @@
       if (anyFail) govDc = Math.max(govDc, 101);          // มี element เกินกำลัง → D/C > 100
       const dc = Math.round(govDc || (pass ? 78 : 123));
       const margin = Math.round(10000 / Math.max(1, dc) - 100);
-      state.res = { Mu: Math.round(mp), MuNeg: Math.round(mn), Vu: ac.Vmax, pass, dc, margin };
+      state.res = { b: P.b, h: P.h, Mu: Math.round(mp), MuNeg: Math.round(mn), Vu: ac.Vmax, pass, dc, margin };
     }
   }
   // live = engine result ทับ MOCK (คีย์ที่ยังไม่ map → fallback mock · graceful)
@@ -2061,13 +2062,9 @@
     syncVerdict();
     if (state.step === 3) { drawMainSections(); if (state.ctab === 'detail') drawDetailing(); }
     // continuous live summary tweaks (b×h via JS; Wu/Mu set inside drawStep2 via ccUnits)
-    if (state.mode === 'cont') {
-      $('#ls_bh').textContent = MOCK.cont.b + '×' + MOCK.cont.h;
-      const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = MOCK.cont.b + '×' + MOCK.cont.h;
-    } else {
-      $('#ls_bh').textContent = P.b + '×' + P.h;
-      const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h;
-    }
+    // b×h = live P ทั้ง 2 โหมด (section card ใช้ร่วมกัน · ตรงกับ engine input)
+    $('#ls_bh').textContent = P.b + '×' + P.h;
+    { const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h; }
     updateNav();
   }
 
