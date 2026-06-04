@@ -1825,11 +1825,13 @@
     if (state.mode === 'cont') {
       const ac = analyzeContinuous(), o = ac && ac.out;
       // engine shear ราย span → ป้ายปลอก (S1=หัวเสา · S2=กลางช่วง)
-      // fallback (engine ยังไม่พร้อม / span fail ไม่มี S1/S2) = fixed 1ป — engine ต่อเนื่องออกแบบ 1ป เสมอ
-      //   (ห้ามใช้ stirText() = state.legs · จะ leak 2ป จาก single mode · Codex P2)
+      //   - เฉือน FAIL (passes=false · ไม่มี S1/S2) → โชว์ "✗ หน้าตัดไม่พอ" ห้ามแต่งเป็น spacing ปลอม (Codex P1)
+      //   - ไม่มีข้อมูล → "—" (ไม่ใช้ stirText/state.legs · กัน leak 2ป จาก single · Codex P2)
+      //   engine ต่อเนื่องออกแบบ 1ป เสมอ (n_legs=2) · 2ป (n_legs=4) ไม่เกิดในต่อเนื่อง
       const fmtStir = (sh, key) => {
+        if (sh && sh.passes === false) return '✗ หน้าตัดไม่พอ';
         const s = sh && (key === 'S1' ? sh.S1_cm : sh.S2_cm);
-        if (!s) return `1ป-RB9@${key === 'S1' ? '0.10' : '0.25'}`;
+        if (!s) return '—';
         return `${sh.n_legs === 4 ? 2 : 1}ป-${sh.bar || 'RB9'}@${(s / 100).toFixed(2)}`;
       };
       if (o && o.spans && o.spans.length) {
@@ -1838,9 +1840,12 @@
           const isEnd = (i === 0 || i === ns);
           const mneg = su.M_neg_tonm ? '−' + ccUnits.Mn(su.M_neg_tonm * 1000) : '—';
           const topBars = (su.top_bars && su.top_bars !== '—') ? su.top_bars + ' (บน)' : '—';
-          const vmax = Math.max(i > 0 ? (o.spans[i - 1].Vu_ton || 0) : 0, i < ns ? (o.spans[i].Vu_ton || 0) : 0);
+          // โซนหัวเสาคุมด้วยช่วงที่ Vu สูงกว่า (โหลด/ช่วงไม่สมมาตร → ซ้ายอาจ govern · Codex P2)
+          const lV = i > 0 ? (o.spans[i - 1].Vu_ton || 0) : -1, rV = i < ns ? (o.spans[i].Vu_ton || 0) : -1;
+          const vmax = Math.max(Math.max(lV, 0), Math.max(rV, 0));
+          const supShear = (lV >= rV) ? o.spans[i - 1].shear : o.spans[i].shear;
           rows.push([`ที่รองรับ ${su.label}${isEnd ? ' (ปลาย)' : ''}`, mneg, topBars,
-                     vmax ? ccUnits.Pn(vmax * 1000) : '—', fmtStir(i < ns ? o.spans[i].shear : o.spans[ns - 1].shear, 'S1')]);
+                     vmax ? ccUnits.Pn(vmax * 1000) : '—', fmtStir(supShear, 'S1')]);
           if (i < ns) {
             const sp = o.spans[i];
             rows.push([`กลางช่วง ${sp.label}`, '+' + ccUnits.Mn(sp.M_pos_tonm * 1000),
