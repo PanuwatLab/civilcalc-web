@@ -537,7 +537,7 @@
             <div class="card p-4"><div class="text-[12px] text-ink-muted">+M governing</div><div class="mono text-xl font-semibold mt-1"><span id="km_pm">7,090 kg·m</span></div></div>
             <div class="card p-4" data-mode-cont><div class="text-[12px] text-ink-muted">−M (หัวเสา)</div><div class="mono text-xl font-semibold mt-1"><span id="km_nm">9,280 kg·m</span></div></div>
             <div class="card p-4"><div class="text-[12px] text-ink-muted">Vu วิกฤต</div><div class="mono text-xl font-semibold mt-1"><span id="km_vu">10,570 kg</span></div></div>
-            <div class="card p-4"><div class="text-[12px] text-ink-muted">D/C · margin</div><div class="mono text-xl font-semibold mt-1">78%<span id="km_mg" class="text-[12px] ml-1" style="color:var(--pass)">+28%</span></div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-muted">D/C · margin</div><div class="mono text-xl font-semibold mt-1"><span id="km_dc">78%</span><span id="km_mg" class="text-[12px] ml-1" style="color:var(--pass)">+28%</span></div></div>
           </div>
 
           <!-- ออกแบบรับดัด: steps 1-11 -->
@@ -850,6 +850,7 @@
   let booted = false;
   function boot() {
     if (booted) return; booted = true;
+    window.__civilRefresh = render;   // ให้ bootPyodide เรียก re-render เมื่อ engine พร้อม (Phase 2b)
     initEverything();
     // bootScreen is hidden by the real Pyodide boot (window.__hideBootScreen)
     // once calc.py is loaded — see bootPyodide() at end of file. Fallback below
@@ -1008,20 +1009,20 @@
       if (key in P || ['b', 'h', 'cover', 'L', 'db', 'dstir'].includes(key)) {
         P[key] = (inp.type === 'number' || inp.type === 'range') ? parseFloat(inp.value) : inp.value;
       }
-      recalcBase();
+      render();
     }));
     // f'c pills
     $$('#fcPills .pill').forEach(p => p.addEventListener('click', () => {
       $$('#fcPills .pill').forEach(x => x.setAttribute('aria-pressed', 'false'));
-      p.setAttribute('aria-pressed', 'true'); P.fc = +p.dataset.fc; recalcBase();
+      p.setAttribute('aria-pressed', 'true'); P.fc = +p.dataset.fc; render();
     }));
-    $('#in_grade').addEventListener('change', e => { P.grade = e.target.value; recalcBase(); });
-    $('#in_db').addEventListener('change', e => { P.db = e.target.value; recalcBase(); });
-    $('#in_ds').addEventListener('change', e => { P.dstir = e.target.value; recalcBase(); });
+    $('#in_grade').addEventListener('change', e => { P.grade = e.target.value; render(); });
+    $('#in_db').addEventListener('change', e => { P.db = e.target.value; render(); });
+    $('#in_ds').addEventListener('change', e => { P.dstir = e.target.value; render(); });
     // cover pills
     $$('#coverPills .pill').forEach(p => p.addEventListener('click', () => {
       $$('#coverPills .pill').forEach(x => x.setAttribute('aria-pressed', 'false'));
-      p.setAttribute('aria-pressed', 'true'); P.cover = +p.dataset.cover; recalcBase();
+      p.setAttribute('aria-pressed', 'true'); P.cover = +p.dataset.cover; render();
     }));
     // continuous span count → rebuild span-length inputs + redraw
     $('#in_nspan').addEventListener('change', e => {
@@ -1085,10 +1086,10 @@
       if (k === 'kind') ccModel.points[i].kind = v;
       else if (k === 'P') ccModel.points[i].P = (parseFloat(v) || 0) * (ccUnits.force === 'T' ? 1000 : 1);
       else ccModel.points[i].x = Math.min(ccModel.total, Math.max(0, parseFloat(v) || 0));
-      drawStep2();
+      refreshResults();
     }));
     host.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
-      ccModel.points.splice(+e.target.dataset.del, 1); renderPointLoads(); drawStep2();
+      ccModel.points.splice(+e.target.dataset.del, 1); renderPointLoads(); render();
     }));
   }
 
@@ -1115,17 +1116,17 @@
       const i = +e.target.dataset.i, k = e.target.dataset.q, v = parseFloat(e.target.value) || 0;
       if (k === 'w') ccModel.partials[i].w = v * (ccUnits.force === 'T' ? 1000 : 1);
       else ccModel.partials[i][k] = Math.min(ccModel.total, Math.max(0, v));
-      drawStep2();
+      refreshResults();
     }));
     host.querySelectorAll('[data-delq]').forEach(b => b.addEventListener('click', e => {
-      ccModel.partials.splice(+e.target.dataset.delq, 1); renderPartialLoads(); drawStep2();
+      ccModel.partials.splice(+e.target.dataset.delq, 1); renderPartialLoads(); render();
     }));
   }
 
   function initStep2() {
     renderPointLoads(); renderPartialLoads();
-    $('#addPL').addEventListener('click', () => { ccModel.addPoint(); renderPointLoads(); drawStep2(); });
-    $('#addPart').addEventListener('click', () => { if (ccModel.partials.length >= 3) return; ccModel.addPartial(); renderPartialLoads(); drawStep2(); });
+    $('#addPL').addEventListener('click', () => { ccModel.addPoint(); renderPointLoads(); render(); });
+    $('#addPart').addEventListener('click', () => { if (ccModel.partials.length >= 3) return; ccModel.addPartial(); renderPartialLoads(); render(); });
     $$('#loadRows .row-del').forEach(b => b.addEventListener('click', e => e.target.closest('tr').remove()));
     drawStep2();
   }
@@ -1133,15 +1134,19 @@
   /* ── statics preview (single span · real-ish for smooth drag feedback) ── */
   function analyzeSingle(total, w, points, partials) {
     const N = 140;
+    // factor จุดโหลด/partial ให้สอดคล้องกับ UDL (w=Wu factored แล้ว) + headline engine
+    //   combo 1.4D+1.7L → DL×1.4 · LL×1.7 · partial = LL (P3-A · กัน +M กราฟ ≠ Mu สรุป)
+    const PF = points.map(p => ({ x: p.x, P: p.P * (p.kind === 'DL' ? 1.4 : 1.7) }));
+    const QF = partials.map(q => ({ x0: q.x0, x1: q.x1, w: q.w * 1.7 }));
     // total load + reactions about A
     let W = w * total, Mo = W * (total / 2);
-    points.forEach(p => { W += p.P; Mo += p.P * p.x; });
-    partials.forEach(q => { const len = Math.max(0, q.x1 - q.x0), Wp = q.w * len; W += Wp; Mo += Wp * (q.x0 + q.x1) / 2; });
+    PF.forEach(p => { W += p.P; Mo += p.P * p.x; });
+    QF.forEach(q => { const len = Math.max(0, q.x1 - q.x0), Wp = q.w * len; W += Wp; Mo += Wp * (q.x0 + q.x1) / 2; });
     const RB = total > 0 ? Mo / total : 0, RA = W - RB;
     const Vfn = x => {
       let v = RA - w * x;
-      partials.forEach(q => { if (x > q.x0) v -= q.w * (Math.min(x, q.x1) - q.x0); });
-      points.forEach(p => { if (x >= p.x - 1e-9) v -= p.P; });
+      QF.forEach(q => { if (x > q.x0) v -= q.w * (Math.min(x, q.x1) - q.x0); });
+      PF.forEach(p => { if (x >= p.x - 1e-9) v -= p.P; });
       return v;
     };
     const xs = [], V = [], M = [];
@@ -1155,6 +1160,161 @@
     V.forEach(v => { if (Math.abs(v) > Vmax) Vmax = Math.abs(v); });
     M.forEach((mm, i) => { if (mm > Mmax) { Mmax = mm; xMmax = xs[i]; } });
     return { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mmax), xMmax, RA, RB };
+  }
+
+  /* ── continuous analysis via REAL engine (three-moment) · responds to dragged loads ──
+     แปลงหน่วย: ccModel กก./กก.·ม ↔ engine kN ภายใน (1 kgf = 1/KGF_PER_KN kN)
+     คืนรูปเดียวกับ analyzeSingle (+ marks +M/−M) · null = engine ยังไม่พร้อม/พลาด → ใช้ fallback */
+  const KGF_PER_KN = 101.9716;
+  function analyzeContinuous() {
+    if (!(window.__civilCalc && window.__civilCalc.ready)) return null;
+    const g = geom();
+    const dl = MOCK.cont.DL / KGF_PER_KN, ll = MOCK.cont.LL / KGF_PER_KN;  // kg/m → kN/m (UDL ยัง mock)
+    const spans = g.spans.map(L => ({ L, DL: dl, LL: ll, point_loads: [] }));
+    // helper: วางจุดโหลด (global x ม. · P kN) ลงช่วงที่ถูกต้อง
+    const addPt = (xg, P_kN, kind) => {
+      // half-open [node_k, node_{k+1}) → จุดบนหัวเสาภายในไปช่วงถัดไปที่ x=0 (กัน engine ทิ้ง
+      //   end-of-span load · Codex P1) · ช่วงสุดท้ายปิดท้าย (รวม x=total ที่ support ขวา)
+      let si = g.spans.length - 1;
+      for (let k = 0; k < g.spans.length; k++) { if (xg >= g.nodes[k] - 1e-9 && xg < g.nodes[k + 1] - 1e-6) { si = k; break; } }
+      const xloc = Math.max(0, Math.min(g.spans[si], xg - g.nodes[si]));
+      spans[si].point_loads.push({ kind: kind === 'DL' ? 'DL' : 'LL', P: P_kN, x: xloc });
+    };
+    // จุดโหลดจริง (กก.→kN)
+    ccModel.points.forEach(p => addPt(Math.min(g.total, p.x), p.P / KGF_PER_KN, p.kind));
+    // partial UDL: engine ต่อเนื่องไม่รองรับโดยตรง → discretize เป็นจุดย่อย (w·seg ที่กึ่งกลาง
+    //   แต่ละ sub-segment · ผลรวม = w·L) · ~1 จุด/0.25 ม. (ขั้นต่ำ 4) → กราฟ V/M ตอบสนอง partial
+    ccModel.partials.forEach(q => {
+      const x0 = Math.max(0, q.x0), x1 = Math.min(g.total, q.x1), span = x1 - x0;
+      if (span <= 0.01) return;
+      const N = Math.max(4, Math.round(span / 0.25));
+      const seg = span / N, Peach = (q.w / KGF_PER_KN) * seg;   // กก./ม → kN/ม × seg = kN
+      for (let j = 0; j < N; j++) addPt(x0 + seg * (j + 0.5), Peach, 'LL');
+    });
+    let res;
+    // section/material = ค่า live จาก Step 1 (P) เหมือนช่วงเดียว · UDL ยัง mock (Phase 2c)
+    try { res = window.__civilCalc.designContinuous({ b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir), spans, load_combo: '1.4D+1.7L' }); }
+    catch (e) { console.warn('[civilcalc] continuous engine call failed', e); return null; }
+    if (!res || !res.ok || !res.out || !res.out.diagram) return null;
+    const d = res.out.diagram;
+    const xs = d.x.slice(), V = d.V_ton.map(v => v * 1000), M = d.M_tonm.map(v => v * 1000);  // ton→kg · t·m→kg·m
+    // SMOOTH การแสดงผล V ในช่วง partial UDL: discretize เป็นจุดย่อย → V เป็นขั้นบันได
+    //   แต่ภายใต้ uniform load จริง V = ramp เชิงเส้น → interp เชิงเส้นปลาย-ปลาย (ต่อช่วง ·
+    //   คง jump ที่หัวเสา/จุดโหลดจริงไว้) · M ไม่แตะ (แม่นจาก discretize อยู่แล้ว)
+    ccModel.partials.forEach(q => {
+      const a0 = Math.max(0, q.x0), b0 = Math.min(g.total, q.x1);
+      g.spans.forEach((sp, si) => {
+        const lo = Math.max(a0, g.nodes[si]), hi = Math.min(b0, g.nodes[si + 1]);
+        if (hi - lo <= 0.05) return;                                    // ไม่ทับช่วงนี้
+        if (ccModel.points.some(p => p.x > lo + 0.05 && p.x < hi - 0.05)) return; // คง jump จุดโหลดจริง
+        let i0 = -1, i1 = -1;
+        for (let i = 0; i < xs.length; i++) { if (xs[i] <= lo + 1e-6) i0 = i; if (i1 < 0 && xs[i] >= hi - 1e-6) i1 = i; }
+        if (i0 < 0 || i1 <= i0) return;
+        const x0 = xs[i0], x1 = xs[i1], v0 = V[i0], v1 = V[i1];
+        for (let i = i0 + 1; i < i1; i++) V[i] = v0 + (v1 - v0) * (xs[i] - x0) / (x1 - x0);
+      });
+    });
+    let Vmax = 0; V.forEach(v => { if (Math.abs(v) > Vmax) Vmax = Math.abs(v); });
+    // marks: +M สูงสุดต่อช่วง · −M ต่ำสุดที่หัวเสาภายใน (จาก array จริง)
+    const marks = [];
+    let Mpk = 1;
+    g.spans.forEach((sp, si) => {
+      let best = -Infinity, bx = (g.nodes[si] + g.nodes[si + 1]) / 2;
+      for (let i = 0; i < xs.length; i++) { if (xs[i] >= g.nodes[si] - 1e-9 && xs[i] <= g.nodes[si + 1] + 1e-9 && M[i] > best) { best = M[i]; bx = xs[i]; } }
+      if (best > 1) { marks.push({ x: bx, val: best, type: 'pos' }); Mpk = Math.max(Mpk, best); }
+    });
+    for (let k = 1; k < g.nodes.length - 1; k++) {
+      let worst = Infinity, wx = g.nodes[k];
+      for (let i = 0; i < xs.length; i++) { if (Math.abs(xs[i] - g.nodes[k]) < (g.total / 400) && M[i] < worst) { worst = M[i]; wx = xs[i]; } }
+      if (worst < -1) { marks.push({ x: wx, val: -worst, type: 'neg' }); Mpk = Math.max(Mpk, -worst); }
+    }
+    return { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mpk), marks, out: res.out };
+  }
+
+  /* ── recompute() · เรียก engine จริง → state.res (คีย์เดียวกับ MOCK · หน่วย กก.) ──
+     Phase 2b: wire headline results (Mu/MuNeg/Vu/D-C/verdict/rebar) เป็นค่า engine จริง
+     UDL ยังใช้ MOCK.DL/LL (load list ยังไม่ editable) · จุดโหลด/partial = จริง */
+  function recompute() {
+    state.res = null;
+    if (!(window.__civilCalc && window.__civilCalc.ready)) return;
+    const K = KGF_PER_KN;
+    if (state.mode !== 'cont') {
+      const fy = fyOf(P.grade);
+      const inp = {
+        b: P.b, h: P.h, L: ccModel.total, fc: P.fc, fy, cover: P.cover,
+        db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir),
+        DL: MOCK.single.DL / K, LL: MOCK.single.LL / K, load_combo: '1.4D+1.7L',
+        stirrup_legs: state.legs === 2 ? 4 : 2,
+        point_loads: ccModel.points.map(p => ({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: p.P / K, x: Math.min(ccModel.total, p.x) })),
+        partial_udls: ccModel.partials.map(q => ({ kind: 'LL', w: q.w / K, x1: q.x0, x2: Math.min(ccModel.total, q.x1) })),
+      };
+      let r; try { r = window.__civilCalc.design(inp); } catch (e) { return; }
+      if (!r || !r.ok) { state.res = { _err: r && r.msg }; return; }
+      const o = r.out, margin = o.safety_margin_pct || 0;
+      state.res = {
+        Mu: o.Mu * K, Vu: o.Vu * K, RA: o.R_A * K, RB: o.R_B * K,
+        As_req: o.As_required, As_prov: o.rebar ? o.rebar.As_provided : 0,
+        rebarMain: o.rebar ? o.rebar.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '—',
+        b: P.b, h: P.h, d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
+        pass: !!o.passes, citations: o.citations || [],
+      };
+    } else {
+      const ac = analyzeContinuous(); if (!ac) return;
+      let mp = 0, mn = 0; ac.marks.forEach(k => { if (k.type === 'pos') mp = Math.max(mp, k.val); else mn = Math.max(mn, k.val); });
+      const o = ac.out || {};
+      // governing D/C จาก flexure ทุกช่วง (bottom) + หัวเสา (top) — ค่า engine จริง
+      //   มี margin → D/C=10000/(100+margin) · element fail (phi_Mn=0/ไม่มี margin) → เกินกำลัง
+      let govDc = 0, anyFail = false;
+      const acc = el => {
+        if (!el) return;
+        if (typeof el.safety_margin_pct === 'number') govDc = Math.max(govDc, 10000 / (100 + el.safety_margin_pct));
+        if (el.passes === false || !el.phi_Mn) anyFail = true;
+      };
+      (o.spans || []).forEach(sp => acc(sp.bottom));
+      (o.supports || []).forEach(su => acc(su.top));
+      const pass = o.passes !== false && !anyFail;
+      if (anyFail) govDc = Math.max(govDc, 101);          // มี element เกินกำลัง → D/C > 100
+      const dc = Math.round(govDc || (pass ? 78 : 123));
+      const margin = Math.round(10000 / Math.max(1, dc) - 100);
+      state.res = { b: P.b, h: P.h, Mu: Math.round(mp), MuNeg: Math.round(mn), Vu: ac.Vmax, pass, dc, margin };
+    }
+  }
+  // live = engine result ทับ MOCK (คีย์ที่ยังไม่ map → fallback mock · graceful)
+  function liveData() { const base = state.mode === 'cont' ? MOCK.cont : MOCK.single; return state.res && !state.res._err ? Object.assign({}, base, state.res) : base; }
+
+  /* sync verdict (pass/fail) + D/C จากผล engine จริง (Phase 2b · override mock toggle เมื่อ engine พร้อม) */
+  function syncVerdict() {
+    // engine ไม่พร้อม/ผลหาย (เช่น ต่อเนื่อง 1 ช่วง · boot ก่อน Pyodide) → reset เป็น fallback
+    //   mock (ตรงกับ liveData) ไม่ปล่อย verdict ค้างค่าเก่า (Codex P2)
+    let pass, dc;
+    if (!state.res || state.res._err) {
+      const m = liveData();
+      pass = !state.res ? true : false;     // ไม่มีผล → mock pass · _err → ไม่ผ่าน
+      dc = ((m.dc != null ? m.dc : (pass ? 78 : 123))) + '%';
+    } else {
+      pass = !!state.res.pass;
+      dc = (state.res.dc != null ? state.res.dc : (pass ? 78 : 123)) + '%';
+    }
+    if ($('#verdictPass')) $('#verdictPass').classList.toggle('step-hidden', !pass);
+    if ($('#verdictFail')) $('#verdictFail').classList.toggle('step-hidden', pass);
+    const v = $('#ls_verdict');
+    if (v) {
+      v.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-sans text-[11px]';
+      v.style.background = pass ? 'rgba(22,163,74,.22)' : 'rgba(220,38,38,.25)';
+      v.style.color = pass ? '#86efac' : '#fca5a5';
+      v.textContent = pass ? '✓ ผ่าน' : '✕ ไม่ผ่าน';
+    }
+    if ($('#ls_dc')) $('#ls_dc').textContent = dc;
+  }
+
+  /* recompute + อัปเดตกราฟ/ผล/verdict โดย "ไม่ rebuild ช่องกรอกโหลด" (กัน focus หลุดตอนพิมพ์ ·
+     Codex P2) · ใช้กับ input-typing · ส่วน add/delete/drag-release/section ใช้ render() เต็ม */
+  function refreshResults() {
+    recompute();
+    drawStep2();
+    renderWork();
+    syncVerdict();
+    if (state.step === 3) { drawMainSections(); if (state.ctab === 'detail') drawDetailing(); }
   }
 
   /* ════════════════ CORE · ccCanvas (Revit-style interactive beam) ════════════════
@@ -1245,7 +1405,7 @@
           ccCanvas._dragDim = { y: ccCanvas._dragDimY || 137, segs: [[ad[0], px], [px, ad[1]]] };
           drawStep2(); showDragTip(host, e.clientX - r.left, e.clientY - r.top, 'x = ' + px.toFixed(1) + ' ม · ' + ccUnits.P(ccModel.points[i].P));
         };
-        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); hideDragTip(); ccCanvas._dragDim = null; renderPointLoads(); drawStep2(); };
+        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); hideDragTip(); ccCanvas._dragDim = null; renderPointLoads(); render(); };
         document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
       });
     },
@@ -1270,7 +1430,7 @@
           ccCanvas._dragDim = { y: ccCanvas._dragDimY || 137, segs };
           drawStep2(); showDragTip(host, (e.clientX - r.left), e.clientY - r.top, 'w: ' + q.x0.toFixed(1) + ' → ' + q.x1.toFixed(1) + ' ม (กว้าง ' + (q.x1 - q.x0).toFixed(1) + ' ม)');
         };
-        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); hideDragTip(); ccCanvas._dragDim = null; renderPartialLoads(); drawStep2(); };
+        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); hideDragTip(); ccCanvas._dragDim = null; renderPartialLoads(); render(); };
         document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
       });
     },
@@ -1287,7 +1447,7 @@
     inp.className = 'cc-edit num-field text-center';
     inp.style.cssText = `position:absolute;width:72px;left:${(vbx / CV.W) * r.width - 36}px;top:${(vby / 196) * r.height - 14}px;z-index:5`;
     host.appendChild(inp); inp.focus(); inp.select();
-    const commit = () => { ccModel.setSpanLen(idx, parseFloat(inp.value) || ccModel.spans[idx]); inp.remove(); syncSpanLens(); buildSpanLenInputs(); drawStep2(); };
+    const commit = () => { ccModel.setSpanLen(idx, parseFloat(inp.value) || ccModel.spans[idx]); inp.remove(); syncSpanLens(); buildSpanLenInputs(); render(); };
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') inp.remove(); });
     inp.addEventListener('blur', commit);
   }
@@ -1372,32 +1532,47 @@
         marks.push({ x: X(a.xMmax), y: mAxis + Mmax * msc, val: Mmax, type: 'pos' });
         if (Mmin < -1) marks.push({ x: X(xMmin), y: mAxis + Mmin * msc, val: -Mmin, type: 'neg' });
       } else {
-        // continuous — smooth parabola per span through (yL, midSag, yR); proportional scale
-        const n = g.spans.length; Vmax = MOCK.cont.Vu;
-        const nodeHog = g.nodes.map((nx, i) => (i === 0 || i === g.nodes.length - 1) ? 0 : (spanMoments(i - 1, n).negR || 8800));
-        let maxSag = 1; g.spans.forEach((sp, si) => { maxSag = Math.max(maxSag, spanMoments(si, n).pos); });
-        const maxHog = Math.max(1, ...nodeHog);
-        Mmax = Math.max(maxSag, maxHog);
-        const msc = Math.min(momDown / maxSag, momUp / maxHog);   // one scale → magnitudes stay proportional
-        const lp = [], fp = [], vpts = [];
-        g.spans.forEach((sp, si) => {
-          const x0 = g.nodes[si], yL = -nodeHog[si], yR = -nodeHog[si + 1], Pp = spanMoments(si, n).pos;
-          // parabola coeffs (value space): M(t)=a t² + b t + c, M(0)=yL, M(.5)=Pp, M(1)=yR
-          const a2 = -4 * Pp + 2 * yL + 2 * yR, b2 = 4 * Pp - 3 * yL - yR, c2 = yL;
-          const steps = 30;
-          for (let k = (si > 0 ? 1 : 0); k <= steps; k++) {       // skip shared node to keep one smooth path
-            const t = k / steps, v = a2 * t * t + b2 * t + c2, x = x0 + t * sp, py = mAxis + v * msc;
-            lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`);
-          }
-          marks.push({ x: X((g.nodes[si] + g.nodes[si + 1]) / 2), y: mAxis + Pp * msc, val: Pp, type: 'pos' });
-          // shear: linear within span, jump at supports
-          vpts.push([X(x0), vMid - vH * 0.34], [X(g.nodes[si + 1]), vMid + vH * 0.34]);
-        });
-        g.nodes.forEach((nx, i) => { if (nodeHog[i] > 0) marks.push({ x: X(nx), y: mAxis - nodeHog[i] * msc, val: nodeHog[i], type: 'neg' }); });
-        mLine = lp.join(' ');
-        mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
-        vLine = vpts.map(([x, y]) => `${x},${y}`).join(' ');
-        vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+        const ac = analyzeContinuous();
+        if (ac) {
+          // ── REAL engine (three-moment) · interactive · responds to dragged loads (Phase 2) ──
+          Vmax = ac.Vmax || 1;
+          let maxPos = 1, maxNeg = 1;
+          ac.M.forEach(mm => { if (mm > maxPos) maxPos = mm; if (-mm > maxNeg) maxNeg = -mm; });
+          Mmax = Math.max(maxPos, maxNeg);
+          const vsc = (vH * 0.42) / Vmax, msc = Math.min(momDown / maxPos, momUp / maxNeg);
+          vLine = ac.xs.map((x, i) => `${X(x)},${(vMid - ac.V[i] * vsc).toFixed(1)}`).join(' ');
+          vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+          const lp = [], fp = [];
+          ac.xs.forEach((x, i) => { const py = mAxis + ac.M[i] * msc; lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`); });
+          mLine = lp.join(' ');
+          mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
+          ac.marks.forEach(mk => marks.push({ x: X(mk.x), y: mAxis + (mk.type === 'neg' ? -mk.val : mk.val) * msc, val: mk.val, type: mk.type }));
+        } else {
+          // ── fallback (engine ยังไม่พร้อม) · parabola ประมาณจาก spanMoments ──
+          const n = g.spans.length; Vmax = MOCK.cont.Vu;
+          const nodeHog = g.nodes.map((nx, i) => (i === 0 || i === g.nodes.length - 1) ? 0 : (spanMoments(i - 1, n).negR || 8800));
+          let maxSag = 1; g.spans.forEach((sp, si) => { maxSag = Math.max(maxSag, spanMoments(si, n).pos); });
+          const maxHog = Math.max(1, ...nodeHog);
+          Mmax = Math.max(maxSag, maxHog);
+          const msc = Math.min(momDown / maxSag, momUp / maxHog);
+          const lp = [], fp = [], vpts = [];
+          g.spans.forEach((sp, si) => {
+            const x0 = g.nodes[si], yL = -nodeHog[si], yR = -nodeHog[si + 1], Pp = spanMoments(si, n).pos;
+            const a2 = -4 * Pp + 2 * yL + 2 * yR, b2 = 4 * Pp - 3 * yL - yR, c2 = yL;
+            const steps = 30;
+            for (let k = (si > 0 ? 1 : 0); k <= steps; k++) {
+              const t = k / steps, v = a2 * t * t + b2 * t + c2, x = x0 + t * sp, py = mAxis + v * msc;
+              lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`);
+            }
+            marks.push({ x: X((g.nodes[si] + g.nodes[si + 1]) / 2), y: mAxis + Pp * msc, val: Pp, type: 'pos' });
+            vpts.push([X(x0), vMid - vH * 0.34], [X(g.nodes[si + 1]), vMid + vH * 0.34]);
+          });
+          g.nodes.forEach((nx, i) => { if (nodeHog[i] > 0) marks.push({ x: X(nx), y: mAxis - nodeHog[i] * msc, val: nodeHog[i], type: 'neg' }); });
+          mLine = lp.join(' ');
+          mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
+          vLine = vpts.map(([x, y]) => `${x},${y}`).join(' ');
+          vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+        }
       }
 
       // ── V band ──
@@ -1433,7 +1608,7 @@
   // render step-2 (canvas + diagram + live bar Wu/Mu) — synchronous so it can never get stuck
   function drawStep2() {
     ccCanvas.render(); ccDiagram.render();
-    const Wu = ccModel.Wu, Mu = state.mode === 'cont' ? MOCK.cont.Mu : MOCK.single.Mu;
+    const Wu = ccModel.Wu, Mu = liveData().Mu;
     if ($('#ls_wu')) $('#ls_wu').textContent = ccUnits.W(Wu);
     if ($('#ls_mu')) $('#ls_mu').textContent = ccUnits.M(Mu);
   }
@@ -1454,13 +1629,14 @@
   }
 
   function renderWork() {
-    const m = state.mode === 'cont' ? MOCK.cont : MOCK.single;
-    // mode-aware key metrics
+    const m = liveData();
+    // mode-aware key metrics (engine จริง · fallback mock)
     if ($('#km_pm')) {
       $('#km_pm').textContent = ccUnits.M(m.Mu);
-      if ($('#km_nm')) $('#km_nm').textContent = ccUnits.M(MOCK.cont.MuNeg);
+      if ($('#km_nm')) $('#km_nm').textContent = ccUnits.M(m.MuNeg != null ? m.MuNeg : MOCK.cont.MuNeg);
       $('#km_vu').textContent = ccUnits.P(m.Vu);
-      $('#km_mg').textContent = '+' + m.margin + '%';
+      $('#km_mg').textContent = (m.margin >= 0 ? '+' : '') + m.margin + '%';
+      if ($('#km_dc')) $('#km_dc').textContent = (m.dc != null ? m.dc : 78) + '%';
     }
     const steps = [
       wstep(1, 'ความลึกประสิทธิผล', 'มงคล Eq 3.1', [
@@ -1840,7 +2016,7 @@
     $$('#legPills .pill').forEach(p => p.addEventListener('click', () => {
       $$('#legPills .pill').forEach(x => x.setAttribute('aria-pressed', 'false'));
       p.setAttribute('aria-pressed', 'true'); state.legs = +p.dataset.leg;
-      drawElevation(); drawSections3(); drawMainSections(); renderWork();
+      render();   // recompute engine (stirrup_legs เปลี่ยน → เฉือน/D-C/verdict ใหม่) + redraw ครบ
     }));
   }
 
@@ -1903,19 +2079,17 @@
   /* ╔══════════════ master render ══════════════╗ */
   function render() {
     applyMode();
+    recompute();          // Phase 2b · engine จริง → state.res (ก่อน render ที่อ่าน liveData)
     recalcBase();
     renderPointLoads(); renderPartialLoads();
     drawStep2();
     renderWork();
+    syncVerdict();
     if (state.step === 3) { drawMainSections(); if (state.ctab === 'detail') drawDetailing(); }
     // continuous live summary tweaks (b×h via JS; Wu/Mu set inside drawStep2 via ccUnits)
-    if (state.mode === 'cont') {
-      $('#ls_bh').textContent = MOCK.cont.b + '×' + MOCK.cont.h;
-      const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = MOCK.cont.b + '×' + MOCK.cont.h;
-    } else {
-      $('#ls_bh').textContent = P.b + '×' + P.h;
-      const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h;
-    }
+    // b×h = live P ทั้ง 2 โหมด (section card ใช้ร่วมกัน · ตรงกับ engine input)
+    $('#ls_bh').textContent = P.b + '×' + P.h;
+    { const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h; }
     updateNav();
   }
 
@@ -4363,8 +4537,9 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       },
     };
     document.body.classList.add('engine-ready');
-    console.log('[civilcalc] Pyodide ready · window.__civilCalc available (Phase 1 · results still mock)');
+    console.log('[civilcalc] Pyodide ready · window.__civilCalc available');
     if (window.__hideBootScreen) window.__hideBootScreen();
+    if (window.__civilRefresh) window.__civilRefresh();   // Phase 2b · re-render ด้วยผล engine จริง
   } catch (err) {
     console.error('[civilcalc] Pyodide boot failed:', err);
     setMsg('โหลดเครื่องคำนวณไม่สำเร็จ: ' + String(err && err.message || err));
