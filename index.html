@@ -1167,12 +1167,23 @@
     const g = geom();
     const dl = MOCK.cont.DL / KGF_PER_KN, ll = MOCK.cont.LL / KGF_PER_KN;  // kg/m → kN/m (UDL ยัง mock)
     const spans = g.spans.map(L => ({ L, DL: dl, LL: ll, point_loads: [] }));
-    // map global point loads → per-span (x จากปลายซ้ายของช่วง · P กก.→kN)
-    ccModel.points.forEach(p => {
+    // helper: วางจุดโหลด (global x ม. · P kN) ลงช่วงที่ถูกต้อง
+    const addPt = (xg, P_kN, kind) => {
       let si = 0;
-      for (let k = 0; k < g.spans.length; k++) { if (p.x >= g.nodes[k] - 1e-9 && p.x <= g.nodes[k + 1] + 1e-9) { si = k; break; } si = k; }
-      const xloc = Math.max(0, Math.min(g.spans[si], p.x - g.nodes[si]));
-      spans[si].point_loads.push({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: p.P / KGF_PER_KN, x: xloc });
+      for (let k = 0; k < g.spans.length; k++) { if (xg >= g.nodes[k] - 1e-9 && xg <= g.nodes[k + 1] + 1e-9) { si = k; break; } si = k; }
+      const xloc = Math.max(0, Math.min(g.spans[si], xg - g.nodes[si]));
+      spans[si].point_loads.push({ kind: kind === 'DL' ? 'DL' : 'LL', P: P_kN, x: xloc });
+    };
+    // จุดโหลดจริง (กก.→kN)
+    ccModel.points.forEach(p => addPt(Math.min(g.total, p.x), p.P / KGF_PER_KN, p.kind));
+    // partial UDL: engine ต่อเนื่องไม่รองรับโดยตรง → discretize เป็นจุดย่อย (w·seg ที่กึ่งกลาง
+    //   แต่ละ sub-segment · ผลรวม = w·L) · ~1 จุด/0.25 ม. (ขั้นต่ำ 4) → กราฟ V/M ตอบสนอง partial
+    ccModel.partials.forEach(q => {
+      const x0 = Math.max(0, q.x0), x1 = Math.min(g.total, q.x1), span = x1 - x0;
+      if (span <= 0.01) return;
+      const N = Math.max(4, Math.round(span / 0.25));
+      const seg = span / N, Peach = (q.w / KGF_PER_KN) * seg;   // กก./ม → kN/ม × seg = kN
+      for (let j = 0; j < N; j++) addPt(x0 + seg * (j + 0.5), Peach, 'LL');
     });
     let res;
     try { res = window.__civilCalc.designContinuous({ b: MOCK.cont.b, h: MOCK.cont.h, fc: MOCK.cont.fc, fy: MOCK.cont.fy, spans, load_combo: '1.4D+1.7L' }); }
