@@ -591,12 +591,9 @@
                 </div>
               </div>
 
-              <div class="hairline pt-4 space-y-3">
-                <div class="text-[13px] font-semibold text-ink-muted">ความยาวเหล็ก (ม)</div>
-                <div class="grid grid-cols-[1fr_84px] items-center gap-3"><label class="text-[14px]">เหล็กบน-ซ้าย</label><input class="num-field text-center" type="number" step="0.05" value="1.05" data-draw="topL" /></div>
-                <div class="grid grid-cols-[1fr_84px] items-center gap-3"><label class="text-[14px]">เหล็กบน-ขวา</label><input class="num-field text-center" type="number" step="0.05" value="1.40" data-draw="topR" /></div>
-                <div class="grid grid-cols-[1fr_84px] items-center gap-3"><label class="text-[14px]">เหล็กล่าง-ริม</label><input class="num-field text-center" type="number" step="0.05" value="0.53" data-draw="botEdge" /></div>
-                <div class="grid grid-cols-[1fr_84px] items-center gap-3"><label class="text-[14px]">เหล็กล่าง-กลาง</label><input class="num-field text-center" type="number" step="0.05" value="3.00" data-draw="botMid" /></div>
+              <div class="hairline pt-4 space-y-2">
+                <div class="text-[13px] font-semibold text-ink-muted">ความยาวเหล็ก</div>
+                <p class="text-[12px] text-ink-muted leading-relaxed">คำนวณอัตโนมัติจากช่วงคาน · เหล็กหลัก(2 มุม)วิ่งเต็มความยาว · เหล็กเสริมหัวเสา ยื่น L/3 ต่อข้าง · เหล็กเสริมกลางช่วง ตัดที่ L/6 จากเสา</p>
               </div>
 
               <div class="hairline pt-4 space-y-2">
@@ -636,6 +633,7 @@
                   <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 inline-block" style="background:var(--rebar)"></span> เหล็กเสริม</span>
                   <span class="flex items-center gap-1.5"><span class="w-3 h-3 inline-grid place-items-center text-[8px]" style="color:var(--ink-muted)">‖</span> ปลอก</span>
                 </div>
+                <p class="mt-1 text-[11px] text-ink-muted">รูป schematic เป็นแนวทาง (guide) — เหล็กหลัก 2 เส้น(เบอร์ใหญ่สุด)วิ่งเต็ม · เสริมหัวเสายื่น L/3 · เสริมกลาง L/6 จากเสา · * เสริมปลาย = nominal กันร้าว (ปลายโมเดล M=0) · หัวเสา/ช่วงที่ต้องการ 2 เส้น = เหล็กหลักพอ ไม่มีเสริม · วิศวกร ก.ว. จัด detailing/curtailment จริงก่อนก่อสร้าง</p>
               </div>
 
               <div class="card p-5">
@@ -647,11 +645,11 @@
                 <h4 class="text-[14px] font-semibold mb-3">Bar Bending Schedule (BBS)</h4>
                 <table class="w-full text-[13px] mono whitespace-nowrap">
                   <thead class="text-ink-muted text-[12px] border-b border-border">
-                    <tr><th class="text-left font-semibold py-2 pr-3">มาร์ก</th><th class="text-left font-semibold py-2 pr-3">ขนาด</th><th class="text-right font-semibold py-2 pr-3">จำนวน</th><th class="text-right font-semibold py-2 pr-3">ยาว (ม)</th><th class="text-left font-semibold py-2 pr-3">รูปดัด</th><th class="text-right font-semibold py-2">น้ำหนัก (กก.)</th></tr>
+                    <tr><th class="text-left font-semibold py-2 pr-3">มาร์ก</th><th class="text-left font-semibold py-2 pr-3">ขนาด</th><th class="text-right font-semibold py-2 pr-3">จำนวน</th><th class="text-right font-semibold py-2 pr-3">ยาว (ม)</th><th class="text-left font-semibold py-2">ตำแหน่ง</th></tr>
                   </thead>
                   <tbody id="bbsRows" class="divide-y divide-border"></tbody>
                 </table>
-                <p class="mt-3 text-[12px] text-ink-muted">* ความยาว/น้ำหนัก = ค่า detailing · วิศวกร ก.ว. ตรวจ</p>
+                <p class="mt-3 text-[12px] text-ink-muted">* ความยาว = ระยะช่วง/cutoff (ไม่รวมระยะทาบ·ระยะงอ·ฝังยึด) · เหล็กบนยื่น L/4 ต่อข้าง · ปลอก = เส้นรอบรูป · วิศวกร ก.ว. ตรวจ detailing จริง</p>
               </div>
             </div>
           </div>
@@ -800,7 +798,7 @@
       DL: 1440, LL: 900, Wu: 3546, Mu: 7090, Vu: 10570,   // kg/m · kg·m · kg
       RA: 11990, RB: 11030, As_req: 4.78,
       Vc: 9300, phiVc: 7905, Vs: 3135, VuAtD: 10570, dShear: 45.30,   // kg
-      stirBar: 'RB9', stirLegs: 2, S1: 10, S2: 25, stirShop: '1ป-RB9@0.10 (S1) · 1ป-RB9@0.25 (S2)',
+      stirBar: 'RB9', stirLegs: 2, S1: 10, S2: 25, stirShop: '1ป-RB9@0.10 (S1) · 1ป-RB9@0.25 (S2)', stirN: 32,
       rebarMain: '3-DB16', As_prov: 6.03, phiMn: 9090, dc: 78, margin: 28,
       col: 0.30, topL: 1.05, topR: 1.40, botEdge: 0.53, botMid: 3.00,
       nodes: [0, 4.5], spans: [4.5],
@@ -1003,6 +1001,15 @@
     const beta1 = beta1Of(fc);
     const rho_b = (0.85 * beta1 * fc / fy) * (6120 / (6120 + fy));   // 6120 = εcu·Es = 0.003·2,040,000
     return { beta1, rho_b, rho_min: 14 / fy, rho_max: 0.75 * rho_b };
+  };
+  // จำนวนปลอกตามยาว = 2·(โซนหัวเสา L_S1/S1) + (กลางช่วง L_S2/S2) + 1 ปลอกปิดท้าย
+  //   (engine n_stirrups = n_legs//2 ไม่ใช่จำนวนตามยาว · ต้องคำนวณจาก zone เอง · เรขาคณิตล้วน)
+  const stirrupCount = sh => {
+    if (!sh) return 0;
+    const n1 = sh.S1_cm ? (sh.L_S1_cm || 0) / sh.S1_cm : 0;
+    const n2 = sh.S2_cm ? (sh.L_S2_cm || 0) / sh.S2_cm : 0;
+    const n = Math.round(2 * n1 + n2) + 1;
+    return n > 1 ? n : 0;
   };
   const dbVal = s => ({ DB12: 1.2, DB16: 1.6, DB20: 2.0, DB25: 2.5 }[s] || 1.6);
   const dsVal = s => ({ RB6: 0.6, RB9: 0.9, DB10: 1.0 }[s] || 0.9);
@@ -1344,7 +1351,7 @@
         spacingClear: o.rebar ? o.rebar.spacing_min_clear : 0,
         Vc: (sd.Vc_ton || 0) * 1000, phiVc: (sd.phi_Vc_ton || 0) * 1000, Vs: (sd.Vs_required_ton || 0) * 1000,  // ตัน → กก.
         VuAtD: (sd.Vu_at_d_ton || 0) * 1000, dShear: o.d_actual,
-        stirBar: sd.bar, stirLegs: sd.n_legs, S1: sd.S1_cm, S2: sd.S2_cm, stirShop: sd.shop_drawing_notation, stirPass: sd.passes,
+        stirBar: sd.bar, stirLegs: sd.n_legs, S1: sd.S1_cm, S2: sd.S2_cm, stirShop: sd.shop_drawing_notation, stirPass: sd.passes, stirN: stirrupCount(sd),
       };
     } else {
       const ac = analyzeContinuous(); if (!ac) return;
@@ -1892,17 +1899,34 @@
     renderBBS();
   }
 
+  // detailBars — จำนวน/ขนาดเหล็กจาก engine ต่อตำแหน่ง · แยก หลัก(2 มุม) + เสริม
+  //   ตาม convention [[Convention - Beam Rebar Layout (Main + Extra)]] (pi confirm 2026-06-05)
+  function detailBars() {
+    const fromRebar = rb => { if (!rb || !rb.main_bars || !rb.main_bars.length) return { n: 0, size: 'DB16' }; const n = rb.main_bars.reduce((s, t) => s + t[1], 0); return { n, size: rb.main_bars[0][0] }; };
+    const fromStr = s => { const p = (s && s !== '—') ? s.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean) : []; const n = p.reduce((a, mm) => a + (+mm[1]), 0); return { n, size: p.length ? p[0][2] : 'DB16' }; };
+    const stir = sh => ({ bar: (sh && sh.bar) || 'RB9', s1: sh && sh.S1_cm, s2: sh && sh.S2_cm });
+    if (state.mode === 'cont') {
+      const ac = analyzeContinuous(), o = ac && ac.out;
+      if (!o || !o.spans) return null;
+      return {
+        spanBot: o.spans.map(sp => fromRebar(sp.bottom && sp.bottom.rebar)),
+        supTop: o.supports.map(su => fromRebar(su.top && su.top.rebar)),
+        spanStir: o.spans.map(sp => stir(sp.shear)),
+      };
+    }
+    const m = liveData();
+    return { spanBot: [fromStr(m.rebarMain)], supTop: [{ n: 0, size: 'DB16' }, { n: 0, size: 'DB16' }], spanStir: [{ bar: m.stirBar || 'RB9', s1: m.S1, s2: m.S2 }] };  // ปลายคานเดี่ยว = ไม่มี −M
+  }
+
   const D = () => {  // detailing config from inputs + mode geometry
     const m = state.mode === 'cont' ? MOCK.cont : MOCK.single;
     const g = geom();
     const get = sel => parseFloat($(`[data-draw="${sel}"]`)?.value);
     return {
-      spans: g.spans.slice(), nodes: g.nodes.slice(), h: m.h / 100, b: m.b,
-      col: get('col') || m.col, topL: get('topL') || m.topL, topR: get('topR') || m.topR,
-      botEdge: get('botEdge') || m.botEdge, botMid: get('botMid') || m.botMid,
-      topBars: state.mode === 'cont' ? '6-DB20' : '2-DB16',
-      botBars: state.mode === 'cont' ? '3-DB20' : '3-DB16',
+      spans: g.spans.slice(), nodes: g.nodes.slice(), h: (P.h || m.h) / 100, b: P.b || m.b,
+      col: get('col') || m.col,
       legs: state.legs,
+      bars: detailBars(),   // {spanBot[], supTop[]} จาก engine · null ก่อน ready
     };
   };
   // stirrup symbol incl. leg count: e.g. 1ป-RB9@.15 / 2ป-RB9@.20
@@ -1937,18 +1961,15 @@
     // beam body
     svg.appendChild(svgEl('rect', { x: X(node0), y: beamTop, width: totalLen * pxm, height: beamH, fill: '#EEF2F6', stroke: '#94A3B8', 'stroke-width': 1.2 }));
 
-    // stirrup zones per span (with leg-aware label)
+    // stirrup lines (visual · ป้ายระยะเรียง/จำนวน ดูในตาราง BBS · ไม่ใส่ label ที่นี่ กัน text ทับ)
     c.spans.forEach((sp, si) => {
       const xA = c.nodes[si], xB = c.nodes[si + 1];
       const segs = [
-        { a: xA, b: xA + sp * 0.25, step: Math.max(sp * 0.05, 0.12), lbl: stirText('.10') },
-        { a: xA + sp * 0.25, b: xA + sp * 0.75, step: Math.max(sp * 0.08, 0.26), lbl: stirText('.25') },
-        { a: xA + sp * 0.75, b: xB, step: Math.max(sp * 0.05, 0.12), lbl: stirText('.15') },
+        { a: xA, b: xA + sp * 0.25, step: Math.max(sp * 0.05, 0.12) },
+        { a: xA + sp * 0.25, b: xA + sp * 0.75, step: Math.max(sp * 0.08, 0.26) },
+        { a: xA + sp * 0.75, b: xB, step: Math.max(sp * 0.05, 0.12) },
       ];
-      segs.forEach(seg => {
-        for (let xx = seg.a; xx <= seg.b + 1e-6; xx += seg.step) svg.appendChild(svgEl('line', { x1: X(xx), y1: beamTop + inset * 0.6, x2: X(xx), y2: beamBot - inset * 0.6, stroke: '#cbd5e1', 'stroke-width': 1 }));
-        if (!compact) { const lt = svgEl('text', { x: X((seg.a + seg.b) / 2), y: beamBot - 4, 'font-size': 9, fill: '#64748B', 'text-anchor': 'middle' }); lt.textContent = seg.lbl; svg.appendChild(lt); }
-      });
+      segs.forEach(seg => { for (let xx = seg.a; xx <= seg.b + 1e-6; xx += seg.step) svg.appendChild(svgEl('line', { x1: X(xx), y1: beamTop + inset * 0.6, x2: X(xx), y2: beamBot - inset * 0.6, stroke: '#cbd5e1', 'stroke-width': 1 })); });
     });
 
     // columns
@@ -1957,31 +1978,66 @@
       svg.appendChild(svgEl('rect', { x, y: colTop, width: cw, height: colBot - colTop, fill: '#CBD5E1', stroke: '#94A3B8', 'stroke-width': 1 }));
       for (let hy = colTop + 6; hy < colBot; hy += 9) svg.appendChild(svgEl('line', { x1: x, y1: hy, x2: x + cw, y2: hy - 6, stroke: '#fff', 'stroke-width': 0.6, opacity: .6 }));
     });
+    // ป้ายกริดเสา (#3) — วงกลม + ชื่อกริด ใต้เสาแต่ละต้น (เต็มจอเท่านั้น)
+    if (!compact && opts.callouts) {
+      c.nodes.forEach((nx, i) => {
+        const gx = X(nx), gy = colBot + 13;
+        svg.appendChild(svgEl('circle', { cx: gx, cy: gy, r: 9, fill: '#fff', stroke: '#64748B', 'stroke-width': 1.2 }));
+        const gt = svgEl('text', { x: gx, y: gy + 3.5, 'font-size': 10, fill: '#475569', 'text-anchor': 'middle', 'font-weight': 700 }); gt.textContent = ccModel.grid(i); svg.appendChild(gt);
+      });
+    }
 
-    // bottom rebar
-    const yBot = beamBot - inset;
+    // ── เหล็กตาม convention: หลัก(2 มุม)วิ่งเต็มความยาว + เสริม layer 2 (−M หัวเสา · +M กลางช่วง) ──
+    const bars = c.bars, mainN = 2, x0 = c.nodes[0], xN = c.nodes.at(-1);
+    // เหล็กหลัก = ขนาดใหญ่สุดในคาน (วิ่งเต็ม · กัน under-reinforce จุดที่ engine เลือกเบอร์ใหญ่ · schematic)
+    const sizeNum = s => +(((s || 'DB16').match(/\d+/)) || [16])[0];
+    const maxSize = arr => { const f = (arr || []).filter(Boolean); return f.length ? f.reduce((a, b) => sizeNum(b) > sizeNum(a) ? b : a) : ''; };
+    const botSize = (bars && maxSize(bars.spanBot.map(s => s.size))) || 'DB16';
+    const topSize = (bars && maxSize(bars.supTop.filter(s => s.n > 0).map(s => s.size))) || botSize;
+
+    // MAIN-BOTTOM (เต็ม) + EXTRA-MID (+M · ตัด L/6 จากเสา)
+    const yBot = beamBot - inset, yBotX = yBot - 7;
+    rebar(svg, X(x0), X(xN), yBot, 'up');
+    if (!compact) labelBar(svg, X(x0) + 6, yBot + 13, `${mainN}-${botSize} หลักล่าง`, '#1D4ED8', 'start');
     c.spans.forEach((sp, si) => {
-      const xA = c.nodes[si], xB = c.nodes[si + 1], mid = (xA + xB) / 2;
-      const hl = Math.min(c.botMid, sp) / 2;
-      rebar(svg, X(mid - hl), X(mid + hl), yBot, 'up');
-      labelBar(svg, X(mid), yBot + (compact ? 11 : 13), c.botBars, '#1D4ED8');
-      if (state.mode === 'single') {
-        rebar(svg, X(xA), X(xA + c.botEdge), yBot - 4, 'up', true);
-        rebar(svg, X(xB - c.botEdge), X(xB), yBot - 4, 'up', true);
-      }
+      const xA = c.nodes[si], xB = c.nodes[si + 1];
+      const extra = Math.max(0, ((bars && bars.spanBot[si]) ? bars.spanBot[si].n : 3) - mainN);
+      if (extra <= 0) return;
+      rebar(svg, X(xA + sp / 6), X(xB - sp / 6), yBotX, 'up', true);
+      if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${extra}-${(bars ? bars.spanBot[si].size : botSize)} เสริมกลาง`, '#2563EB', 'middle', 9);
     });
 
-    // top rebar
-    const yTop = beamTop + inset;
+    // MAIN-TOP (เต็ม) + EXTRA หัวเสา (−M · L/3 ต่อข้าง)
+    const yTop = beamTop + inset, yTopX = yTop + 7;
+    rebar(svg, X(x0), X(xN), yTop, 'down');
+    if (!compact) labelBar(svg, X(x0) + 4, beamTop - 5, `${mainN}-${topSize} หลักบน`, '#1D4ED8', 'start');
+    const isCont = state.mode === 'cont';
     c.nodes.forEach((nx, i) => {
-      const isL = i === 0, isR = i === c.nodes.length - 1;
-      let a, b;
-      if (isL) { a = nx; b = nx + c.topL; } else if (isR) { a = nx - c.topR; b = nx; } else { a = nx - c.topL; b = nx + c.topR; }
-      a = Math.max(c.nodes[0], a); b = Math.min(c.nodes.at(-1), b);
-      rebar(svg, X(a), X(b), yTop, 'down');
-      if (!compact || i < 2) labelBar(svg, X((a + b) / 2), yTop - 7, c.topBars, '#1D4ED8');
-      if (showDim && !compact) dim(svg, X(a), X(b), yTop - 22, (b - a).toFixed(2));
+      const isL = i === 0, isR = i === c.nodes.length - 1, isEnd = isL || isR;
+      let extra = Math.max(0, ((bars && bars.supTop[i]) ? bars.supTop[i].n : 0) - mainN);
+      let esize = (bars && bars.supTop[i] && bars.supTop[i].n > 0) ? bars.supTop[i].size : topSize;
+      let nominal = false;
+      // EXTRA-END: ปลายคานต่อเนื่อง engine มองเป็น simple (M=0) → ใส่ nominal กันร้าว 2 เส้น ยื่น L/3 (pi 2026-06-05)
+      if (isCont && isEnd && extra <= 0) { extra = 2; esize = topSize; nominal = true; }
+      if (extra <= 0) return;
+      const spL = i > 0 ? c.spans[i - 1] : 0, spR = i < c.spans.length ? c.spans[i] : 0;
+      let a = isL ? nx : nx - spL / 3, b = isR ? nx : nx + spR / 3;
+      a = Math.max(x0, a); b = Math.min(xN, b);
+      rebar(svg, X(a), X(b), yTopX, 'down', true);
+      const lbl = isEnd ? (nominal ? 'เสริมปลาย*' : 'เสริมปลาย') : 'เสริมหัวเสา';
+      if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 11, `+${extra}-${esize} ${lbl}`, '#2563EB', 'middle', 9);
+      if (showDim && !compact) dim(svg, X(a), X(b), beamTop - 24, (b - a).toFixed(2));
     });
+
+    // ระยะปลอก (#4) — ป้ายราย span กลางความสูงคาน (เหนือเส้นปลอกเทาๆ · ไม่ทับ bar บน/ล่าง)
+    if (!compact) {
+      c.spans.forEach((sp, si) => {
+        const st = bars && bars.spanStir && bars.spanStir[si];
+        const s1 = st && st.s1 ? (st.s1 / 100).toFixed(2) : '0.10', s2 = st && st.s2 ? (st.s2 / 100).toFixed(2) : '0.25';
+        const txt = `ปลอก ${st ? st.bar : 'RB9'}@${s1}·${s2}`;
+        labelBar(svg, X((c.nodes[si] + c.nodes[si + 1]) / 2), beamBot + 22, txt, '#64748B', 'middle', 9);
+      });
+    }
 
     // dim lines
     if (showDim) {
@@ -1993,8 +2049,9 @@
     if (opts.callouts) {
       const calloutX = state.mode === 'cont'
         ? [c.nodes[1], (c.nodes[1] + (c.nodes[2] ?? c.nodes.at(-1))) / 2, (c.nodes[2] ?? c.nodes.at(-1))]
-        : [c.spans[0] * 0.08, c.spans[0] / 2, c.spans[0] * 0.92];
-      ['A', 'B', 'C'].forEach((lab, i) => {
+        : [c.spans[0] * 0.18, c.spans[0] / 2, c.spans[0] * 0.82];
+      // มาร์กหน้าตัด = 1/2/3 (แยกจากป้ายกริดเสา A/B/C/D ด้านล่าง · กันสับสน)
+      ['1', '2', '3'].forEach((lab, i) => {
         const cx = X(calloutX[i]);
         svg.appendChild(svgEl('line', { x1: cx, y1: beamTop - 4, x2: cx, y2: beamBot + 4, stroke: '#DC2626', 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
         svg.appendChild(svgEl('circle', { cx, cy: beamTop - 14, r: 8, fill: '#fff', stroke: '#DC2626', 'stroke-width': 1 }));
@@ -2045,7 +2102,8 @@
       const head = document.createElement('div'); head.className = 'mb-1';
       head.innerHTML = `<span class="text-[13px] font-semibold">ช่วง ${si + 1}</span> <span class="text-ink-muted text-[12px] mono">${sp.toFixed(2)} ม</span>`;
       card.appendChild(head);
-      const sub = { spans: [sp], nodes: [c.nodes[si], c.nodes[si + 1]], h: c.h, b: c.b, col: c.col, topL: Math.min(c.topL, sp * 0.4), topR: Math.min(c.topR, sp * 0.4), botEdge: c.botEdge, botMid: Math.min(c.botMid, sp * 0.85), topBars: c.topBars, botBars: c.botBars };
+      const sub = { spans: [sp], nodes: [c.nodes[si], c.nodes[si + 1]], h: c.h, b: c.b, col: c.col,
+        bars: c.bars ? { spanBot: [c.bars.spanBot[si]], supTop: [c.bars.supTop[si], c.bars.supTop[si + 1]] } : null };
       const { svg } = buildElevationSVG(sub, { compact: true, marginX: 22, pxm: sharedPxm, showDim: true });
       svg.style.maxWidth = '100%'; svg.style.height = 'auto'; card.appendChild(svg);
       const mom = spanMoments(si, c.spans.length);
@@ -2069,8 +2127,8 @@
     svg.appendChild(svgEl('line', { x1, y1: y, x2: x1, y2: y + hk, stroke: '#1D4ED8', 'stroke-width': w }));
     svg.appendChild(svgEl('line', { x1: x2, y1: y, x2: x2, y2: y + hk, stroke: '#1D4ED8', 'stroke-width': w }));
   }
-  function labelBar(svg, x, y, txt, fill) {
-    const t = svgEl('text', { x, y, 'font-size': 10, fill, 'text-anchor': 'middle', 'font-weight': 600 }); t.textContent = txt; svg.appendChild(t);
+  function labelBar(svg, x, y, txt, fill, anchor, size) {
+    const t = svgEl('text', { x, y, 'font-size': size || 10, fill, 'text-anchor': anchor || 'middle', 'font-weight': 600 }); t.textContent = txt; svg.appendChild(t);
   }
   // moment value label with white halo so it reads over the graph line/fill
   function momLabel(svg, x, y, txt, fill) {
@@ -2156,16 +2214,58 @@
   }
 
   /* ── BBS ── */
+  // BBS — รายการเหล็ก (แบบงานวิศวกรรมโครงสร้าง · ความยาว = เรขาคณิตช่วง ไม่ใช่แบบสั่งตัด)
+  //   มาร์ก · ขนาด · จำนวน · ยาว(ม) · ตำแหน่ง · ทุกค่าจาก engine (count/size) + geometry (length)
   function renderBBS() {
     const cont = state.mode === 'cont';
-    const rows = cont
-      ? [['T1', 'DB20', 6, 2.40, 'ตรง+ตะขอ', 35.5], ['B1', 'DB20', 3, 4.30, 'ตรง', 31.8], ['S1', 'RB9', 96, 1.46, 'ปลอกปิด', 70.0]]
-      : [['T1', 'DB16', 2, 2.45, 'ตรง+ตะขอ', 7.7], ['B1', 'DB16', 3, 3.00, 'ตรง', 14.2], ['B2', 'DB16', 2, 1.06, 'ตรง', 3.3], ['S1', 'RB9', 32, 1.26, 'ปลอกปิด', 20.1]];
+    const cv = P.cover || 0;
+    const perim = +((((P.b || 0) - 2 * cv) + ((P.h || 0) - 2 * cv)) * 2 / 100).toFixed(2);  // เส้นรอบรูปปลอก (ม · ไม่รวมขอ)
+    // ตรงรูป elevation: หลัก(2 มุม เบอร์ใหญ่สุด)เต็มคาน + เสริม (หัวเสา L/3 · ปลาย nominal · กลาง 2L/3)
+    const bars = detailBars();
+    const sizeNum = s => +(((s || 'DB16').match(/\d+/)) || [16])[0];
+    const maxSize = arr => { const f = (arr || []).filter(Boolean); return f.length ? f.reduce((a, b) => sizeNum(b) > sizeNum(a) ? b : a) : ''; };
+    let rows = [];   // [มาร์ก, ขนาด, จำนวน, ยาว(ม), ตำแหน่ง]
+    if (cont) {
+      const ac = analyzeContinuous(), o = ac && ac.out;
+      if (o && o.spans && o.spans.length && bars) {
+        const ns = o.spans.length;
+        const total = +(o.spans.reduce((s, sp) => s + (sp.L || 0), 0)).toFixed(2);
+        const botSize = maxSize(bars.spanBot.map(s => s.size)) || 'DB16';
+        const topSize = maxSize(bars.supTop.filter(s => s.n > 0).map(s => s.size)) || botSize;
+        rows.push(['MT', topSize, 2, total, 'บน·หลัก·เต็มคาน']);
+        rows.push(['MB', botSize, 2, total, 'ล่าง·หลัก·เต็มคาน']);
+        // เสริมหัวเสา (−M) + เสริมปลาย (nominal) · ยาว L/3
+        o.supports.forEach((su, i) => {
+          const isEnd = (i === 0 || i === ns);
+          let extra = Math.max(0, (bars.supTop[i].n || 0) - 2), size = bars.supTop[i].n > 0 ? bars.supTop[i].size : topSize;
+          if (isEnd && extra <= 0) { extra = 2; size = topSize; }   // EXTRA-END nominal
+          if (!extra) return;
+          const spL = i > 0 ? (o.spans[i - 1].L || 0) : 0, spR = i < ns ? (o.spans[i].L || 0) : 0;
+          const len = +((isEnd ? (spL || spR) : (spL + spR)) / 3).toFixed(2);
+          rows.push([isEnd ? (i === 0 ? 'TE1' : 'TE2') : `T${i}`, size, extra, len, isEnd ? `บน·เสริมปลาย* ${su.label}` : `บน·เสริมหัวเสา ${su.label}`]);
+        });
+        // เสริมกลาง (+M · ยาว 2L/3) + ปลอก — รายช่วง
+        o.spans.forEach((sp, i) => {
+          const extra = Math.max(0, (bars.spanBot[i].n || 0) - 2);
+          if (extra) rows.push([`M${i + 1}`, bars.spanBot[i].size, extra, +((sp.L || 0) * 2 / 3).toFixed(2), `ล่าง·เสริมกลาง ${sp.label}`]);
+          const sh = sp.shear || {}, nStir = stirrupCount(sh);
+          if (nStir) rows.push([`S${i + 1}`, sh.bar || 'RB9', nStir, perim, `ปลอก·ช่วง ${sp.label}`]);
+        });
+      }
+    } else {
+      const m = liveData();
+      const L = +(ccModel.total || 0).toFixed(2);
+      const sb = bars ? bars.spanBot[0] : { n: 3, size: 'DB16' };
+      rows.push(['MT', sb.size, 2, L, 'บน·หลัก (ยึดปลอก)']);
+      rows.push(['MB', sb.size, 2, L, 'ล่าง·หลัก·เต็มคาน']);
+      const extra = Math.max(0, (sb.n || 0) - 2);
+      if (extra) rows.push(['M1', sb.size, extra, +(L * 2 / 3).toFixed(2), 'ล่าง·เสริมกลาง']);
+      if (m.stirN) rows.push(['S1', m.stirBar || 'RB9', m.stirN, perim, 'ปลอกปิด']);
+    }
     $('#bbsRows').innerHTML = rows.map(r => `<tr>
       <td class="py-2 pr-3">${r[0]}</td><td class="py-2 pr-3">${r[1]}</td>
-      <td class="py-2 pr-3 text-right">${r[2]}</td><td class="py-2 pr-3 text-right">${r[3].toFixed(2)}</td>
-      <td class="py-2 pr-3 font-sans">${r[4]}</td><td class="py-2 text-right">${r[5].toFixed(1)}</td></tr>`).join('');
-    if (!cont) { } // ok
+      <td class="py-2 pr-3 text-right">${r[2]}</td><td class="py-2 pr-3 text-right">${(+r[3]).toFixed(2)}</td>
+      <td class="py-2 font-sans">${r[4]}</td></tr>`).join('');
     $('#bbsCard').classList.toggle('step-hidden', !$('#tgBBS').checked);
   }
 
