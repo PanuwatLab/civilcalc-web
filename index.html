@@ -1086,7 +1086,7 @@
       if (k === 'kind') ccModel.points[i].kind = v;
       else if (k === 'P') ccModel.points[i].P = (parseFloat(v) || 0) * (ccUnits.force === 'T' ? 1000 : 1);
       else ccModel.points[i].x = Math.min(ccModel.total, Math.max(0, parseFloat(v) || 0));
-      render();
+      refreshResults();
     }));
     host.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
       ccModel.points.splice(+e.target.dataset.del, 1); renderPointLoads(); render();
@@ -1116,7 +1116,7 @@
       const i = +e.target.dataset.i, k = e.target.dataset.q, v = parseFloat(e.target.value) || 0;
       if (k === 'w') ccModel.partials[i].w = v * (ccUnits.force === 'T' ? 1000 : 1);
       else ccModel.partials[i][k] = Math.min(ccModel.total, Math.max(0, v));
-      render();
+      refreshResults();
     }));
     host.querySelectorAll('[data-delq]').forEach(b => b.addEventListener('click', e => {
       ccModel.partials.splice(+e.target.dataset.delq, 1); renderPartialLoads(); render();
@@ -1169,8 +1169,10 @@
     const spans = g.spans.map(L => ({ L, DL: dl, LL: ll, point_loads: [] }));
     // helper: วางจุดโหลด (global x ม. · P kN) ลงช่วงที่ถูกต้อง
     const addPt = (xg, P_kN, kind) => {
-      let si = 0;
-      for (let k = 0; k < g.spans.length; k++) { if (xg >= g.nodes[k] - 1e-9 && xg <= g.nodes[k + 1] + 1e-9) { si = k; break; } si = k; }
+      // half-open [node_k, node_{k+1}) → จุดบนหัวเสาภายในไปช่วงถัดไปที่ x=0 (กัน engine ทิ้ง
+      //   end-of-span load · Codex P1) · ช่วงสุดท้ายปิดท้าย (รวม x=total ที่ support ขวา)
+      let si = g.spans.length - 1;
+      for (let k = 0; k < g.spans.length; k++) { if (xg >= g.nodes[k] - 1e-9 && xg < g.nodes[k + 1] - 1e-6) { si = k; break; } }
       const xloc = Math.max(0, Math.min(g.spans[si], xg - g.nodes[si]));
       spans[si].point_loads.push({ kind: kind === 'DL' ? 'DL' : 'LL', P: P_kN, x: xloc });
     };
@@ -1291,6 +1293,16 @@
       v.textContent = pass ? '✓ ผ่าน' : '✕ ไม่ผ่าน';
     }
     if ($('#ls_dc')) $('#ls_dc').textContent = dc;
+  }
+
+  /* recompute + อัปเดตกราฟ/ผล/verdict โดย "ไม่ rebuild ช่องกรอกโหลด" (กัน focus หลุดตอนพิมพ์ ·
+     Codex P2) · ใช้กับ input-typing · ส่วน add/delete/drag-release/section ใช้ render() เต็ม */
+  function refreshResults() {
+    recompute();
+    drawStep2();
+    renderWork();
+    syncVerdict();
+    if (state.step === 3) { drawMainSections(); if (state.ctab === 'detail') drawDetailing(); }
   }
 
   /* ════════════════ CORE · ccCanvas (Revit-style interactive beam) ════════════════
