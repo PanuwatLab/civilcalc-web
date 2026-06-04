@@ -1280,9 +1280,17 @@
 
   /* sync verdict (pass/fail) + D/C จากผล engine จริง (Phase 2b · override mock toggle เมื่อ engine พร้อม) */
   function syncVerdict() {
-    if (!state.res) return;                 // engine ยังไม่พร้อม → คง mock toggle
-    const pass = state.res._err ? false : !!state.res.pass;
-    const dc = (state.res.dc != null ? state.res.dc : (pass ? 78 : 123)) + '%';
+    // engine ไม่พร้อม/ผลหาย (เช่น ต่อเนื่อง 1 ช่วง · boot ก่อน Pyodide) → reset เป็น fallback
+    //   mock (ตรงกับ liveData) ไม่ปล่อย verdict ค้างค่าเก่า (Codex P2)
+    let pass, dc;
+    if (!state.res || state.res._err) {
+      const m = liveData();
+      pass = !state.res ? true : false;     // ไม่มีผล → mock pass · _err → ไม่ผ่าน
+      dc = ((m.dc != null ? m.dc : (pass ? 78 : 123))) + '%';
+    } else {
+      pass = !!state.res.pass;
+      dc = (state.res.dc != null ? state.res.dc : (pass ? 78 : 123)) + '%';
+    }
     if ($('#verdictPass')) $('#verdictPass').classList.toggle('step-hidden', !pass);
     if ($('#verdictFail')) $('#verdictFail').classList.toggle('step-hidden', pass);
     const v = $('#ls_verdict');
