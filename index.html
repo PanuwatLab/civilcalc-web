@@ -1366,9 +1366,13 @@
       // Phase 2d · show-work detail = ช่วงที่ +M สูงสุด (governing positive · ตรงกับกล่อง +M)
       let gov = null, govShear = null, govMpos = -Infinity;
       (o.spans || []).forEach(sp => { if (sp.bottom && sp.M_pos_kNm > govMpos) { govMpos = sp.M_pos_kNm; gov = sp.bottom; govShear = sp.shear || {}; } });
-      const mat = ccMaterial(P.fc, fyOf(P.grade));   // β₁/ρb/ρmin/ρmax (engine ต่อเนื่องไม่คืนราย span)
+      const _fyC = fyOf(P.grade);
+      const mat = ccMaterial(P.fc, _fyC);   // β₁/ρb/ρmin/ρmax (engine ต่อเนื่องไม่คืนราย span)
+      // ρ_design (ก่อนจำกัด) — engine ต่อเนื่องคืนแค่ rho_final → mirror compute_rho_design (มงคล Eq 3.8) จาก gov.Rn
+      //   (Codex P2: ถ้า alias = rho_final จะซ่อนการปรับเป็น ρmin ในช่วงโหลดน้อย · transparency ต้องเผย)
+      const rhoDesignC = (Rn) => (Rn > 0) ? (0.85 * P.fc / _fyC) * (1 - Math.sqrt(Math.max(0, 1 - 2 * Rn / (0.85 * P.fc)))) : 0;
       const cd = gov ? {
-        d: gov.d_actual, Rn: gov.Rn, rho_design: gov.rho_final, rho_final: gov.rho_final,
+        d: gov.d_actual, Rn: gov.Rn, rho_design: (gov.Rn > 0 ? rhoDesignC(gov.Rn) : gov.rho_final), rho_final: gov.rho_final,
         a: gov.a_stress_block, Mn: (gov.Mn || 0) / 100, phiMn: (gov.phi_Mn || 0) / 100,
         As_req: gov.As_required, As_prov: gov.rebar ? gov.rebar.As_provided : 0,
         rebarMain: gov.rebar ? gov.rebar.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '—',
@@ -1812,7 +1816,7 @@
       wstep(3, 'ระยะเรียงปลอก → เลือกปลอก', 'วสท. 1007', [
         { t: 'f', v: 's = Av·fy·d / Vs' },
         { t: 'res', v: 'ใช้ ' + (m.stirShop || stirText('0.15')) },
-        { t: 'sub', v: 'โซนหัวเสา S1 · กลางช่วง S2 (≤ d/2)' }], `ปลอก ${m.stirLegs ? (m.stirLegs === 4 ? 4 : 2) : (state.legs === 2 ? 4 : 2)} ขา (${m.stirBar || 'RB9'}) · ตะขอ 135°`),
+        { t: 'sub', v: 'โซนหัวเสา S1 · กลางช่วง S2 (≤ d/2)' }], `ปลอก ${m.stirLegs ? (m.stirLegs === 4 ? 4 : 2) : (state.mode === 'cont' ? 2 : (state.legs === 2 ? 4 : 2))} ขา (${m.stirBar || 'RB9'}) · ตะขอ 135°`),
     ];
     $('#shearSteps').innerHTML = shear.join('');
 
