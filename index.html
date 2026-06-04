@@ -421,12 +421,12 @@
               <tbody id="loadRows" class="divide-y divide-border mono">
                 <tr><td class="px-3 py-2.5">พื้น (DL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">250 kg/m² × 3.0 ม</td><td class="px-3 py-2.5 text-right load-val" data-kg="750">750</td><td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td></tr>
                 <tr><td class="px-3 py-2.5">ผนัง (DL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">390 kg/m (ผนังก่อ)</td><td class="px-3 py-2.5 text-right load-val" data-kg="390">390</td><td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td></tr>
-                <tr><td class="px-3 py-2.5">น้ำหนักตัวเอง (DL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">γ·b·h อัตโนมัติ</td><td class="px-3 py-2.5 text-right load-val" data-kg="300">300</td><td class="px-2 text-right text-ink-muted/40">—</td></tr>
+                <tr data-selfweight="1"><td class="px-3 py-2.5">น้ำหนักตัวเอง (DL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">γ·b·h อัตโนมัติ</td><td class="px-3 py-2.5 text-right load-val" data-kg="300">300</td><td class="px-2 text-right text-ink-muted/40">—</td></tr>
                 <tr><td class="px-3 py-2.5">จร (LL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">300 kg/m² × 3.0 ม</td><td class="px-3 py-2.5 text-right load-val" data-kg="900">900</td><td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td></tr>
               </tbody>
             </table>
           </div>
-          <button class="mt-3 text-[13px] text-accent font-medium hover:underline">+ เพิ่มรายการ</button>
+          <button id="addLoadRow" class="mt-3 text-[13px] text-accent font-medium hover:underline">+ เพิ่มรายการ</button>
           <div class="mt-4 grid grid-cols-2 gap-3 mono">
             <div class="rounded-ctrl bg-bg px-4 py-3"><div class="text-[12px] text-ink-muted font-sans">รวม DL</div><div class="text-lg font-semibold" id="sumDL">1,440 kg/m</div></div>
             <div class="rounded-ctrl bg-bg px-4 py-3"><div class="text-[12px] text-ink-muted font-sans">รวม LL</div><div class="text-lg font-semibold" id="sumLL">900 kg/m</div></div>
@@ -606,14 +606,15 @@
                   <span class="badge-code">@0.25</span><span class="text-ink-muted">/</span>
                   <span class="badge-code">@0.10</span>
                 </div>
-                <div class="grid grid-cols-[1fr_auto] items-center gap-3 pt-1">
+                <div class="grid grid-cols-[1fr_auto] items-center gap-3 pt-1" data-mode-single>
                   <label class="text-[14px]">ขาปลอก</label>
                   <div class="flex gap-1.5" id="legPills">
                     <button class="pill !py-1 !px-2.5 text-[13px]" data-leg="1" aria-pressed="true">1ป (2 ขา)</button>
                     <button class="pill !py-1 !px-2.5 text-[13px]" data-leg="2">2ป (4 ขา)</button>
                   </div>
                 </div>
-                <p class="text-[11px] text-ink-muted leading-relaxed">สัญลักษณ์เปลี่ยนตามจำนวนขา · ระยะเรียงยังใช้ค่าเดิม (คำนวณ 4 ขาจริงทำที่ engine)</p>
+                <p class="text-[11px] text-ink-muted leading-relaxed" data-mode-single>สัญลักษณ์เปลี่ยนตามจำนวนขา · ระยะเรียงยังใช้ค่าเดิม (คำนวณ 4 ขาจริงทำที่ engine)</p>
+                <p class="text-[11px] text-ink-muted leading-relaxed step-hidden" data-mode-cont>โหมดต่อเนื่อง: เหล็กปลอกคำนวณ 2 ขา (engine) · ตัวเลือกปลอกเบิ้ลใช้ได้ในคานช่วงเดียว</p>
               </div>
 
               <div class="hairline pt-4 space-y-2">
@@ -828,13 +829,33 @@
     get total() { return this.nodes.at(-1); },
     grid(i) { return this.gridNames[i] != null ? this.gridNames[i] : String.fromCharCode(65 + i); },
     gridNames: {},                                      // i -> ชื่อกริดที่ผู้ใช้แก้ (ตัวหนังสือ)
-    get Wu() { return state.mode === 'cont' ? MOCK.cont.Wu : MOCK.single.Wu; },   // kg/m (factored)
+    get Wu() { const L = sumLoads(); return 1.4 * L.DL + 1.7 * L.LL; },   // kg/m (factored · 1.4D+1.7L · จาก load list จริง)
     points: [{ id: 1, x: 2.0, P: 5000, kind: 'LL' }],   // P in kg
     partials: [],                                       // { id, x0, x1, w(kg/m) }
     setSpanLen(i, len) { len = Math.max(0.5, Math.round(len * 10) / 10); if (state.mode === 'cont') state.spanLens[i] = len; else P.L = len; },
     addPoint() { if (this.points.length >= 5) return; this.points.push({ id: ++_lid, x: Math.min(2.5, this.total / 2), P: 3000, kind: 'LL' }); },
     addPartial() { const t = this.total; this.partials.push({ id: ++_lid, x0: Math.max(0, t * 0.2), x1: Math.min(t, t * 0.2 + 2), w: 1500 }); },
   };
+
+  /* sumLoads() — DL/LL จริงจาก load list (#loadRows · กก./ม) + น้ำหนักตัวเอง γ·b·h (Phase 2c)
+     kind จาก data-kind หรือป้าย "(LL)" · ใช้แทน MOCK.DL/LL ทั้ง engine + display · ใช้ร่วม 2 โหมด */
+  function selfWeightKg() { return Math.round(2400 * ((P.b || 0) / 100) * ((P.h || 0) / 100)); }  // γ·b·h กก./ม
+  // อัปแถวน้ำหนักตัวเอง (auto) ให้ตรง b/h — แถวนี้ถูกรวมใน sumLoads แล้ว (ไม่บวก sw ซ้ำ · Codex P1)
+  function updateSelfWeightRow() {
+    const cell = document.querySelector('#loadRows tr[data-selfweight] .load-val');
+    if (cell) { cell.dataset.kg = selfWeightKg(); cell.textContent = ccUnits.Wn(selfWeightKg()); }
+  }
+  function sumLoads() {
+    let dl = 0, ll = 0;
+    document.querySelectorAll('#loadRows tr').forEach(tr => {
+      const cell = tr.querySelector('.load-val'); if (!cell) return;
+      const kg = parseFloat(cell.dataset.kg) || 0;
+      // ใช้ data-kind ก่อน (row เพิ่มใหม่) · fallback ป้าย "(LL)" เฉพาะ row เก่าที่ไม่มี data-kind (Codex P3)
+      const isLL = tr.dataset.kind ? (tr.dataset.kind === 'LL') : /\(LL\)/.test(tr.textContent);
+      if (isLL) ll += kg; else dl += kg;   // รวมทุกแถว (รวมแถว self-weight) · ไม่บวก sw ซ้ำ
+    });
+    return { DL: dl, LL: ll };
+  }
   // legacy alias used by older code paths
   const contGeom = () => ({ spans: ccModel.spans, nodes: ccModel.nodes });
 
@@ -887,13 +908,13 @@
     }));
   }
   function refreshUnits() {
-    const m = state.mode === 'cont' ? MOCK.cont : MOCK.single;
     recalcBase();
     if ($('#loadColUnit')) $('#loadColUnit').textContent = ccUnits.uW();
     $$('.load-val').forEach(td => { td.textContent = ccUnits.Wn(+td.dataset.kg); });
-    if ($('#sumDL')) $('#sumDL').textContent = ccUnits.W(m.DL);
-    if ($('#sumLL')) $('#sumLL').textContent = ccUnits.W(m.LL);
-    if ($('#sumWu')) $('#sumWu').textContent = '= ' + ccUnits.W(m.Wu);
+    const L = sumLoads();
+    if ($('#sumDL')) $('#sumDL').textContent = ccUnits.W(L.DL);
+    if ($('#sumLL')) $('#sumLL').textContent = ccUnits.W(L.LL);
+    if ($('#sumWu')) $('#sumWu').textContent = '= ' + ccUnits.W(ccModel.Wu);
     renderPointLoads(); renderPartialLoads();
     drawStep2();
     renderWork();
@@ -990,6 +1011,7 @@
     $('#bv_rmin').textContent = rmin.toFixed(4);
     $('#bv_rmax').textContent = rmax.toFixed(4);
     $('#bv_sw').innerHTML = ccUnits.Wn(sw) + ' <span class="u">' + ccUnits.uW() + '</span>';
+    updateSelfWeightRow();   // อัปแถวน้ำหนักตัวเองในตารางตาม b/h (Codex P1 · กัน sw คงที่ + double-count)
     // live summary (geometry-driven parts are live; design figures stay mock)
     $('#ls_bh').textContent = P.b + '×' + P.h;
     $('#ls_d').textContent = d.toFixed(1);
@@ -1127,8 +1149,44 @@
     renderPointLoads(); renderPartialLoads();
     $('#addPL').addEventListener('click', () => { ccModel.addPoint(); renderPointLoads(); render(); });
     $('#addPart').addEventListener('click', () => { if (ccModel.partials.length >= 3) return; ccModel.addPartial(); renderPartialLoads(); render(); });
-    $$('#loadRows .row-del').forEach(b => b.addEventListener('click', e => e.target.closest('tr').remove()));
+    initLoadList();
     drawStep2();
+  }
+
+  /* load list interactive (Phase 2c) — แก้ค่า (contenteditable) · ลบ · เพิ่ม row → recompute engine จริง */
+  function initLoadList() {
+    const tb = $('#loadRows'); if (!tb) return;
+    // ค่าแก้ได้: .load-val เป็น contenteditable · พิมพ์เลข → อัป data-kg → recompute
+    const wireCell = td => {
+      td.contentEditable = 'true'; td.inputMode = 'decimal'; td.classList.add('editable-load');
+      // focus โชว์ค่าในหน่วยปัจจุบัน (T mode → kg/1000) ให้ตรงกับที่ handler ตีความ (Codex P2 · กัน ×1000)
+      td.addEventListener('focus', () => { td.textContent = String(ccUnits.force === 'T' ? (+td.dataset.kg / 1000) : +td.dataset.kg); });
+      td.addEventListener('input', () => {
+        const raw = parseFloat(td.textContent.replace(/[^\d.]/g, '')) || 0;
+        td.dataset.kg = ccUnits.force === 'T' ? raw * 1000 : raw;   // แสดงหน่วยตาม toggle → เก็บ กก.
+        refreshResults();   // อัปกราฟ/ผล/D-C โดยไม่ rebuild ตาราง (กัน focus หลุด)
+      });
+      td.addEventListener('blur', () => { td.textContent = ccUnits.Wn(+td.dataset.kg); });
+    };
+    tb.querySelectorAll('tr:not([data-selfweight]) .load-val').forEach(wireCell);  // self-weight = auto (ไม่แก้มือ)
+    // ลบ row (delegation) → render เต็ม
+    tb.addEventListener('click', e => {
+      const del = e.target.closest('.row-del'); if (!del) return;
+      del.closest('tr').remove(); render();
+    });
+    // เพิ่ม row
+    const addBtn = $('#addLoadRow');
+    if (addBtn) addBtn.addEventListener('click', () => {
+      const name = (prompt('ชื่อรายการ (เช่น พื้น/ผนัง/จร):', 'น้ำหนักเพิ่ม') || '').trim(); if (!name) return;
+      const kind = (prompt('ชนิด DL หรือ LL:', 'DL') || 'DL').toUpperCase() === 'LL' ? 'LL' : 'DL';
+      const kg = Math.max(0, parseFloat(prompt('ค่า (กก./ม):', '300')) || 0);
+      const tr = document.createElement('tr'); tr.dataset.kind = kind;
+      tr.innerHTML = `<td class="px-3 py-2.5">${name} (${kind})</td>`
+        + `<td class="px-3 py-2.5 text-ink-muted text-[12px]">กำหนดเอง</td>`
+        + `<td class="px-3 py-2.5 text-right load-val" data-kg="${kg}">${ccUnits.Wn(kg)}</td>`
+        + `<td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td>`;
+      tb.appendChild(tr); wireCell(tr.querySelector('.load-val')); render();
+    });
   }
 
   /* ── statics preview (single span · real-ish for smooth drag feedback) ── */
@@ -1166,10 +1224,14 @@
      แปลงหน่วย: ccModel กก./กก.·ม ↔ engine kN ภายใน (1 kgf = 1/KGF_PER_KN kN)
      คืนรูปเดียวกับ analyzeSingle (+ marks +M/−M) · null = engine ยังไม่พร้อม/พลาด → ใช้ fallback */
   const KGF_PER_KN = 101.9716;
+  let _acCache = { sig: null, val: null };
   function analyzeContinuous() {
     if (!(window.__civilCalc && window.__civilCalc.ready)) return null;
     const g = geom();
-    const dl = MOCK.cont.DL / KGF_PER_KN, ll = MOCK.cont.LL / KGF_PER_KN;  // kg/m → kN/m (UDL ยัง mock)
+    const _L = sumLoads(), dl = _L.DL / KGF_PER_KN, ll = _L.LL / KGF_PER_KN;  // kg/m → kN/m (จาก load list จริง · Phase 2c)
+    // signature cache (Phase 2c) — recompute()+ccDiagram.render() เรียกซ้ำในสถานะเดิม → engine call เดียว
+    const sig = JSON.stringify([g.spans, P.b, P.h, P.fc, P.grade, P.cover, P.db, P.dstir, dl, ll, ccModel.points, ccModel.partials]);
+    if (_acCache.sig === sig) return _acCache.val;
     const spans = g.spans.map(L => ({ L, DL: dl, LL: ll, point_loads: [] }));
     // helper: วางจุดโหลด (global x ม. · P kN) ลงช่วงที่ถูกต้อง
     const addPt = (xg, P_kN, kind) => {
@@ -1228,7 +1290,9 @@
       for (let i = 0; i < xs.length; i++) { if (Math.abs(xs[i] - g.nodes[k]) < (g.total / 400) && M[i] < worst) { worst = M[i]; wx = xs[i]; } }
       if (worst < -1) { marks.push({ x: wx, val: -worst, type: 'neg' }); Mpk = Math.max(Mpk, -worst); }
     }
-    return { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mpk), marks, out: res.out };
+    const result = { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mpk), marks, out: res.out };
+    _acCache = { sig, val: result };
+    return result;
   }
 
   /* ── recompute() · เรียก engine จริง → state.res (คีย์เดียวกับ MOCK · หน่วย กก.) ──
@@ -1243,7 +1307,7 @@
       const inp = {
         b: P.b, h: P.h, L: ccModel.total, fc: P.fc, fy, cover: P.cover,
         db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir),
-        DL: MOCK.single.DL / K, LL: MOCK.single.LL / K, load_combo: '1.4D+1.7L',
+        DL: sumLoads().DL / K, LL: sumLoads().LL / K, load_combo: '1.4D+1.7L',
         stirrup_legs: state.legs === 2 ? 4 : 2,
         point_loads: ccModel.points.map(p => ({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: p.P / K, x: Math.min(ccModel.total, p.x) })),
         partial_udls: ccModel.partials.map(q => ({ kind: 'LL', w: q.w / K, x1: q.x0, x2: Math.min(ccModel.total, q.x1) })),
@@ -1608,9 +1672,13 @@
   // render step-2 (canvas + diagram + live bar Wu/Mu) — synchronous so it can never get stuck
   function drawStep2() {
     ccCanvas.render(); ccDiagram.render();
-    const Wu = ccModel.Wu, Mu = liveData().Mu;
+    const Wu = ccModel.Wu, Mu = liveData().Mu, L = sumLoads();
     if ($('#ls_wu')) $('#ls_wu').textContent = ccUnits.W(Wu);
     if ($('#ls_mu')) $('#ls_mu').textContent = ccUnits.M(Mu);
+    // load sums = sumLoads จริง (Phase 2c · อัปตอนแก้/ลบ/เพิ่ม row)
+    if ($('#sumDL')) $('#sumDL').textContent = ccUnits.W(L.DL);
+    if ($('#sumLL')) $('#sumLL').textContent = ccUnits.W(L.LL);
+    if ($('#sumWu')) $('#sumWu').textContent = '= ' + ccUnits.W(Wu);
   }
 
   /* ╔══════════════ STEP ③A: show-work steps ══════════════╗ */
@@ -2079,6 +2147,7 @@
   /* ╔══════════════ master render ══════════════╗ */
   function render() {
     applyMode();
+    updateSelfWeightRow();  // อัป self-weight ตาม b/h ก่อน recompute อ่าน sumLoads (Codex P2 · กันผลค้าง 1 render)
     recompute();          // Phase 2b · engine จริง → state.res (ก่อน render ที่อ่าน liveData)
     recalcBase();
     renderPointLoads(); renderPartialLoads();
