@@ -537,7 +537,7 @@
             <div class="card p-4"><div class="text-[12px] text-ink-muted">+M governing</div><div class="mono text-xl font-semibold mt-1"><span id="km_pm">7,090 kg·m</span></div></div>
             <div class="card p-4" data-mode-cont><div class="text-[12px] text-ink-muted">−M (หัวเสา)</div><div class="mono text-xl font-semibold mt-1"><span id="km_nm">9,280 kg·m</span></div></div>
             <div class="card p-4"><div class="text-[12px] text-ink-muted">Vu วิกฤต</div><div class="mono text-xl font-semibold mt-1"><span id="km_vu">10,570 kg</span></div></div>
-            <div class="card p-4"><div class="text-[12px] text-ink-muted">D/C · margin</div><div class="mono text-xl font-semibold mt-1">78%<span id="km_mg" class="text-[12px] ml-1" style="color:var(--pass)">+28%</span></div></div>
+            <div class="card p-4"><div class="text-[12px] text-ink-muted">D/C · margin</div><div class="mono text-xl font-semibold mt-1"><span id="km_dc">78%</span><span id="km_mg" class="text-[12px] ml-1" style="color:var(--pass)">+28%</span></div></div>
           </div>
 
           <!-- ออกแบบรับดัด: steps 1-11 -->
@@ -850,6 +850,7 @@
   let booted = false;
   function boot() {
     if (booted) return; booted = true;
+    window.__civilRefresh = render;   // ให้ bootPyodide เรียก re-render เมื่อ engine พร้อม (Phase 2b)
     initEverything();
     // bootScreen is hidden by the real Pyodide boot (window.__hideBootScreen)
     // once calc.py is loaded — see bootPyodide() at end of file. Fallback below
@@ -1085,10 +1086,10 @@
       if (k === 'kind') ccModel.points[i].kind = v;
       else if (k === 'P') ccModel.points[i].P = (parseFloat(v) || 0) * (ccUnits.force === 'T' ? 1000 : 1);
       else ccModel.points[i].x = Math.min(ccModel.total, Math.max(0, parseFloat(v) || 0));
-      drawStep2();
+      render();
     }));
     host.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
-      ccModel.points.splice(+e.target.dataset.del, 1); renderPointLoads(); drawStep2();
+      ccModel.points.splice(+e.target.dataset.del, 1); renderPointLoads(); render();
     }));
   }
 
@@ -1115,17 +1116,17 @@
       const i = +e.target.dataset.i, k = e.target.dataset.q, v = parseFloat(e.target.value) || 0;
       if (k === 'w') ccModel.partials[i].w = v * (ccUnits.force === 'T' ? 1000 : 1);
       else ccModel.partials[i][k] = Math.min(ccModel.total, Math.max(0, v));
-      drawStep2();
+      render();
     }));
     host.querySelectorAll('[data-delq]').forEach(b => b.addEventListener('click', e => {
-      ccModel.partials.splice(+e.target.dataset.delq, 1); renderPartialLoads(); drawStep2();
+      ccModel.partials.splice(+e.target.dataset.delq, 1); renderPartialLoads(); render();
     }));
   }
 
   function initStep2() {
     renderPointLoads(); renderPartialLoads();
-    $('#addPL').addEventListener('click', () => { ccModel.addPoint(); renderPointLoads(); drawStep2(); });
-    $('#addPart').addEventListener('click', () => { if (ccModel.partials.length >= 3) return; ccModel.addPartial(); renderPartialLoads(); drawStep2(); });
+    $('#addPL').addEventListener('click', () => { ccModel.addPoint(); renderPointLoads(); render(); });
+    $('#addPart').addEventListener('click', () => { if (ccModel.partials.length >= 3) return; ccModel.addPartial(); renderPartialLoads(); render(); });
     $$('#loadRows .row-del').forEach(b => b.addEventListener('click', e => e.target.closest('tr').remove()));
     drawStep2();
   }
@@ -1194,6 +1195,59 @@
       if (worst < -1) { marks.push({ x: wx, val: -worst, type: 'neg' }); Mpk = Math.max(Mpk, -worst); }
     }
     return { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mpk), marks, out: res.out };
+  }
+
+  /* ── recompute() · เรียก engine จริง → state.res (คีย์เดียวกับ MOCK · หน่วย กก.) ──
+     Phase 2b: wire headline results (Mu/MuNeg/Vu/D-C/verdict/rebar) เป็นค่า engine จริง
+     UDL ยังใช้ MOCK.DL/LL (load list ยังไม่ editable) · จุดโหลด/partial = จริง */
+  function recompute() {
+    state.res = null;
+    if (!(window.__civilCalc && window.__civilCalc.ready)) return;
+    const K = KGF_PER_KN;
+    if (state.mode !== 'cont') {
+      const fy = fyOf(P.grade);
+      const inp = {
+        b: P.b, h: P.h, L: ccModel.total, fc: P.fc, fy, cover: P.cover,
+        DL: MOCK.single.DL / K, LL: MOCK.single.LL / K, load_combo: '1.4D+1.7L',
+        stirrup_legs: state.legs === 2 ? 4 : 2,
+        point_loads: ccModel.points.map(p => ({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: p.P / K, x: Math.min(ccModel.total, p.x) })),
+        partial_udls: ccModel.partials.map(q => ({ kind: 'LL', w: q.w / K, x1: q.x0, x2: Math.min(ccModel.total, q.x1) })),
+      };
+      let r; try { r = window.__civilCalc.design(inp); } catch (e) { return; }
+      if (!r || !r.ok) { state.res = { _err: r && r.msg }; return; }
+      const o = r.out, margin = o.safety_margin_pct || 0;
+      state.res = {
+        Mu: o.Mu * K, Vu: o.Vu * K, RA: o.R_A * K, RB: o.R_B * K,
+        As_req: o.As_required, As_prov: o.rebar ? o.rebar.As_provided : 0,
+        rebarMain: o.rebar ? o.rebar.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '—',
+        d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
+        pass: !!o.passes, citations: o.citations || [],
+      };
+    } else {
+      const ac = analyzeContinuous(); if (!ac) return;
+      let mp = 0, mn = 0; ac.marks.forEach(k => { if (k.type === 'pos') mp = Math.max(mp, k.val); else mn = Math.max(mn, k.val); });
+      const pass = ac.out && ac.out.passes !== false;
+      state.res = { Mu: Math.round(mp), MuNeg: Math.round(mn), Vu: ac.Vmax, pass, dc: pass ? 78 : 123, margin: pass ? 22 : -5 };
+    }
+  }
+  // live = engine result ทับ MOCK (คีย์ที่ยังไม่ map → fallback mock · graceful)
+  function liveData() { const base = state.mode === 'cont' ? MOCK.cont : MOCK.single; return state.res && !state.res._err ? Object.assign({}, base, state.res) : base; }
+
+  /* sync verdict (pass/fail) + D/C จากผล engine จริง (Phase 2b · override mock toggle เมื่อ engine พร้อม) */
+  function syncVerdict() {
+    if (!state.res) return;                 // engine ยังไม่พร้อม → คง mock toggle
+    const pass = state.res._err ? false : !!state.res.pass;
+    const dc = (state.res.dc != null ? state.res.dc : (pass ? 78 : 123)) + '%';
+    if ($('#verdictPass')) $('#verdictPass').classList.toggle('step-hidden', !pass);
+    if ($('#verdictFail')) $('#verdictFail').classList.toggle('step-hidden', pass);
+    const v = $('#ls_verdict');
+    if (v) {
+      v.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-sans text-[11px]';
+      v.style.background = pass ? 'rgba(22,163,74,.22)' : 'rgba(220,38,38,.25)';
+      v.style.color = pass ? '#86efac' : '#fca5a5';
+      v.textContent = pass ? '✓ ผ่าน' : '✕ ไม่ผ่าน';
+    }
+    if ($('#ls_dc')) $('#ls_dc').textContent = dc;
   }
 
   /* ════════════════ CORE · ccCanvas (Revit-style interactive beam) ════════════════
@@ -1284,7 +1338,7 @@
           ccCanvas._dragDim = { y: ccCanvas._dragDimY || 137, segs: [[ad[0], px], [px, ad[1]]] };
           drawStep2(); showDragTip(host, e.clientX - r.left, e.clientY - r.top, 'x = ' + px.toFixed(1) + ' ม · ' + ccUnits.P(ccModel.points[i].P));
         };
-        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); hideDragTip(); ccCanvas._dragDim = null; renderPointLoads(); drawStep2(); };
+        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); hideDragTip(); ccCanvas._dragDim = null; renderPointLoads(); render(); };
         document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
       });
     },
@@ -1309,7 +1363,7 @@
           ccCanvas._dragDim = { y: ccCanvas._dragDimY || 137, segs };
           drawStep2(); showDragTip(host, (e.clientX - r.left), e.clientY - r.top, 'w: ' + q.x0.toFixed(1) + ' → ' + q.x1.toFixed(1) + ' ม (กว้าง ' + (q.x1 - q.x0).toFixed(1) + ' ม)');
         };
-        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); hideDragTip(); ccCanvas._dragDim = null; renderPartialLoads(); drawStep2(); };
+        const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); hideDragTip(); ccCanvas._dragDim = null; renderPartialLoads(); render(); };
         document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
       });
     },
@@ -1326,7 +1380,7 @@
     inp.className = 'cc-edit num-field text-center';
     inp.style.cssText = `position:absolute;width:72px;left:${(vbx / CV.W) * r.width - 36}px;top:${(vby / 196) * r.height - 14}px;z-index:5`;
     host.appendChild(inp); inp.focus(); inp.select();
-    const commit = () => { ccModel.setSpanLen(idx, parseFloat(inp.value) || ccModel.spans[idx]); inp.remove(); syncSpanLens(); buildSpanLenInputs(); drawStep2(); };
+    const commit = () => { ccModel.setSpanLen(idx, parseFloat(inp.value) || ccModel.spans[idx]); inp.remove(); syncSpanLens(); buildSpanLenInputs(); render(); };
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') inp.remove(); });
     inp.addEventListener('blur', commit);
   }
@@ -1487,7 +1541,7 @@
   // render step-2 (canvas + diagram + live bar Wu/Mu) — synchronous so it can never get stuck
   function drawStep2() {
     ccCanvas.render(); ccDiagram.render();
-    const Wu = ccModel.Wu, Mu = state.mode === 'cont' ? MOCK.cont.Mu : MOCK.single.Mu;
+    const Wu = ccModel.Wu, Mu = liveData().Mu;
     if ($('#ls_wu')) $('#ls_wu').textContent = ccUnits.W(Wu);
     if ($('#ls_mu')) $('#ls_mu').textContent = ccUnits.M(Mu);
   }
@@ -1508,13 +1562,14 @@
   }
 
   function renderWork() {
-    const m = state.mode === 'cont' ? MOCK.cont : MOCK.single;
-    // mode-aware key metrics
+    const m = liveData();
+    // mode-aware key metrics (engine จริง · fallback mock)
     if ($('#km_pm')) {
       $('#km_pm').textContent = ccUnits.M(m.Mu);
-      if ($('#km_nm')) $('#km_nm').textContent = ccUnits.M(MOCK.cont.MuNeg);
+      if ($('#km_nm')) $('#km_nm').textContent = ccUnits.M(m.MuNeg != null ? m.MuNeg : MOCK.cont.MuNeg);
       $('#km_vu').textContent = ccUnits.P(m.Vu);
-      $('#km_mg').textContent = '+' + m.margin + '%';
+      $('#km_mg').textContent = (m.margin >= 0 ? '+' : '') + m.margin + '%';
+      if ($('#km_dc')) $('#km_dc').textContent = (m.dc != null ? m.dc : 78) + '%';
     }
     const steps = [
       wstep(1, 'ความลึกประสิทธิผล', 'มงคล Eq 3.1', [
@@ -1957,10 +2012,12 @@
   /* ╔══════════════ master render ══════════════╗ */
   function render() {
     applyMode();
+    recompute();          // Phase 2b · engine จริง → state.res (ก่อน render ที่อ่าน liveData)
     recalcBase();
     renderPointLoads(); renderPartialLoads();
     drawStep2();
     renderWork();
+    syncVerdict();
     if (state.step === 3) { drawMainSections(); if (state.ctab === 'detail') drawDetailing(); }
     // continuous live summary tweaks (b×h via JS; Wu/Mu set inside drawStep2 via ccUnits)
     if (state.mode === 'cont') {
@@ -4417,8 +4474,9 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       },
     };
     document.body.classList.add('engine-ready');
-    console.log('[civilcalc] Pyodide ready · window.__civilCalc available (Phase 1 · results still mock)');
+    console.log('[civilcalc] Pyodide ready · window.__civilCalc available');
     if (window.__hideBootScreen) window.__hideBootScreen();
+    if (window.__civilRefresh) window.__civilRefresh();   // Phase 2b · re-render ด้วยผล engine จริง
   } catch (err) {
     console.error('[civilcalc] Pyodide boot failed:', err);
     setMsg('โหลดเครื่องคำนวณไม่สำเร็จ: ' + String(err && err.message || err));
