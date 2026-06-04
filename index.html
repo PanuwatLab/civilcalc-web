@@ -1187,7 +1187,7 @@
     });
     let res;
     // section/material = ค่า live จาก Step 1 (P) เหมือนช่วงเดียว · UDL ยัง mock (Phase 2c)
-    try { res = window.__civilCalc.designContinuous({ b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, spans, load_combo: '1.4D+1.7L' }); }
+    try { res = window.__civilCalc.designContinuous({ b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir), spans, load_combo: '1.4D+1.7L' }); }
     catch (e) { console.warn('[civilcalc] continuous engine call failed', e); return null; }
     if (!res || !res.ok || !res.out || !res.out.diagram) return null;
     const d = res.out.diagram;
@@ -1236,6 +1236,7 @@
       const fy = fyOf(P.grade);
       const inp = {
         b: P.b, h: P.h, L: ccModel.total, fc: P.fc, fy, cover: P.cover,
+        db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir),
         DL: MOCK.single.DL / K, LL: MOCK.single.LL / K, load_combo: '1.4D+1.7L',
         stirrup_legs: state.legs === 2 ? 4 : 2,
         point_loads: ccModel.points.map(p => ({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: p.P / K, x: Math.min(ccModel.total, p.x) })),
@@ -1991,7 +1992,7 @@
     $$('#legPills .pill').forEach(p => p.addEventListener('click', () => {
       $$('#legPills .pill').forEach(x => x.setAttribute('aria-pressed', 'false'));
       p.setAttribute('aria-pressed', 'true'); state.legs = +p.dataset.leg;
-      drawElevation(); drawSections3(); drawMainSections(); renderWork();
+      render();   // recompute engine (stirrup_legs เปลี่ยน → เฉือน/D-C/verdict ใหม่) + redraw ครบ
     }));
   }
 
