@@ -795,19 +795,23 @@
   const MOCK = {
     single: {
       b: 25, h: 50, L: 4.5, fc: 240, fy: 4000,
-      d: 44.30, beta1: 0.85, rho_min: 0.0035, rho_max: 0.0197,
+      d: 45.30, beta1: 0.85, rho_b: 0.0263, rho_min: 0.0035, rho_max: 0.0197,
+      Rn: 38.26, rho_design: 0.00410, rho_final: 0.00410, a: 4.73, spacingClear: 6.1,
       DL: 1440, LL: 900, Wu: 3546, Mu: 7090, Vu: 10570,   // kg/m · kg·m · kg
       RA: 11990, RB: 11030, As_req: 4.78,
-      Vc: 9300, phiVc: 7905, Vs: 3135,                     // kg
+      Vc: 9300, phiVc: 7905, Vs: 3135, VuAtD: 10570, dShear: 45.30,   // kg
+      stirBar: 'RB9', stirLegs: 2, S1: 10, S2: 25, stirShop: '1ป-RB9@0.10 (S1) · 1ป-RB9@0.25 (S2)',
       rebarMain: '3-DB16', As_prov: 6.03, phiMn: 9090, dc: 78, margin: 28,
       col: 0.30, topL: 1.05, topR: 1.40, botEdge: 0.53, botMid: 3.00,
       nodes: [0, 4.5], spans: [4.5],
     },
     cont: {
       b: 30, h: 50, fc: 240, fy: 4000,
-      d: 44.30, beta1: 0.85, rho_min: 0.0035, rho_max: 0.0197,
+      d: 45.10, beta1: 0.85, rho_b: 0.0263, rho_min: 0.0035, rho_max: 0.0197,
+      Rn: 30.0, rho_design: 0.00420, rho_final: 0.00420, a: 4.95, spacingClear: 5.5,
       DL: 1620, LL: 1080, Wu: 4104, Mu: 7570, MuNeg: 9280, Vu: 12340,
-      Vc: 11160, phiVc: 9486, Vs: 5030,
+      Vc: 11160, phiVc: 9486, Vs: 5030, VuAtD: 12340, dShear: 45.10,
+      stirBar: 'RB9', stirLegs: 2, S1: 10, S2: 25, stirShop: '1ป-RB9@0.10 (S1) · 1ป-RB9@0.25 (S2)',
       As_req: 5.1, rebarMain: '3-DB20', rebarTop: '6-DB20', As_prov: 9.42,
       phiMn: 9700, dc: 78, margin: 22,
       col: 0.30, topL: 1.20, topR: 1.20, botEdge: 0.60, botMid: 3.20,
@@ -991,6 +995,15 @@
 
   /* ╔══════════════ STEP ① realtime base values ══════════════╗ */
   const beta1Of = fc => fc <= 280 ? 0.85 : Math.max(0.65, 0.85 - 0.05 * (fc - 280) / 70);
+  // ccMaterial — material-only constants (β₁/ρb/ρmin/ρmax · ขึ้นกับ fc,fy เท่านั้น · ไม่ใช่ค่าต่อคาน)
+  //   mirror ตรงสูตร engine: compute_beta1/compute_rho_b/compute_rho_min/compute_rho_max (calc.py)
+  //   ใช้สำหรับ: (1) fallback ก่อน engine ready (2) continuous show-work (engine ต่อเนื่องไม่คืน 4 ค่านี้ราย span)
+  //   parity-gate: ค่าเหล่านี้ต้อง == ผล engine single-span ที่ fc,fy เดียวกัน (runDesignAudit/manual verify)
+  const ccMaterial = (fc, fy) => {
+    const beta1 = beta1Of(fc);
+    const rho_b = (0.85 * beta1 * fc / fy) * (6120 / (6120 + fy));   // 6120 = εcu·Es = 0.003·2,040,000
+    return { beta1, rho_b, rho_min: 14 / fy, rho_max: 0.75 * rho_b };
+  };
   const dbVal = s => ({ DB12: 1.2, DB16: 1.6, DB20: 2.0, DB25: 2.5 }[s] || 1.6);
   const dsVal = s => ({ RB6: 0.6, RB9: 0.9, DB10: 1.0 }[s] || 0.9);
   const fyOf = g => ({ SD30: 3000, SD40: 4000, SD50: 5000 }[g] || 4000);
@@ -1315,12 +1328,23 @@
       let r; try { r = window.__civilCalc.design(inp); } catch (e) { return; }
       if (!r || !r.ok) { state.res = { _err: r && r.msg }; return; }
       const o = r.out, margin = o.safety_margin_pct || 0;
+      const sd = o.stirrup_design || {};
+      const _L = sumLoads();
       state.res = {
         Mu: o.Mu * K, Vu: o.Vu * K, RA: o.R_A * K, RB: o.R_B * K,
         As_req: o.As_required, As_prov: o.rebar ? o.rebar.As_provided : 0,
         rebarMain: o.rebar ? o.rebar.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '—',
         b: P.b, h: P.h, d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
         pass: !!o.passes, citations: o.citations || [],
+        // Phase 2d · ค่ากลาง engine สำหรับ show-work data-driven (parity-safe · ไม่คำนวณซ้ำใน JS)
+        beta1: o.beta1, rho_b: o.rho_b, rho_min: o.rho_min, rho_max: o.rho_max,
+        Rn: o.Rn, rho_design: o.rho_design, rho_final: o.rho_final,
+        a: o.a_stress_block, Mn: (o.Mn || 0) / 100, phiMn: (o.phi_Mn || 0) / 100,   // kg·cm → kg·m
+        DL: _L.DL, LL: _L.LL, Wu: 1.4 * _L.DL + 1.7 * _L.LL,                          // กก./ม (factored)
+        spacingClear: o.rebar ? o.rebar.spacing_min_clear : 0,
+        Vc: (sd.Vc_ton || 0) * 1000, phiVc: (sd.phi_Vc_ton || 0) * 1000, Vs: (sd.Vs_required_ton || 0) * 1000,  // ตัน → กก.
+        VuAtD: (sd.Vu_at_d_ton || 0) * 1000, dShear: o.d_actual,
+        stirBar: sd.bar, stirLegs: sd.n_legs, S1: sd.S1_cm, S2: sd.S2_cm, stirShop: sd.shop_drawing_notation, stirPass: sd.passes,
       };
     } else {
       const ac = analyzeContinuous(); if (!ac) return;
@@ -1340,7 +1364,35 @@
       if (anyFail) govDc = Math.max(govDc, 101);          // มี element เกินกำลัง → D/C > 100
       const dc = Math.round(govDc || (pass ? 78 : 123));
       const margin = Math.round(10000 / Math.max(1, dc) - 100);
-      state.res = { b: P.b, h: P.h, Mu: Math.round(mp), MuNeg: Math.round(mn), Vu: ac.Vmax, pass, dc, margin };
+      // Phase 2d · flexure show-work = ช่วงที่ +M สูงสุด (governing positive · ตรงกับกล่อง +M)
+      let gov = null, govMpos = -Infinity;
+      (o.spans || []).forEach(sp => { if (sp.bottom && sp.M_pos_kNm > govMpos) { govMpos = sp.M_pos_kNm; gov = sp.bottom; } });
+      // shear show-work = ช่วงที่ Vu สูงสุด (อาจคนละช่วงกับ +M สูงสุด · Codex P2)
+      //   → Vu_at_d/Vc/Vs/stirShop + d มาจากช่วงเดียวกัน (สูตร Vs=Vu/φ−Vc ไม่ผสมข้ามช่วง · ตรงเลข engine)
+      let govShear = {}, govShVu = -Infinity, govShearD = 0;
+      (o.spans || []).forEach(sp => { const v = sp.Vu_ton || 0; if (v > govShVu) { govShVu = v; govShear = sp.shear || {}; govShearD = (sp.bottom && sp.bottom.d_actual) || 0; } });
+      const _fyC = fyOf(P.grade);
+      const mat = ccMaterial(P.fc, _fyC);   // β₁/ρb/ρmin/ρmax (engine ต่อเนื่องไม่คืนราย span)
+      // ρ_design (ก่อนจำกัด) — engine ต่อเนื่องคืนแค่ rho_final → mirror compute_rho_design (มงคล Eq 3.8) จาก gov.Rn
+      //   (Codex P2: ถ้า alias = rho_final จะซ่อนการปรับเป็น ρmin ในช่วงโหลดน้อย · transparency ต้องเผย)
+      const rhoDesignC = (Rn) => (Rn > 0) ? (0.85 * P.fc / _fyC) * (1 - Math.sqrt(Math.max(0, 1 - 2 * Rn / (0.85 * P.fc)))) : 0;
+      const cd = gov ? {
+        d: gov.d_actual, Rn: gov.Rn, rho_design: (gov.Rn > 0 ? rhoDesignC(gov.Rn) : gov.rho_final), rho_final: gov.rho_final,
+        a: gov.a_stress_block, Mn: (gov.Mn || 0) / 100, phiMn: (gov.phi_Mn || 0) / 100,
+        As_req: gov.As_required, As_prov: gov.rebar ? gov.rebar.As_provided : 0,
+        rebarMain: gov.rebar ? gov.rebar.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '—',
+        spacingClear: gov.rebar ? gov.rebar.spacing_min_clear : 0,
+        Vc: (govShear.Vc_ton || 0) * 1000, phiVc: (govShear.phi_Vc_ton || 0) * 1000, Vs: (govShear.Vs_required_ton || 0) * 1000,
+        VuAtD: (govShear.Vu_at_d_ton || 0) * 1000, dShear: govShearD,
+        stirBar: govShear.bar, stirLegs: govShear.n_legs, S1: govShear.S1_cm, S2: govShear.S2_cm, stirShop: govShear.shop_drawing_notation,
+      } : {};
+      const _L = sumLoads();
+      state.res = Object.assign({
+        b: P.b, h: P.h, Mu: gov ? Math.round(govMpos * K) : Math.round(mp), MuNeg: Math.round(mn),
+        Vu: govShVu > 0 ? Math.round(govShVu * 1000) : ac.Vmax, pass, dc, margin,   // Vu จากช่วง Vu สูงสุด (ตรงกับ Vc/Vs · Codex P2)
+        beta1: mat.beta1, rho_b: mat.rho_b, rho_min: mat.rho_min, rho_max: mat.rho_max,
+        DL: _L.DL, LL: _L.LL, Wu: 1.4 * _L.DL + 1.7 * _L.LL,
+      }, cd);
     }
   }
   // live = engine result ทับ MOCK (คีย์ที่ยังไม่ map → fallback mock · graceful)
@@ -1706,80 +1758,126 @@
       $('#km_mg').textContent = (m.margin >= 0 ? '+' : '') + m.margin + '%';
       if ($('#km_dc')) $('#km_dc').textContent = (m.dc != null ? m.dc : 78) + '%';
     }
+    // Phase 2d · show-work data-driven — ทุกค่าจาก engine (m = liveData · fallback MOCK ก่อน ready)
+    const fy = fyOf(P.grade), dsv = dsVal(P.dstir);
+    const f = (v, n) => (v == null || isNaN(v)) ? '—' : (+v).toFixed(n);   // คงทศนิยมคงที่ (กัน UI สั่น)
+    const sep = v => (v == null || isNaN(v)) ? '—' : Math.round(v).toLocaleString('en-US');
+    // ความลึก "ออกแบบ" = back-solve จาก Rn ของ engine เอง (Rn คิดที่ d_assumed · เลือกเหล็กจริงอาจคนละขนาด)
+    //   → สูตร Rn/As ในจอตรงกับค่า engine เป๊ะทุกโหมด · ค่าวิศวกรรมทั้งหมดเป็นของ engine (แค่ back-solve d ตอนแสดงผล)
+    const dDesign = (m.Rn > 0 && m.Mu > 0 && m.b > 0) ? Math.sqrt((m.Mu * 100) / (0.9 * m.b * m.Rn)) : (m.d || 0);
+    const dbHalf = (P.h - P.cover - dsv) - dDesign;                        // = d_b/2 ที่ทำให้ผลรวม = d_design เป๊ะ
+    const inRange = (m.rho_design >= m.rho_min && m.rho_design <= m.rho_max);
+    const okAs = (m.As_prov >= m.As_req), okMn = (m.phiMn >= m.Mu);
+    const eps = 6120 / (6120 + fy);
     const steps = [
       wstep(1, 'ความลึกประสิทธิผล', 'มงคล Eq 3.1', [
         { t: 'f', v: 'd = h − cover − d<sub>stirrup</sub> − d<sub>b</sub>/2' },
-        { t: 'sub', v: '= 50 − 3 − 0.9 − 0.8' },
-        { t: 'res', v: '= 45.30 ซม' }], 'ความลึกประสิทธิผลที่ใช้ออกแบบ'),
+        { t: 'sub', v: `= ${P.h} − ${P.cover} − ${f(dsv, 1)} − ${f(dbHalf, 2)}` },
+        { t: 'res', v: `= ${f(dDesign, 2)} ซม` }], 'ความลึกประสิทธิผลที่ใช้ออกแบบ (สมมติขนาดเหล็ก)'),
       wstep(2, 'สัมประสิทธิ์ β₁ (Whitney)', 'ACI 10.2.7', [
-        { t: 'f', v: "f'c = 240 ≤ 280 ksc" },
-        { t: 'res', v: 'β₁ = 0.85' }], 'ใช้กำหนดความลึก stress block'),
-      wstep(3, 'อัตราส่วนเหล็กสมดุล ρb', 'มงคล Eq 3.7', [
+        { t: 'f', v: `f'c = ${P.fc} ${P.fc <= 280 ? '≤' : '>'} 280 ksc` },
+        { t: 'res', v: `β₁ = ${f(m.beta1, 2)}` }], 'ใช้กำหนดความลึก stress block'),
+      wstep(3, 'อัตราส่วนเหล็กสมดุล ρb', 'มงคล Eq 3.12', [
         { t: 'f', v: "ρb = 0.85·β₁·(f'c/fy)·6120/(6120+fy)" },
-        { t: 'sub', v: '= 0.85·0.85·(240/4000)·0.605' },
-        { t: 'res', v: 'ρb = 0.0263' }], null),
+        { t: 'sub', v: `= 0.85·${f(m.beta1, 2)}·(${P.fc}/${fy})·${f(eps, 3)}` },
+        { t: 'res', v: `ρb = ${f(m.rho_b, 4)}` }], null),
       wstep(4, 'ขอบเขต ρmin / ρmax', 'วสท. 1008', [
-        { t: 'f', v: 'ρmin = 14/fy = 14/4000' },
-        { t: 'res', v: 'ρmin = 0.0035' },
+        { t: 'f', v: `ρmin = 14/fy = 14/${fy}` },
+        { t: 'res', v: `ρmin = ${f(m.rho_min, 4)}` },
         { t: 'f', v: 'ρmax = 0.75·ρb' },
-        { t: 'res', v: 'ρmax = 0.0197' }], null),
+        { t: 'res', v: `ρmax = ${f(m.rho_max, 4)}` }], null),
       wstep('5–6', 'โมเมนต์ออกแบบ → Rn → ρ', 'SDM', [
         { t: 'f', v: `Wu = 1.4DL + 1.7LL = 1.4(${ccUnits.Wn(m.DL)})+1.7(${ccUnits.Wn(m.LL)})` },
         { t: 'sub', v: '= ' + ccUnits.W(m.Wu) },
-        { t: 'f', v: 'Mu = ' + ccUnits.M(m.Mu) + ' = ' + (m.Mu * 100).toLocaleString('en-US') + ' kg·cm' },
-        { t: 'f', v: `Rn = Mu/(φ·b·d²) = ${(m.Mu * 100).toLocaleString('en-US')}/(0.9·${m.b}·45.3²)` },
-        { t: 'res', v: 'Rn = ' + (m.Mu * 100 / (0.9 * m.b * 45.3 * 45.3)).toFixed(2) + ' ksc' },
+        { t: 'f', v: 'Mu = ' + ccUnits.M(m.Mu) + ' = ' + sep(m.Mu * 100) + ' kg·cm' },
+        { t: 'f', v: `Rn = Mu/(φ·b·d²) = ${sep(m.Mu * 100)}/(0.9·${m.b}·${f(dDesign, 1)}²)` },
+        { t: 'res', v: `Rn = ${f(m.Rn, 2)} ksc` },
         { t: 'f', v: "ρ = (0.85f'c/fy)[1−√(1−2Rn/0.85f'c)]" },
-        { t: 'res', v: 'ρ_design = 0.00410' }], null),
+        { t: 'res', v: `ρ_design = ${f(m.rho_design, 5)}` }], null),
       wstep(7, 'ตรวจขอบเขต → ρ_final', 'วสท. 1008', [
         { t: 'f', v: 'ρmin ≤ ρ_design ≤ ρmax' },
-        { t: 'sub', v: '0.0035 ≤ 0.00410 ≤ 0.0197 ✓' },
-        { t: 'res', v: 'ρ_final = 0.00410' }], 'อยู่ในช่วงเหนียว (ductile) — ผ่าน'),
+        { t: 'sub', v: `${f(m.rho_min, 4)} ≤ ${f(m.rho_design, 5)} ≤ ${f(m.rho_max, 4)} ${inRange ? '✓' : '⚠ ปรับเข้าขอบเขต'}` },
+        { t: 'res', v: `ρ_final = ${f(m.rho_final, 5)}` }], inRange ? 'อยู่ในช่วงเหนียว (ductile) — ผ่าน' : 'ρ ถูกปรับให้อยู่ในขอบเขต ว.ส.ท.'),
       wstep(8, 'พื้นที่เหล็กต้องการ As', null, [
-        { t: 'f', v: `As = ρ·b·d = 0.00410·${m.b}·45.3` },
-        { t: 'res', v: 'As,req = ' + m.As_req.toFixed(2) + ' cm²' }], null),
+        { t: 'f', v: `As = ρ·b·d = ${f(m.rho_final, 5)}·${m.b}·${f(dDesign, 1)}` },
+        { t: 'res', v: `As,req = ${f(m.As_req, 2)} cm²` }], null),
       wstep(9, 'เลือกเหล็ก → As ที่ใช้', 'วสท. 1009', [
-        { t: 'f', v: `ใช้ ${m.rebarMain}  (As = ${m.As_prov} cm²)` },
-        { t: 'res', v: `As,prov = ${m.As_prov} cm² ≥ ${m.As_req.toFixed(2)} ✓` },
-        { t: 'sub', v: 'ระยะห่างเหล็ก clear ≈ 6.1 ซม ≥ db,25มม ✓' }], 'จัดได้ 1 ชั้น'),
+        { t: 'f', v: `ใช้ ${m.rebarMain}  (As = ${f(m.As_prov, 2)} cm²)` },
+        { t: 'res', v: `As,prov = ${f(m.As_prov, 2)} cm² ${okAs ? '≥' : '<'} ${f(m.As_req, 2)} ${okAs ? '✓' : '✗ ต้องเพิ่มเหล็ก'}` },
+        { t: 'sub', v: `ระยะห่างเหล็ก clear ≈ ${f(m.spacingClear, 1)} ซม` }], okAs ? 'จัดได้ 1 ชั้น' : null),
       wstep('10–11', 'a → Mn → φMn เทียบ Mu', 'SDM', [
         { t: 'f', v: "a = As·fy/(0.85·f'c·b)" },
-        { t: 'res', v: 'a = 4.73 ซม' },
+        { t: 'res', v: `a = ${f(m.a, 2)} ซม` },
         { t: 'f', v: 'φMn = 0.9·As·fy·(d − a/2)' },
-        { t: 'res', v: 'φMn = ' + ccUnits.M(m.phiMn) + '  ≥  Mu ' + ccUnits.M(m.Mu) + ' ✓' }], `safety margin = (φMn−Mu)/Mu = +${m.margin}%`),
+        { t: 'res', v: `φMn = ${ccUnits.M(m.phiMn)}  ${okMn ? '≥' : '<'}  Mu ${ccUnits.M(m.Mu)} ${okMn ? '✓' : '✗'}` }], `safety margin = (φMn−Mu)/Mu = ${m.margin >= 0 ? '+' : ''}${m.margin}%`),
     ];
     $('#workSteps').innerHTML = steps.join('');
 
+    // shear: ใช้ Vu ที่ระยะ d (ค่าที่ engine ใช้ออกแบบจริง · ไม่ใช่ envelope) + d ของช่วงเฉือน → สูตรตรงเลข engine
+    const vuD = (m.VuAtD != null && m.VuAtD > 0) ? m.VuAtD : m.Vu;
+    const dSh = (m.dShear != null && m.dShear > 0) ? m.dShear : m.d;
     const shear = [
       wstep(1, 'กำลังเฉือนคอนกรีต Vc', 'วสท. 1007', [
-        { t: 'f', v: `Vc = 0.53·√f'c·b·d = 0.53·√240·${m.b}·45.3` },
+        { t: 'f', v: `Vc = 0.53·√f'c·b·d = 0.53·√${P.fc}·${m.b}·${f(dSh, 1)}` },
         { t: 'res', v: 'Vc = ' + ccUnits.P(m.Vc) + '  (φVc = ' + ccUnits.P(m.phiVc) + ')' }], null),
       wstep(2, 'เฉือนที่เหล็กปลอกต้องรับ V′', 'SDM', [
-        { t: 'f', v: 'Vs = Vu/φ − Vc = ' + ccUnits.Pn(m.Vu) + '/0.85 − ' + ccUnits.Pn(m.Vc) },
-        { t: 'res', v: 'Vs = ' + ccUnits.P(m.Vs) }], 'Vu = ' + ccUnits.P(m.Vu) + ' ที่ระยะ d จากที่รองรับ'),
+        { t: 'f', v: 'Vs = Vu/φ − Vc = ' + ccUnits.Pn(vuD) + '/0.85 − ' + ccUnits.Pn(m.Vc) },
+        { t: 'res', v: 'Vs = ' + ccUnits.P(m.Vs) }], 'Vu = ' + ccUnits.P(vuD) + ' ที่ระยะ d จากที่รองรับ'),
       wstep(3, 'ระยะเรียงปลอก → เลือกปลอก', 'วสท. 1007', [
         { t: 'f', v: 's = Av·fy·d / Vs' },
-        { t: 'res', v: 's ≤ 19.5 ซม  →  ใช้ ' + stirText('0.15') },
-        { t: 'sub', v: 'โซนหัวเสา @0.10 · กลางช่วง @0.25 (≤ d/2)' }], `ปลอกปิด ${state.legs === 2 ? '4' : '2'} ขา · ตะขอ 135°`),
+        { t: 'res', v: 'ใช้ ' + (m.stirShop || stirText('0.15')) },
+        { t: 'sub', v: 'โซนหัวเสา S1 · กลางช่วง S2 (≤ d/2)' }], `ปลอก ${m.stirLegs ? (m.stirLegs === 4 ? 4 : 2) : (state.mode === 'cont' ? 2 : (state.legs === 2 ? 4 : 2))} ขา (${m.stirBar || 'RB9'}) · ตะขอ 135°`),
     ];
     $('#shearSteps').innerHTML = shear.join('');
 
-    // summary table — generated for the actual span count (supports + mid-spans)
+    // summary table — Phase 2d · engine จริง (continuous: spans/supports · single: state.res)
     let rows = [];
     if (state.mode === 'cont') {
-      const g = geom(), n = g.spans.length;
-      g.nodes.forEach((nx, i) => {
-        const interior = i > 0 && i < g.nodes.length - 1;
-        const mom = spanMoments(Math.max(0, i - 1), n);
-        if (i === 0) rows.push([`หัวเสา ${i + 1} (ปลาย)`, '−' + ccUnits.Mn(spanMoments(0, n).negR || 8800), `${state.legs}ป·6-DB20 (บน)`, ccUnits.Pn(MOCK.cont.Vu), stirText('0.10')]);
-        else if (interior) rows.push([`หัวเสา ${i + 1}`, '−' + ccUnits.Mn(mom.negR || 8800), `${state.legs}ป·6-DB20 (บน)`, ccUnits.Pn(MOCK.cont.Vu - i * 100), stirText('0.10')]);
-        else rows.push([`หัวเสา ${i + 1} (ปลาย)`, '−' + ccUnits.Mn(spanMoments(n - 1, n).negL || 8500), `${state.legs}ป·6-DB20 (บน)`, ccUnits.Pn(MOCK.cont.Vu - 300), stirText('0.10')]);
-        if (i < g.spans.length) rows.push([`กลางช่วง ${i + 1}`, '+' + ccUnits.Mn(spanMoments(i, n).pos), '3-DB20 (ล่าง)', '—', stirText('0.25')]);
-      });
+      const ac = analyzeContinuous(), o = ac && ac.out;
+      // engine shear ราย span → ป้ายปลอก (S1=หัวเสา · S2=กลางช่วง)
+      //   - เฉือน FAIL (passes=false · ไม่มี S1/S2) → โชว์ "✗ หน้าตัดไม่พอ" ห้ามแต่งเป็น spacing ปลอม (Codex P1)
+      //   - ไม่มีข้อมูล → "—" (ไม่ใช้ stirText/state.legs · กัน leak 2ป จาก single · Codex P2)
+      //   engine ต่อเนื่องออกแบบ 1ป เสมอ (n_legs=2) · 2ป (n_legs=4) ไม่เกิดในต่อเนื่อง
+      const fmtStir = (sh, key) => {
+        if (sh && sh.passes === false) return '✗ หน้าตัดไม่พอ';
+        const s = sh && (key === 'S1' ? sh.S1_cm : sh.S2_cm);
+        if (!s) return '—';
+        return `${sh.n_legs === 4 ? 2 : 1}ป-${sh.bar || 'RB9'}@${(s / 100).toFixed(2)}`;
+      };
+      if (o && o.spans && o.spans.length) {
+        const ns = o.spans.length;
+        o.supports.forEach((su, i) => {
+          const isEnd = (i === 0 || i === ns);
+          const mneg = su.M_neg_tonm ? '−' + ccUnits.Mn(su.M_neg_tonm * 1000) : '—';
+          const topBars = (su.top_bars && su.top_bars !== '—') ? su.top_bars + ' (บน)' : '—';
+          // โซนหัวเสาคุมด้วยช่วงที่ Vu สูงกว่า (โหลด/ช่วงไม่สมมาตร → ซ้ายอาจ govern · Codex P2)
+          const lV = i > 0 ? (o.spans[i - 1].Vu_ton || 0) : -1, rV = i < ns ? (o.spans[i].Vu_ton || 0) : -1;
+          const vmax = Math.max(Math.max(lV, 0), Math.max(rV, 0));
+          const supShear = (lV >= rV) ? o.spans[i - 1].shear : o.spans[i].shear;
+          rows.push([`ที่รองรับ ${su.label}${isEnd ? ' (ปลาย)' : ''}`, mneg, topBars,
+                     vmax ? ccUnits.Pn(vmax * 1000) : '—', fmtStir(supShear, 'S1')]);
+          if (i < ns) {
+            const sp = o.spans[i];
+            rows.push([`กลางช่วง ${sp.label}`, '+' + ccUnits.Mn(sp.M_pos_tonm * 1000),
+                       (sp.bottom_bars || '—') + ' (ล่าง)', '—', fmtStir(sp.shear, 'S2')]);
+          }
+        });
+      }
     } else {
-      rows = [['ปลายซ้าย', '—', `${state.legs}ป·2-DB16 (บน)`, ccUnits.Pn(MOCK.single.RA), stirText('0.10')],
-              ['กลางช่วง', '+' + ccUnits.Mn(MOCK.single.Mu), '3-DB16 (ล่าง)', '—', stirText('0.25')],
-              ['ปลายขวา', '—', `${state.legs}ป·2-DB16 (บน)`, ccUnits.Pn(MOCK.single.RB), stirText('0.10')]];
+      const size = (m.rebarMain && /DB?\d+/.test(m.rebarMain)) ? m.rebarMain.match(/[RD]B?\d+/)[0] : 'DB16';
+      const topLbl = `2-${size} (บน·ยึดปลอก)`;
+      // เฉือน FAIL (single) → โชว์ "✗ หน้าตัดไม่พอ" ไม่ซ่อนเป็น spacing ปลอม (Codex P2)
+      //   มี engine S1/S2 → ใช้จริง · ไม่มี (ก่อน ready) → stirText (state.legs valid ใน single)
+      const shearFailed = (m.stirPass === false) || (!!m.stirShop && /หน้าตัดไม่พอ|ขยาย/.test(m.stirShop));
+      const stirCell = key => {
+        if (shearFailed) return '✗ หน้าตัดไม่พอ';
+        const s = key === 'S1' ? m.S1 : m.S2;
+        if (s) return `${m.stirLegs === 4 ? 2 : 1}ป-${m.stirBar || 'RB9'}@${(s / 100).toFixed(2)}`;
+        return stirText(key === 'S1' ? '0.10' : '0.25');
+      };
+      rows = [['ปลายซ้าย', '—', topLbl, m.RA ? ccUnits.Pn(m.RA) : '—', stirCell('S1')],
+              ['กลางช่วง', '+' + ccUnits.Mn(m.Mu), (m.rebarMain || '—') + ' (ล่าง)', '—', stirCell('S2')],
+              ['ปลายขวา', '—', topLbl, m.RB ? ccUnits.Pn(m.RB) : '—', stirCell('S1')]];
     }
     $('#summaryRows').innerHTML = rows.map(r => `<tr>
       <td class="py-2 font-sans">${r[0]}</td><td class="py-2 text-right">${r[1]}</td>
