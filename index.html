@@ -1134,15 +1134,19 @@
   /* ── statics preview (single span · real-ish for smooth drag feedback) ── */
   function analyzeSingle(total, w, points, partials) {
     const N = 140;
+    // factor จุดโหลด/partial ให้สอดคล้องกับ UDL (w=Wu factored แล้ว) + headline engine
+    //   combo 1.4D+1.7L → DL×1.4 · LL×1.7 · partial = LL (P3-A · กัน +M กราฟ ≠ Mu สรุป)
+    const PF = points.map(p => ({ x: p.x, P: p.P * (p.kind === 'DL' ? 1.4 : 1.7) }));
+    const QF = partials.map(q => ({ x0: q.x0, x1: q.x1, w: q.w * 1.7 }));
     // total load + reactions about A
     let W = w * total, Mo = W * (total / 2);
-    points.forEach(p => { W += p.P; Mo += p.P * p.x; });
-    partials.forEach(q => { const len = Math.max(0, q.x1 - q.x0), Wp = q.w * len; W += Wp; Mo += Wp * (q.x0 + q.x1) / 2; });
+    PF.forEach(p => { W += p.P; Mo += p.P * p.x; });
+    QF.forEach(q => { const len = Math.max(0, q.x1 - q.x0), Wp = q.w * len; W += Wp; Mo += Wp * (q.x0 + q.x1) / 2; });
     const RB = total > 0 ? Mo / total : 0, RA = W - RB;
     const Vfn = x => {
       let v = RA - w * x;
-      partials.forEach(q => { if (x > q.x0) v -= q.w * (Math.min(x, q.x1) - q.x0); });
-      points.forEach(p => { if (x >= p.x - 1e-9) v -= p.P; });
+      QF.forEach(q => { if (x > q.x0) v -= q.w * (Math.min(x, q.x1) - q.x0); });
+      PF.forEach(p => { if (x >= p.x - 1e-9) v -= p.P; });
       return v;
     };
     const xs = [], V = [], M = [];
