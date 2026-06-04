@@ -1824,10 +1824,12 @@
     let rows = [];
     if (state.mode === 'cont') {
       const ac = analyzeContinuous(), o = ac && ac.out;
-      // engine shear ราย span → ป้ายปลอก (S1=หัวเสา · S2=กลางช่วง) · fallback stirText ก่อน engine ready
+      // engine shear ราย span → ป้ายปลอก (S1=หัวเสา · S2=กลางช่วง)
+      // fallback (engine ยังไม่พร้อม / span fail ไม่มี S1/S2) = fixed 1ป — engine ต่อเนื่องออกแบบ 1ป เสมอ
+      //   (ห้ามใช้ stirText() = state.legs · จะ leak 2ป จาก single mode · Codex P2)
       const fmtStir = (sh, key) => {
         const s = sh && (key === 'S1' ? sh.S1_cm : sh.S2_cm);
-        if (!s) return stirText(key === 'S1' ? '0.10' : '0.25');
+        if (!s) return `1ป-RB9@${key === 'S1' ? '0.10' : '0.25'}`;
         return `${sh.n_legs === 4 ? 2 : 1}ป-${sh.bar || 'RB9'}@${(s / 100).toFixed(2)}`;
       };
       if (o && o.spans && o.spans.length) {
