@@ -1158,7 +1158,8 @@
     // ค่าแก้ได้: .load-val เป็น contenteditable · พิมพ์เลข → อัป data-kg → recompute
     const wireCell = td => {
       td.contentEditable = 'true'; td.inputMode = 'decimal'; td.classList.add('editable-load');
-      td.addEventListener('focus', () => { td.textContent = String(td.dataset.kg); });
+      // focus โชว์ค่าในหน่วยปัจจุบัน (T mode → kg/1000) ให้ตรงกับที่ handler ตีความ (Codex P2 · กัน ×1000)
+      td.addEventListener('focus', () => { td.textContent = String(ccUnits.force === 'T' ? (+td.dataset.kg / 1000) : +td.dataset.kg); });
       td.addEventListener('input', () => {
         const raw = parseFloat(td.textContent.replace(/[^\d.]/g, '')) || 0;
         td.dataset.kg = ccUnits.force === 'T' ? raw * 1000 : raw;   // แสดงหน่วยตาม toggle → เก็บ กก.
@@ -2145,6 +2146,7 @@
   /* ╔══════════════ master render ══════════════╗ */
   function render() {
     applyMode();
+    updateSelfWeightRow();  // อัป self-weight ตาม b/h ก่อน recompute อ่าน sumLoads (Codex P2 · กันผลค้าง 1 render)
     recompute();          // Phase 2b · engine จริง → state.res (ก่อน render ที่อ่าน liveData)
     recalcBase();
     renderPointLoads(); renderPartialLoads();
