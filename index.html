@@ -421,7 +421,7 @@
               <tbody id="loadRows" class="divide-y divide-border mono">
                 <tr><td class="px-3 py-2.5">พื้น (DL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">250 kg/m² × 3.0 ม</td><td class="px-3 py-2.5 text-right load-val" data-kg="750">750</td><td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td></tr>
                 <tr><td class="px-3 py-2.5">ผนัง (DL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">390 kg/m (ผนังก่อ)</td><td class="px-3 py-2.5 text-right load-val" data-kg="390">390</td><td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td></tr>
-                <tr><td class="px-3 py-2.5">น้ำหนักตัวเอง (DL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">γ·b·h อัตโนมัติ</td><td class="px-3 py-2.5 text-right load-val" data-kg="300">300</td><td class="px-2 text-right text-ink-muted/40">—</td></tr>
+                <tr data-selfweight="1"><td class="px-3 py-2.5">น้ำหนักตัวเอง (DL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">γ·b·h อัตโนมัติ</td><td class="px-3 py-2.5 text-right load-val" data-kg="300">300</td><td class="px-2 text-right text-ink-muted/40">—</td></tr>
                 <tr><td class="px-3 py-2.5">จร (LL)</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">300 kg/m² × 3.0 ม</td><td class="px-3 py-2.5 text-right load-val" data-kg="900">900</td><td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td></tr>
               </tbody>
             </table>
@@ -839,16 +839,21 @@
 
   /* sumLoads() — DL/LL จริงจาก load list (#loadRows · กก./ม) + น้ำหนักตัวเอง γ·b·h (Phase 2c)
      kind จาก data-kind หรือป้าย "(LL)" · ใช้แทน MOCK.DL/LL ทั้ง engine + display · ใช้ร่วม 2 โหมด */
+  function selfWeightKg() { return Math.round(2400 * ((P.b || 0) / 100) * ((P.h || 0) / 100)); }  // γ·b·h กก./ม
+  // อัปแถวน้ำหนักตัวเอง (auto) ให้ตรง b/h — แถวนี้ถูกรวมใน sumLoads แล้ว (ไม่บวก sw ซ้ำ · Codex P1)
+  function updateSelfWeightRow() {
+    const cell = document.querySelector('#loadRows tr[data-selfweight] .load-val');
+    if (cell) { cell.dataset.kg = selfWeightKg(); cell.textContent = ccUnits.Wn(selfWeightKg()); }
+  }
   function sumLoads() {
     let dl = 0, ll = 0;
     document.querySelectorAll('#loadRows tr').forEach(tr => {
       const cell = tr.querySelector('.load-val'); if (!cell) return;
       const kg = parseFloat(cell.dataset.kg) || 0;
       const isLL = (tr.dataset.kind === 'LL') || /\(LL\)/.test(tr.textContent);
-      if (isLL) ll += kg; else dl += kg;
+      if (isLL) ll += kg; else dl += kg;   // รวมทุกแถว (รวมแถว self-weight) · ไม่บวก sw ซ้ำ
     });
-    const sw = 2400 * ((P.b || 0) / 100) * ((P.h || 0) / 100);   // self-weight กก./ม (γ=2400)
-    return { DL: dl + sw, LL: ll, sw };
+    return { DL: dl, LL: ll };
   }
   // legacy alias used by older code paths
   const contGeom = () => ({ spans: ccModel.spans, nodes: ccModel.nodes });
@@ -1005,6 +1010,7 @@
     $('#bv_rmin').textContent = rmin.toFixed(4);
     $('#bv_rmax').textContent = rmax.toFixed(4);
     $('#bv_sw').innerHTML = ccUnits.Wn(sw) + ' <span class="u">' + ccUnits.uW() + '</span>';
+    updateSelfWeightRow();   // อัปแถวน้ำหนักตัวเองในตารางตาม b/h (Codex P1 · กัน sw คงที่ + double-count)
     // live summary (geometry-driven parts are live; design figures stay mock)
     $('#ls_bh').textContent = P.b + '×' + P.h;
     $('#ls_d').textContent = d.toFixed(1);
@@ -1160,7 +1166,7 @@
       });
       td.addEventListener('blur', () => { td.textContent = ccUnits.Wn(+td.dataset.kg); });
     };
-    tb.querySelectorAll('.load-val').forEach(wireCell);
+    tb.querySelectorAll('tr:not([data-selfweight]) .load-val').forEach(wireCell);  // self-weight = auto (ไม่แก้มือ)
     // ลบ row (delegation) → render เต็ม
     tb.addEventListener('click', e => {
       const del = e.target.closest('.row-del'); if (!del) return;
