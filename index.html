@@ -1191,6 +1191,22 @@
     if (!res || !res.ok || !res.out || !res.out.diagram) return null;
     const d = res.out.diagram;
     const xs = d.x.slice(), V = d.V_ton.map(v => v * 1000), M = d.M_tonm.map(v => v * 1000);  // ton→kg · t·m→kg·m
+    // SMOOTH การแสดงผล V ในช่วง partial UDL: discretize เป็นจุดย่อย → V เป็นขั้นบันได
+    //   แต่ภายใต้ uniform load จริง V = ramp เชิงเส้น → interp เชิงเส้นปลาย-ปลาย (ต่อช่วง ·
+    //   คง jump ที่หัวเสา/จุดโหลดจริงไว้) · M ไม่แตะ (แม่นจาก discretize อยู่แล้ว)
+    ccModel.partials.forEach(q => {
+      const a0 = Math.max(0, q.x0), b0 = Math.min(g.total, q.x1);
+      g.spans.forEach((sp, si) => {
+        const lo = Math.max(a0, g.nodes[si]), hi = Math.min(b0, g.nodes[si + 1]);
+        if (hi - lo <= 0.05) return;                                    // ไม่ทับช่วงนี้
+        if (ccModel.points.some(p => p.x > lo + 0.05 && p.x < hi - 0.05)) return; // คง jump จุดโหลดจริง
+        let i0 = -1, i1 = -1;
+        for (let i = 0; i < xs.length; i++) { if (xs[i] <= lo + 1e-6) i0 = i; if (i1 < 0 && xs[i] >= hi - 1e-6) i1 = i; }
+        if (i0 < 0 || i1 <= i0) return;
+        const x0 = xs[i0], x1 = xs[i1], v0 = V[i0], v1 = V[i1];
+        for (let i = i0 + 1; i < i1; i++) V[i] = v0 + (v1 - v0) * (xs[i] - x0) / (x1 - x0);
+      });
+    });
     let Vmax = 0; V.forEach(v => { if (Math.abs(v) > Vmax) Vmax = Math.abs(v); });
     // marks: +M สูงสุดต่อช่วง · −M ต่ำสุดที่หัวเสาภายใน (จาก array จริง)
     const marks = [];
