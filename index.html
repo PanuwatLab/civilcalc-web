@@ -850,7 +850,8 @@
     document.querySelectorAll('#loadRows tr').forEach(tr => {
       const cell = tr.querySelector('.load-val'); if (!cell) return;
       const kg = parseFloat(cell.dataset.kg) || 0;
-      const isLL = (tr.dataset.kind === 'LL') || /\(LL\)/.test(tr.textContent);
+      // ใช้ data-kind ก่อน (row เพิ่มใหม่) · fallback ป้าย "(LL)" เฉพาะ row เก่าที่ไม่มี data-kind (Codex P3)
+      const isLL = tr.dataset.kind ? (tr.dataset.kind === 'LL') : /\(LL\)/.test(tr.textContent);
       if (isLL) ll += kg; else dl += kg;   // รวมทุกแถว (รวมแถว self-weight) · ไม่บวก sw ซ้ำ
     });
     return { DL: dl, LL: ll };
