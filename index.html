@@ -1009,20 +1009,20 @@
       if (key in P || ['b', 'h', 'cover', 'L', 'db', 'dstir'].includes(key)) {
         P[key] = (inp.type === 'number' || inp.type === 'range') ? parseFloat(inp.value) : inp.value;
       }
-      recalcBase();
+      render();
     }));
     // f'c pills
     $$('#fcPills .pill').forEach(p => p.addEventListener('click', () => {
       $$('#fcPills .pill').forEach(x => x.setAttribute('aria-pressed', 'false'));
-      p.setAttribute('aria-pressed', 'true'); P.fc = +p.dataset.fc; recalcBase();
+      p.setAttribute('aria-pressed', 'true'); P.fc = +p.dataset.fc; render();
     }));
-    $('#in_grade').addEventListener('change', e => { P.grade = e.target.value; recalcBase(); });
-    $('#in_db').addEventListener('change', e => { P.db = e.target.value; recalcBase(); });
-    $('#in_ds').addEventListener('change', e => { P.dstir = e.target.value; recalcBase(); });
+    $('#in_grade').addEventListener('change', e => { P.grade = e.target.value; render(); });
+    $('#in_db').addEventListener('change', e => { P.db = e.target.value; render(); });
+    $('#in_ds').addEventListener('change', e => { P.dstir = e.target.value; render(); });
     // cover pills
     $$('#coverPills .pill').forEach(p => p.addEventListener('click', () => {
       $$('#coverPills .pill').forEach(x => x.setAttribute('aria-pressed', 'false'));
-      p.setAttribute('aria-pressed', 'true'); P.cover = +p.dataset.cover; recalcBase();
+      p.setAttribute('aria-pressed', 'true'); P.cover = +p.dataset.cover; render();
     }));
     // continuous span count → rebuild span-length inputs + redraw
     $('#in_nspan').addEventListener('change', e => {
@@ -1253,8 +1253,22 @@
     } else {
       const ac = analyzeContinuous(); if (!ac) return;
       let mp = 0, mn = 0; ac.marks.forEach(k => { if (k.type === 'pos') mp = Math.max(mp, k.val); else mn = Math.max(mn, k.val); });
-      const pass = ac.out && ac.out.passes !== false;
-      state.res = { Mu: Math.round(mp), MuNeg: Math.round(mn), Vu: ac.Vmax, pass, dc: pass ? 78 : 123, margin: pass ? 22 : -5 };
+      const o = ac.out || {};
+      // governing D/C จาก flexure ทุกช่วง (bottom) + หัวเสา (top) — ค่า engine จริง
+      //   มี margin → D/C=10000/(100+margin) · element fail (phi_Mn=0/ไม่มี margin) → เกินกำลัง
+      let govDc = 0, anyFail = false;
+      const acc = el => {
+        if (!el) return;
+        if (typeof el.safety_margin_pct === 'number') govDc = Math.max(govDc, 10000 / (100 + el.safety_margin_pct));
+        if (el.passes === false || !el.phi_Mn) anyFail = true;
+      };
+      (o.spans || []).forEach(sp => acc(sp.bottom));
+      (o.supports || []).forEach(su => acc(su.top));
+      const pass = o.passes !== false && !anyFail;
+      if (anyFail) govDc = Math.max(govDc, 101);          // มี element เกินกำลัง → D/C > 100
+      const dc = Math.round(govDc || (pass ? 78 : 123));
+      const margin = Math.round(10000 / Math.max(1, dc) - 100);
+      state.res = { Mu: Math.round(mp), MuNeg: Math.round(mn), Vu: ac.Vmax, pass, dc, margin };
     }
   }
   // live = engine result ทับ MOCK (คีย์ที่ยังไม่ map → fallback mock · graceful)
