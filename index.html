@@ -1343,7 +1343,7 @@
         DL: _L.DL, LL: _L.LL, Wu: 1.4 * _L.DL + 1.7 * _L.LL,                          // กก./ม (factored)
         spacingClear: o.rebar ? o.rebar.spacing_min_clear : 0,
         Vc: (sd.Vc_ton || 0) * 1000, phiVc: (sd.phi_Vc_ton || 0) * 1000, Vs: (sd.Vs_required_ton || 0) * 1000,  // ตัน → กก.
-        stirBar: sd.bar, stirLegs: sd.n_legs, S1: sd.S1_cm, S2: sd.S2_cm, stirShop: sd.shop_drawing_notation,
+        stirBar: sd.bar, stirLegs: sd.n_legs, S1: sd.S1_cm, S2: sd.S2_cm, stirShop: sd.shop_drawing_notation, stirPass: sd.passes,
       };
     } else {
       const ac = analyzeContinuous(); if (!ac) return;
@@ -1856,12 +1856,18 @@
     } else {
       const size = (m.rebarMain && /DB?\d+/.test(m.rebarMain)) ? m.rebarMain.match(/[RD]B?\d+/)[0] : 'DB16';
       const topLbl = `2-${size} (บน·ยึดปลอก)`;
-      rows = [['ปลายซ้าย', '—', topLbl, m.RA ? ccUnits.Pn(m.RA) : '—', m.stirShop ? '' : stirText('0.10')],
-              ['กลางช่วง', '+' + ccUnits.Mn(m.Mu), (m.rebarMain || '—') + ' (ล่าง)', '—', stirText('0.25')],
-              ['ปลายขวา', '—', topLbl, m.RB ? ccUnits.Pn(m.RB) : '—', stirText('0.10')]];
-      // close-zone spacing จาก engine shear (S1) ถ้ามี
-      if (m.S1) { rows[0][4] = `${m.stirLegs === 4 ? 2 : 1}ป-${m.stirBar || 'RB9'}@${(m.S1 / 100).toFixed(2)}`; rows[2][4] = rows[0][4]; }
-      if (m.S2) rows[1][4] = `${m.stirLegs === 4 ? 2 : 1}ป-${m.stirBar || 'RB9'}@${(m.S2 / 100).toFixed(2)}`;
+      // เฉือน FAIL (single) → โชว์ "✗ หน้าตัดไม่พอ" ไม่ซ่อนเป็น spacing ปลอม (Codex P2)
+      //   มี engine S1/S2 → ใช้จริง · ไม่มี (ก่อน ready) → stirText (state.legs valid ใน single)
+      const shearFailed = (m.stirPass === false) || (!!m.stirShop && /หน้าตัดไม่พอ|ขยาย/.test(m.stirShop));
+      const stirCell = key => {
+        if (shearFailed) return '✗ หน้าตัดไม่พอ';
+        const s = key === 'S1' ? m.S1 : m.S2;
+        if (s) return `${m.stirLegs === 4 ? 2 : 1}ป-${m.stirBar || 'RB9'}@${(s / 100).toFixed(2)}`;
+        return stirText(key === 'S1' ? '0.10' : '0.25');
+      };
+      rows = [['ปลายซ้าย', '—', topLbl, m.RA ? ccUnits.Pn(m.RA) : '—', stirCell('S1')],
+              ['กลางช่วง', '+' + ccUnits.Mn(m.Mu), (m.rebarMain || '—') + ' (ล่าง)', '—', stirCell('S2')],
+              ['ปลายขวา', '—', topLbl, m.RB ? ccUnits.Pn(m.RB) : '—', stirCell('S1')]];
     }
     $('#summaryRows').innerHTML = rows.map(r => `<tr>
       <td class="py-2 font-sans">${r[0]}</td><td class="py-2 text-right">${r[1]}</td>
