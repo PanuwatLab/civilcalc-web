@@ -1289,7 +1289,8 @@
     });
     let res;
     // section/material = ค่า live จาก Step 1 (P) เหมือนช่วงเดียว · UDL ยัง mock (Phase 2c)
-    try { res = window.__civilCalc.designContinuous({ b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir), spans, load_combo: '1.4D+1.7L' }); }
+    const cInp = { b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir), spans, load_combo: '1.4D+1.7L' };
+    try { res = window.__civilCalc.designContinuous(cInp); }
     catch (e) { console.warn('[civilcalc] continuous engine call failed', e); return null; }
     if (!res || !res.ok || !res.out || !res.out.diagram) return null;
     const d = res.out.diagram;
@@ -1324,7 +1325,7 @@
       for (let i = 0; i < xs.length; i++) { if (Math.abs(xs[i] - g.nodes[k]) < (g.total / 400) && M[i] < worst) { worst = M[i]; wx = xs[i]; } }
       if (worst < -1) { marks.push({ x: wx, val: -worst, type: 'neg' }); Mpk = Math.max(Mpk, -worst); }
     }
-    const result = { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mpk), marks, out: res.out };
+    const result = { xs, V, M, Vmax: Math.round(Vmax), Mmax: Math.round(Mpk), marks, out: res.out, inp: cInp };
     _acCache = { sig, val: result };
     return result;
   }
@@ -1347,8 +1348,9 @@
         partial_udls: ccModel.partials.map(q => ({ kind: 'LL', w: q.w / K, x1: q.x0, x2: Math.min(ccModel.total, q.x1) })),
       };
       let r; try { r = window.__civilCalc.design(inp); } catch (e) { return; }
-      if (!r || !r.ok) { state.res = { _err: r && r.msg }; return; }
+      if (!r || !r.ok) { state.res = { _err: r && r.msg }; state._lastInp = { mode: 'single', inp, out: null, err: r && r.error_type }; return; }
       const o = r.out, margin = o.safety_margin_pct || 0;
+      state._lastInp = { mode: 'single', inp, out: o };   // Phase 4A · parity harness อ่าน engine ที่ recompute ใช้จริง
       const sd = o.stirrup_design || {};
       const _L = sumLoads();
       state.res = {
@@ -1369,6 +1371,7 @@
       };
     } else {
       const ac = analyzeContinuous(); if (!ac) return;
+      state._lastInp = { mode: 'cont', inp: ac.inp, out: ac.out };   // Phase 4A · parity harness
       let mp = 0, mn = 0; ac.marks.forEach(k => { if (k.type === 'pos') mp = Math.max(mp, k.val); else mn = Math.max(mn, k.val); });
       const o = ac.out || {};
       // governing D/C จาก flexure ทุกช่วง (bottom) + หัวเสา (top) — ค่า engine จริง
@@ -1418,6 +1421,27 @@
   }
   // live = engine result ทับ MOCK (คีย์ที่ยังไม่ map → fallback mock · graceful)
   function liveData() { const base = state.mode === 'cont' ? MOCK.cont : MOCK.single; return state.res && !state.res._err ? Object.assign({}, base, state.res) : base; }
+
+  /* ── test hook (Phase 4A · parity harness) ─────────────────────────────────
+     เปิดให้ window.runTests ขับ case + อ่าน engine ที่ recompute ใช้จริง (_lastInp)
+     เทียบกับ state.res → ยืนยัน "เลขที่โชว์ == ความจริง engine · ไม่ใช่ MOCK"
+     mutate state ผ่าน driver เท่านั้น · snapshot/restore กันรั่วสู่ผู้ใช้จริง */
+  window.__civilTest = {
+    mode: () => state.mode,
+    setMode(m) { state.mode = (m === 'cont' ? 'cont' : 'single'); applyMode(); },
+    setSection(b, h, fc, grade) {
+      if (b != null) P.b = b; if (h != null) P.h = h;
+      if (fc != null) P.fc = fc; if (grade != null) P.grade = grade;
+    },
+    setPoints(arr) { ccModel.points = (arr || []).map((p, i) => ({ id: 900 + i, x: p.x, P: p.P, kind: p.kind === 'DL' ? 'DL' : 'LL' })); },
+    recompute, render, renderWork,
+    res: () => state.res,
+    lastInp: () => state._lastInp,
+    engine: () => window.__civilCalc,
+    MOCK: () => MOCK,
+    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)) }; },
+    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; applyMode(); recompute(); },
+  };
 
   /* sync verdict (pass/fail) + D/C จากผล engine จริง (Phase 2b · override mock toggle เมื่อ engine พร้อม) */
   function syncVerdict() {
@@ -4837,6 +4861,183 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
     setMsg('โหลดเครื่องคำนวณไม่สำเร็จ: ' + String(err && err.message || err));
     // leave bootScreen visible with error (fallback timer still hides after 20s)
   }
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Phase 4A · Parity Harness — runTests()
+     ตาข่ายกันพลาดอัตโนมัติ: ยืนยันว่า "เลข 6 อย่างในรายการคำนวณ == ความจริง
+     จาก engine" ทั้ง 2 โหมด (Q1 ขนาดเหล็ก · Q2/Q3 บน-ล่างกี่เส้น · Q4 เสริม
+     พิเศษ · Q5 ปลอกขนาด+ระยะ · Q6 หน้าตัด b×h) · index-only · ไม่แตะ calc.py
+     เรียก window.runTests() ใน console · auto-run ด้วย ?test=1
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function parityHarness() {
+  const tests = [];
+  const T = (name, fn) => tests.push({ name, fn });
+  const assert = (c, m) => { if (!c) throw new Error(m || 'assertion failed'); };
+  const eng = () => window.__civilCalc;
+  const TT = () => window.__civilTest;
+
+  // ── derive expected 6-param จาก engine output (mirror ตรรกะ recompute · ไม่คำนวณ engineering ซ้ำ) ──
+  const mainStr = bars => (bars && bars.length) ? bars.map(t => t[1] + '-' + t[0]).join('+') : '—';
+  const nBars = bars => (bars || []).reduce((s, t) => s + t[1], 0);
+  function expectSingle(out, inp) {
+    const main = (out.rebar && out.rebar.main_bars) || [];
+    const sd = out.stirrup_design || {};
+    return { rebarMain: mainStr(main), nBot: nBars(main), extra: main.length > 1,
+             b: inp.b, h: inp.h, pass: !!out.passes,
+             stirBar: sd.bar || null, stirShop: sd.shop_drawing_notation || null };
+  }
+  function expectCont(out) {
+    // gov +M span → bottom rebar (ตรง recompute 1390) · gov Vu span → shear (ตรง recompute 1394)
+    let gov = null, bestM = -Infinity;
+    (out.spans || []).forEach(sp => { if (sp.bottom && sp.M_pos_kNm > bestM) { bestM = sp.M_pos_kNm; gov = sp.bottom; } });
+    let gv = null, bestV = -Infinity;
+    (out.spans || []).forEach(sp => { const v = sp.Vu_ton || 0; if (v > bestV) { bestV = v; gv = sp.shear || {}; } });
+    const main = (gov && gov.rebar && gov.rebar.main_bars) || [];
+    // pass = mirror recompute (anyFail ถ้า element ใด phi_Mn=0/passes=false)
+    let anyFail = false;
+    (out.spans || []).forEach(sp => { const e = sp.bottom; if (e && (e.passes === false || !e.phi_Mn)) anyFail = true; });
+    (out.supports || []).forEach(su => { const e = su.top; if (e && (e.passes === false || !e.phi_Mn)) anyFail = true; });
+    return { rebarMain: mainStr(main), nBot: nBars(main), extra: main.length > 1,
+             pass: out.passes !== false && !anyFail, stirShop: gv ? (gv.shop_drawing_notation || null) : null };
+  }
+
+  // ── GROUP A · engine bridge sanity (ตรวจสะพาน Pyodide ทำงาน · contract {ok,out}) ──
+  // หน่วย engine: db_assume/d_stirrup = ซม. (DB16→1.6 · RB9→0.9) · DL/LL = kN/m
+  T('engine · คานปกติออกแบบผ่าน + เลือกเหล็ก As>0', () => {
+    const r = eng().design({ b: 25, h: 50, L: 4.5, fc: 240, fy: 4000, cover: 3, db_assume: 1.6, d_stirrup: 0.9, DL: 14, LL: 9, load_combo: '1.4D+1.7L' });
+    assert(r.ok, 'design ควรสำเร็จ · ' + (r.msg || ''));
+    assert(r.out.rebar && r.out.rebar.As_provided > 0, 'ควรเลือกเหล็ก As>0');
+    assert(typeof r.out.passes === 'boolean', 'ควรมีธง passes');
+  });
+  T('engine · input ผิด (b<0) → ok:false + error_type', () => {
+    const r = eng().design({ b: -5, h: 50, L: 4.5, fc: 240, fy: 4000, cover: 3, db_assume: 1.6, d_stirrup: 0.9, DL: 14, LL: 9 });
+    assert(!r.ok, 'b ลบควรล้มเหลว · got ' + JSON.stringify(r).slice(0, 80));
+    assert(r.error_type, 'ควรมี error_type');
+  });
+  T('engine · ต่อเนื่อง 3 ช่วงคืน spans/supports', () => {
+    const r = eng().designContinuous({ b: 30, h: 50, fc: 240, fy: 4000, cover: 3, db_assume: 1.6, d_stirrup: 0.9,
+      spans: [{ L: 4.5, DL: 14, LL: 9, point_loads: [] }, { L: 4.5, DL: 14, LL: 9, point_loads: [] }, { L: 4.5, DL: 14, LL: 9, point_loads: [] }], load_combo: '1.4D+1.7L' });
+    assert(r.ok, 'ต่อเนื่องควรสำเร็จ · ' + (r.msg || ''));
+    assert(r.out.spans && r.out.spans.length === 3, 'ควรมี 3 spans');
+    assert(r.out.supports && r.out.supports.length >= 2, 'ควรมี supports');
+  });
+
+  // ── GROUP B · 6-param parity (หัวใจ Phase 4A) ──
+  T('parity·single · เหล็กหลัก/ปลอก/หน้าตัด/verdict == engine (ไม่ใช่ MOCK)', () => {
+    const snap = TT().snapshot();
+    try {
+      TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().setPoints([]); TT().recompute();
+      const L = TT().lastInp(), res = TT().res();
+      assert(L && L.out, 'engine ควรคืนผล single');
+      assert(res && !res._err, 'state.res ควรมีผลจริง · ' + JSON.stringify(res).slice(0, 60));
+      const ex = expectSingle(L.out, L.inp);
+      assert(res.rebarMain === ex.rebarMain, `เหล็กหลัก(Q1+Q3+Q4): state="${res.rebarMain}" engine="${ex.rebarMain}"`);
+      assert(res.stirShop === ex.stirShop, `ปลอก(Q5): state="${res.stirShop}" engine="${ex.stirShop}"`);
+      assert(res.b === ex.b && res.h === ex.h, `หน้าตัด(Q6): ${res.b}×${res.h} vs ${ex.b}×${ex.h}`);
+      assert(res.pass === ex.pass, `verdict: ${res.pass} vs engine ${ex.pass}`);
+    } finally { TT().restore(snap); }
+  });
+  T('parity·single · เหล็กเสริมพิเศษ (mixed-size) นับครบทุกชุด', () => {
+    const snap = TT().snapshot();
+    try {
+      TT().setMode('single'); TT().setSection(30, 55, 240, 'SD40');
+      TT().setPoints([{ x: 2.25, P: 14000, kind: 'LL' }]);   // โหลดหนัก → As ใหญ่ → เสริมพิเศษ
+      TT().recompute();
+      const L = TT().lastInp(), res = TT().res();
+      if (!L || !L.out || !L.out.rebar) { assert(res && res._err, 'ถ้าไม่คืน rebar ต้องเป็น _err (ไม่ MOCK)'); return; }
+      const ex = expectSingle(L.out, L.inp);
+      assert(res.rebarMain === ex.rebarMain, `mixed: state="${res.rebarMain}" engine="${ex.rebarMain}"`);
+      if (ex.extra) assert(/\+/.test(res.rebarMain), 'engine ออกเสริมพิเศษแต่ string ไม่มี "+" · ' + res.rebarMain);
+    } finally { TT().restore(snap); }
+  });
+  T('parity·single · หน้าตัดไม่พอ → FAIL/_err (ไม่โชว์ MOCK ผ่าน)', () => {
+    const snap = TT().snapshot();
+    try {
+      TT().setMode('single'); TT().setSection(20, 30, 240, 'SD40');
+      TT().setPoints([{ x: 1.5, P: 12000, kind: 'LL' }]);
+      TT().recompute();
+      const L = TT().lastInp(), res = TT().res();
+      if (res && res._err) return;   // engine ปฏิเสธหน้าตัด = ถูกต้อง (ไม่ใช่ MOCK ผ่าน)
+      const ex = expectSingle(L.out, L.inp);
+      assert(res.pass === ex.pass, `verdict ${res.pass} vs engine ${ex.pass}`);
+      if (!ex.pass) assert(res.dc !== TT().MOCK().single.dc, `FAIL ไม่ควรโชว์ D/C MOCK (${res.dc})`);
+    } finally { TT().restore(snap); }
+  });
+  T('parity·cont · เหล็ก/ปลอก gov span == engine (ไม่ leak MOCK.cont)', () => {
+    const snap = TT().snapshot();
+    try {
+      TT().setMode('cont'); TT().setSection(30, 50, 240, 'SD40'); TT().setPoints([]); TT().recompute();
+      const L = TT().lastInp(), res = TT().res();
+      assert(L && L.out && L.out.spans, 'engine ต่อเนื่องควรคืน spans');
+      assert(res && !res._err, 'state.res ต่อเนื่องควรมีผล');
+      const ex = expectCont(L.out);
+      assert(res.rebarMain === ex.rebarMain, `เหล็กหลัก gov: state="${res.rebarMain}" engine="${ex.rebarMain}"`);
+      assert(res.rebarMain !== TT().MOCK().cont.rebarMain || ex.rebarMain === TT().MOCK().cont.rebarMain, 'ไม่ควร leak MOCK.cont.rebarMain');
+      assert(res.stirShop === ex.stirShop, `ปลอก gov(Q5): state="${res.stirShop}" engine="${ex.stirShop}"`);
+      assert(res.pass === ex.pass, `verdict: ${res.pass} vs engine ${ex.pass}`);
+    } finally { TT().restore(snap); }
+  });
+
+  // ── GROUP C · render→DOM spot-check (single: ตารางสรุปโชว์ค่า state.res จริง) ──
+  T('render·single · ตารางสรุปแสดงเหล็กหลักตรง state.res (ไม่ใช่ MOCK)', () => {
+    const snap = TT().snapshot();
+    try {
+      TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().setPoints([]); TT().recompute();
+      const res = TT().res();
+      assert(res && res.rebarMain, 'ต้องมี rebarMain');
+      TT().renderWork();
+      const host = document.getElementById('summaryRows');
+      assert(host, '#summaryRows ต้องมีใน DOM');
+      assert(host.textContent.indexOf(res.rebarMain) !== -1,
+        `ตารางสรุปไม่พบ "${res.rebarMain}" · DOM="${host.textContent.replace(/\s+/g, ' ').slice(0, 80)}"`);
+    } finally { TT().restore(snap); TT().renderWork(); }
+  });
+
+  // ── runner + panel ──
+  function makePanel() {
+    let p = document.getElementById('__testPanel');
+    if (p) p.remove();
+    p = document.createElement('div'); p.id = '__testPanel';
+    p.style.cssText = 'position:fixed;right:12px;bottom:12px;width:380px;max-height:70vh;overflow:auto;z-index:99999;background:#0f172a;color:#e2e8f0;font:12px/1.5 ui-monospace,monospace;border:1px solid #334155;border-radius:10px;padding:12px 14px;box-shadow:0 10px 40px rgba(0,0,0,.4)';
+    document.body.appendChild(p);
+    const head = document.createElement('div'); head.style.cssText = 'font-weight:700;margin-bottom:6px;color:#fbbf24'; p.appendChild(head);
+    const body = document.createElement('div'); p.appendChild(body);
+    const sum = document.createElement('div'); sum.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #334155;font-weight:700'; p.appendChild(sum);
+    return {
+      head: t => head.textContent = t,
+      log: (t, c) => { const d = document.createElement('div'); d.textContent = t; if (c) d.style.color = c; body.appendChild(d); },
+      summary: (t, ok) => { sum.textContent = t; sum.style.color = ok ? '#10b981' : '#ef4444'; },
+    };
+  }
+
+  window.runTests = async function runTests() {
+    const ui = makePanel();
+    let passed = 0, failed = 0; const errors = [];
+    ui.head(`▶ Parity Harness · ${tests.length} เทสต์`);
+    for (let i = 0; i < tests.length; i++) {
+      const t = tests[i];
+      try { await t.fn(); passed++; ui.log('✅ ' + t.name, '#10b981'); console.log('%c✅ ' + t.name, 'color:#10b981'); }
+      catch (e) { failed++; errors.push({ name: t.name, error: e.message }); ui.log('❌ ' + t.name, '#ef4444'); ui.log('   ' + e.message, '#fca5a5'); console.error('❌ ' + t.name + ':', e); }
+    }
+    const pct = ((passed / tests.length) * 100).toFixed(0);
+    ui.summary(`${passed}/${tests.length} ผ่าน (${pct}%)` + (failed ? ` · ${failed} ล้มเหลว` : ' · ครบทุกข้อ 🎉'), failed === 0);
+    window.__testResults = { total: tests.length, passed, failed, errors };
+    console.log(`%c━━ PARITY RESULTS ━━ ${passed}/${tests.length} (${pct}%)`, 'color:#fbbf24;font-weight:700');
+    if (errors.length) errors.forEach(e => console.log(`  ❌ ${e.name}\n     ${e.error}`));
+    return window.__testResults;
+  };
+
+  // auto-run ?test=1 (รอ engine + test hook พร้อม)
+  if (new URLSearchParams(location.search).get('test') === '1') {
+    (function autoRun() {
+      if (!(window.__civilCalc && window.__civilCalc.ready && window.__civilTest)) return setTimeout(autoRun, 200);
+      setTimeout(() => window.runTests(), 500);
+    })();
+  }
+  console.log('[parity] window.runTests() — ตรวจ 6-param parity 2 โหมด');
 })();
 </script>
 </body>
