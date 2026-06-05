@@ -1011,6 +1011,16 @@
     const n = Math.ceil(2 * n1 + n2) + 1;   // ceil — กันปัดลงแล้วระยะเรียงเกิน (ปลอกน้อยไป · Codex P2)
     return n > 1 ? n : 0;
   };
+  // เหล็กเสริม = bars ที่เหลือหลังหัก 2 เส้นหลัก (เบอร์ใหญ่สุด) · คงขนาดผสมไว้ (ไม่ทิ้งเบอร์เล็ก · Codex P2)
+  const _sizeNum = s => +(((s || 'DB16').match(/\d+/)) || [16])[0];
+  function extraBarGroups(list) {
+    if (!list || !list.length) return [];
+    const sorted = list.map(t => [t[0], t[1]]).sort((a, b) => _sizeNum(b[0]) - _sizeNum(a[0]));
+    let rm = 2; const out = [];
+    for (const [size, cnt] of sorted) { if (rm >= cnt) { rm -= cnt; continue; } out.push([size, cnt - rm]); rm = 0; }
+    return out;   // [[size,count],...] หลังหักหลัก 2
+  }
+  const fmtBars = groups => groups.map(g => `${g[1]}-${g[0]}`).join(' + ');   // "1-DB20 + 1-DB10"
   const dbVal = s => ({ DB12: 1.2, DB16: 1.6, DB20: 2.0, DB25: 2.5 }[s] || 1.6);
   const dsVal = s => ({ RB6: 0.6, RB9: 0.9, DB10: 1.0 }[s] || 0.9);
   const fyOf = g => ({ SD30: 3000, SD40: 4000, SD50: 5000 }[g] || 4000);
@@ -1902,8 +1912,8 @@
   // detailBars — จำนวน/ขนาดเหล็กจาก engine ต่อตำแหน่ง · แยก หลัก(2 มุม) + เสริม
   //   ตาม convention [[Convention - Beam Rebar Layout (Main + Extra)]] (pi confirm 2026-06-05)
   function detailBars() {
-    const fromRebar = rb => { if (!rb || !rb.main_bars || !rb.main_bars.length) return { n: 0, size: 'DB16' }; const n = rb.main_bars.reduce((s, t) => s + t[1], 0); return { n, size: rb.main_bars[0][0] }; };
-    const fromStr = s => { const p = (s && s !== '—') ? s.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean) : []; const n = p.reduce((a, mm) => a + (+mm[1]), 0); return { n, size: p.length ? p[0][2] : 'DB16' }; };
+    const fromRebar = rb => { if (!rb || !rb.main_bars || !rb.main_bars.length) return { n: 0, size: 'DB16', list: [] }; const list = rb.main_bars.map(t => [t[0], t[1]]); const n = list.reduce((s, t) => s + t[1], 0); return { n, size: list[0][0], list }; };
+    const fromStr = s => { const p = (s && s !== '—') ? s.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean) : []; const list = p.map(mm => [mm[2], +mm[1]]); const n = list.reduce((a, t) => a + t[1], 0); return { n, size: list.length ? list[0][0] : 'DB16', list }; };
     const stir = sh => ({ bar: (sh && sh.bar) || 'RB9', s1: sh && sh.S1_cm, s2: sh && sh.S2_cm });
     if (state.mode === 'cont') {
       const ac = analyzeContinuous(), o = ac && ac.out;
@@ -2001,10 +2011,10 @@
     if (!compact) labelBar(svg, X(x0) + 6, yBot + 13, `${mainN}-${botSize} หลักล่าง`, '#1D4ED8', 'start');
     c.spans.forEach((sp, si) => {
       const xA = c.nodes[si], xB = c.nodes[si + 1];
-      const extra = Math.max(0, ((bars && bars.spanBot[si]) ? bars.spanBot[si].n : 3) - mainN);
-      if (extra <= 0) return;
+      const gM = (bars && bars.spanBot[si]) ? extraBarGroups(bars.spanBot[si].list) : [];   // คงขนาดผสม (Codex P2)
+      if (!gM.length) return;
       rebar(svg, X(xA + sp / 6), X(xB - sp / 6), yBotX, 'up', true);
-      if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${extra}-${(bars ? bars.spanBot[si].size : botSize)} เสริมกลาง`, '#2563EB', 'middle', 9);
+      if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2563EB', 'middle', 9);
     });
 
     // MAIN-TOP (เต็ม) + EXTRA หัวเสา (−M · L/3 ต่อข้าง)
@@ -2014,21 +2024,20 @@
     const isCont = state.mode === 'cont';
     c.nodes.forEach((nx, i) => {
       const isL = i === 0, isR = i === c.nodes.length - 1, isEnd = isL || isR;
-      let extra = Math.max(0, ((bars && bars.supTop[i]) ? bars.supTop[i].n : 0) - mainN);
-      let esize = (bars && bars.supTop[i] && bars.supTop[i].n > 0) ? bars.supTop[i].size : topSize;
+      let groups = (bars && bars.supTop[i]) ? extraBarGroups(bars.supTop[i].list) : [];   // คงขนาดผสม (Codex P2)
       let nominal = false;
       // EXTRA-END: ปลายคานต่อเนื่อง engine มองเป็น simple (M=0) → ใส่ nominal กันร้าว 2 เส้น ยื่น L/3 (pi 2026-06-05)
       //   ใช้ปลาย "จริง" — tile แตกเป็น sub-beam ราย span (c.endFlags บอกว่า node ไหนเป็นปลายจริงของคานเต็ม)
       //   → หัวเสาในไม่ได้ nominal · ปลายจริงได้ทั้ง full + tile (ตรงกับ BBS · Codex P2)
       const isRealEnd = c.endFlags ? !!c.endFlags[i] : isEnd;
-      if (isCont && isRealEnd && extra <= 0) { extra = 2; esize = topSize; nominal = true; }
-      if (extra <= 0) return;
+      if (isCont && isRealEnd && !groups.length) { groups = [[topSize, 2]]; nominal = true; }
+      if (!groups.length) return;
       const spL = i > 0 ? c.spans[i - 1] : 0, spR = i < c.spans.length ? c.spans[i] : 0;
       let a = isL ? nx : nx - spL / 3, b = isR ? nx : nx + spR / 3;
       a = Math.max(x0, a); b = Math.min(xN, b);
       rebar(svg, X(a), X(b), yTopX, 'down', true);
       const lbl = isRealEnd ? (nominal ? 'เสริมปลาย*' : 'เสริมปลาย') : 'เสริมหัวเสา';
-      if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 11, `+${extra}-${esize} ${lbl}`, '#2563EB', 'middle', 9);
+      if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 11, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
       if (showDim && !compact) dim(svg, X(a), X(b), beamTop - 24, (b - a).toFixed(2));
     });
 
@@ -2241,17 +2250,19 @@
         // เสริมหัวเสา (−M) + เสริมปลาย (nominal) · ยาว L/3
         o.supports.forEach((su, i) => {
           const isEnd = (i === 0 || i === ns);
-          let extra = Math.max(0, (bars.supTop[i].n || 0) - 2), size = bars.supTop[i].n > 0 ? bars.supTop[i].size : topSize;
-          if (isEnd && extra <= 0) { extra = 2; size = topSize; }   // EXTRA-END nominal
-          if (!extra) return;
+          let groups = extraBarGroups(bars.supTop[i].list);   // คงขนาดผสม (Codex P2)
+          if (isEnd && !groups.length) groups = [[topSize, 2]];   // EXTRA-END nominal
+          if (!groups.length) return;
           const spL = i > 0 ? (o.spans[i - 1].L || 0) : 0, spR = i < ns ? (o.spans[i].L || 0) : 0;
           const len = +((isEnd ? (spL || spR) : (spL + spR)) / 3).toFixed(2);
-          rows.push([isEnd ? (i === 0 ? 'TE1' : 'TE2') : `T${i}`, size, extra, len, isEnd ? `บน·เสริมปลาย* ${su.label}` : `บน·เสริมหัวเสา ${su.label}`]);
+          const mark = isEnd ? (i === 0 ? 'TE1' : 'TE2') : `T${i}`;
+          const pos = isEnd ? `บน·เสริมปลาย* ${su.label}` : `บน·เสริมหัวเสา ${su.label}`;
+          groups.forEach((g, k) => rows.push([mark + (groups.length > 1 ? String.fromCharCode(97 + k) : ''), g[0], g[1], len, pos]));
         });
         // เสริมกลาง (+M · ยาว 2L/3) + ปลอก — รายช่วง
         o.spans.forEach((sp, i) => {
-          const extra = Math.max(0, (bars.spanBot[i].n || 0) - 2);
-          if (extra) rows.push([`M${i + 1}`, bars.spanBot[i].size, extra, +((sp.L || 0) * 2 / 3).toFixed(2), `ล่าง·เสริมกลาง ${sp.label}`]);
+          const gM = extraBarGroups(bars.spanBot[i].list), lenM = +((sp.L || 0) * 2 / 3).toFixed(2);   // คงขนาดผสม
+          gM.forEach((g, k) => rows.push([`M${i + 1}${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, `ล่าง·เสริมกลาง ${sp.label}`]));
           const sh = sp.shear || {}, nStir = stirrupCount(sh) * (sh.n_legs === 4 ? 2 : 1);   // 2ป = 2 ชิ้น/station (Codex P2)
           if (nStir) rows.push([`S${i + 1}`, sh.bar || 'RB9', nStir, perim, `ปลอก·ช่วง ${sp.label}`]);
         });
@@ -2259,11 +2270,11 @@
     } else {
       const m = liveData();
       const L = +(ccModel.total || 0).toFixed(2);
-      const sb = bars ? bars.spanBot[0] : { n: 3, size: 'DB16' };
+      const sb = bars ? bars.spanBot[0] : { n: 3, size: 'DB16', list: [['DB16', 3]] };
       rows.push(['MT', sb.size, 2, L, 'บน·หลัก (ยึดปลอก)']);
       rows.push(['MB', sb.size, 2, L, 'ล่าง·หลัก·เต็มคาน']);
-      const extra = Math.max(0, (sb.n || 0) - 2);
-      if (extra) rows.push(['M1', sb.size, extra, +(L * 2 / 3).toFixed(2), 'ล่าง·เสริมกลาง']);
+      const gM = extraBarGroups(sb.list), lenM = +(L * 2 / 3).toFixed(2);   // คงขนาดผสม (Codex P2)
+      gM.forEach((g, k) => rows.push([`M1${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, 'ล่าง·เสริมกลาง']));
       if (m.stirN) rows.push(['S1', m.stirBar || 'RB9', m.stirN * (m.stirLegs === 4 ? 2 : 1), perim, 'ปลอกปิด' + (m.stirLegs === 4 ? ' (2ป·4ขา)' : '')]);   // 2ป = 2 ชิ้น/station (Codex P2)
     }
     $('#bbsRows').innerHTML = rows.map(r => `<tr>
