@@ -94,6 +94,24 @@ check("A cut_half = 5/4 = 1.25", near(tops5.get("A", {}).get("cut_half_m", 0), 1
 check("interior support B ยังอยู่ (exterior_cantilever False)",
       tops5.get("B", {}).get("exterior_cantilever") is False, tops5.get("B", {}).get("exterior_cantilever"))
 
+# ---- Case 6 · gating: UDL equal → applicable=True · จุดโหลด/ช่วงไม่เท่า → False (Codex P2) ----
+print("\nCase 6 · gating applicable")
+check("UDL ช่วงเท่า [5,6,5] → applicable=True", c["applicable"] is True, c["applicable"])
+check("UDL ช่วงเท่า → ไม่มี warnings", len(c["warnings"]) == 0, c["warnings"])
+# มีจุดโหลด → applicable=False
+inp_pl = calc.ContinuousBeamInput(
+    b=30, h=55, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9,
+    spans=[calc.SpanInput(L=5, DL=20, LL=12, point_loads=[calc.PointLoad(kind="LL", P=50, x=2.5)]),
+           calc.SpanInput(L=5, DL=20, LL=12, point_loads=[])],
+    load_combo="1.4D+1.7L")
+cpl = calc.design_continuous_beam_exact(inp_pl)["curtailment"]
+check("มีจุดโหลด → applicable=False", cpl["applicable"] is False, cpl["applicable"])
+check("มีจุดโหลด → warning เรื่องจุดโหลด", any("จุดโหลด" in w for w in cpl["warnings"]), cpl["warnings"])
+# ช่วงไม่เท่ามาก [3,9] UDL → applicable=False
+cuneq = design([3.0, 9.0], h=60, dl=8, ll=5)["curtailment"]
+check("ช่วงไม่เท่า max/min=3 → applicable=False", cuneq["applicable"] is False, cuneq["applicable"])
+check("ช่วงไม่เท่า → warning เรื่องช่วง", any("ช่วง" in w for w in cuneq["warnings"]), cuneq["warnings"])
+
 # ---- Case 4 · citations + method ครบ ----
 print("\nCase 4 · metadata")
 check("method อ้าง รูปที่ 8.32", "8.32" in c["method"], c["method"])

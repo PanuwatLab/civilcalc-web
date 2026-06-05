@@ -1977,7 +1977,7 @@ def _design_one_cantilever(cant, side, inp, adj_span_L):
 
 def compute_curtailment(spans: list, supports: list, Ls: list,
                         h_cm: float, cover_cm: float, d_stirrup_cm: float,
-                        db_default_cm: float) -> dict:
+                        db_default_cm: float, point_loads_per_span: list = None) -> dict:
     """ระยะหยุดเหล็กตามมาตรฐาน รูปที่ 8.32 (มงคล C8 Bond · p215) + extension check.
 
     New module · อ่าน output ที่ design เสร็จแล้ว (spans/supports) → คืนจุดตัดจริงต่อ bar group
@@ -2050,9 +2050,22 @@ def compute_curtailment(spans: list, supports: list, Ls: list,
                      f"≥1/4 ยื่นเข้าเสา 0.15 ม. · เลยจุดดัดกลับ ≥{ext:.2f} ม."),
         })
 
+    # เงื่อนไขใช้ได้ของ รูปที่ 8.32: UDL + ช่วงใกล้เคียงกัน (DRMK p215) · นอกเงื่อนไข = flag (Codex P2)
+    #   จุดโหลด/ช่วงไม่เท่า → จุดดัดกลับเลื่อนจาก UDL · ค่า L/4·L/8 เป็นค่าประมาณ ต้องตรวจ envelope จริง
+    warns = []
+    if any(len(p or []) > 0 for p in (point_loads_per_span or [])):
+        warns.append("⚠️ มีจุดโหลด → จุดดัดกลับเลื่อนจาก UDL · ค่าตัด รูปที่ 8.32 เป็นค่าประมาณ · "
+                     "วิศวกรต้องตรวจจุดหยุดเหล็กจาก moment envelope จริง")
+    if len(Ls) >= 2 and min(Ls) > 0 and (max(Ls) / min(Ls)) > 1.5:
+        warns.append(f"⚠️ ช่วงไม่ใกล้เคียงกัน (ยาวสุด/สั้นสุด = {max(Ls) / min(Ls):.2f} > 1.5) → "
+                     f"รูปที่ 8.32 ใช้กับช่วงใกล้เท่า · ตรวจจุดดัดกลับจริง")
+    applicable = not warns
+
     return {
         "method": "มาตรฐานหยุดเหล็ก รูปที่ 8.32 (มงคล C8 Bond) · ช่วงใกล้เท่า + UDL",
         "datum": "ระยะ ม. · เหล็กบนวัดจากหน้าเสา · เหล็กล่าง L/8 วัดจากศูนย์กลางเสา",
+        "applicable": applicable,   # True = เข้าเงื่อนไข รูปที่ 8.32 (UDL + ช่วงใกล้เท่า) · False = ดู warnings
+        "warnings": warns,
         "top": top_out, "bottom": bot_out,
         "citations": [
             "หยุดเหล็กบน: ครึ่งยื่น L/4 · ≥1/3 ยื่น max(L₁/3,L₂/3) (มงคล รูปที่ 8.32)",
@@ -2192,7 +2205,8 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         "spans": spans_out, "supports": supports_out, "reactions": reactions,
         "uplift_supports": uplift, "recommended_top": rec_top, "passes": all_pass,
         "curtailment": compute_curtailment(spans_out, supports_out, Ls,
-                                           inp.h, inp.cover, inp.d_stirrup, inp.db_assume),
+                                           inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
+                                           point_loads_per_span=pts),
         "support_moments_tonm": [round(m * KNM_TO_TONM, 3) for m in Ms],
         "total_L": round(total_L, 4), "node_x": node_x, "span_loads": span_loads,
         "diagram": {"x": diag_x, "V_ton": diag_V, "M_tonm": diag_M},
