@@ -649,7 +649,7 @@
                   </thead>
                   <tbody id="bbsRows" class="divide-y divide-border"></tbody>
                 </table>
-                <p class="mt-3 text-[12px] text-ink-muted">* ความยาว = ระยะช่วง/cutoff (ไม่รวมระยะทาบ·ระยะงอ·ฝังยึด) · เหล็กบนยื่น L/4 ต่อข้าง · ปลอก = เส้นรอบรูป · วิศวกร ก.ว. ตรวจ detailing จริง</p>
+                <p class="mt-3 text-[12px] text-ink-muted">* ความยาว = ระยะช่วง/cutoff (ไม่รวมระยะทาบ·ระยะงอ·ฝังยึด) · หลัก(MT/MB)วิ่งเต็มคาน · เสริมหัวเสา(TS)ยื่น L/3 ต่อข้าง · เสริมกลาง(M)ยาว 2L/3 · เสริมปลาย(TE)nominal · ปลอก = เส้นรอบรูป · schematic guide · วิศวกร ก.ว. ตรวจ detailing จริง</p>
               </div>
             </div>
           </div>
@@ -2018,14 +2018,16 @@
       let esize = (bars && bars.supTop[i] && bars.supTop[i].n > 0) ? bars.supTop[i].size : topSize;
       let nominal = false;
       // EXTRA-END: ปลายคานต่อเนื่อง engine มองเป็น simple (M=0) → ใส่ nominal กันร้าว 2 เส้น ยื่น L/3 (pi 2026-06-05)
-      //   เฉพาะ full view (!compact) — tile แตกเป็น sub-beam ราย span ทำให้หัวเสาในกลายเป็น "ปลาย" ปลอม (Codex P2)
-      if (isCont && isEnd && extra <= 0 && !compact && opts.callouts) { extra = 2; esize = topSize; nominal = true; }
+      //   ใช้ปลาย "จริง" — tile แตกเป็น sub-beam ราย span (c.endFlags บอกว่า node ไหนเป็นปลายจริงของคานเต็ม)
+      //   → หัวเสาในไม่ได้ nominal · ปลายจริงได้ทั้ง full + tile (ตรงกับ BBS · Codex P2)
+      const isRealEnd = c.endFlags ? !!c.endFlags[i] : isEnd;
+      if (isCont && isRealEnd && extra <= 0) { extra = 2; esize = topSize; nominal = true; }
       if (extra <= 0) return;
       const spL = i > 0 ? c.spans[i - 1] : 0, spR = i < c.spans.length ? c.spans[i] : 0;
       let a = isL ? nx : nx - spL / 3, b = isR ? nx : nx + spR / 3;
       a = Math.max(x0, a); b = Math.min(xN, b);
       rebar(svg, X(a), X(b), yTopX, 'down', true);
-      const lbl = isEnd ? (nominal ? 'เสริมปลาย*' : 'เสริมปลาย') : 'เสริมหัวเสา';
+      const lbl = isRealEnd ? (nominal ? 'เสริมปลาย*' : 'เสริมปลาย') : 'เสริมหัวเสา';
       if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 11, `+${extra}-${esize} ${lbl}`, '#2563EB', 'middle', 9);
       if (showDim && !compact) dim(svg, X(a), X(b), beamTop - 24, (b - a).toFixed(2));
     });
@@ -2104,6 +2106,7 @@
       head.innerHTML = `<span class="text-[13px] font-semibold">ช่วง ${si + 1}</span> <span class="text-ink-muted text-[12px] mono">${sp.toFixed(2)} ม</span>`;
       card.appendChild(head);
       const sub = { spans: [sp], nodes: [c.nodes[si], c.nodes[si + 1]], h: c.h, b: c.b, col: c.col,
+        endFlags: [si === 0, si === c.spans.length - 1],   // node ไหนเป็นปลายจริงของคานเต็ม (Codex P2)
         bars: c.bars ? { spanBot: [c.bars.spanBot[si]], supTop: [c.bars.supTop[si], c.bars.supTop[si + 1]] } : null };
       const { svg } = buildElevationSVG(sub, { compact: true, marginX: 22, pxm: sharedPxm, showDim: true });
       svg.style.maxWidth = '100%'; svg.style.height = 'auto'; card.appendChild(svg);
