@@ -1004,10 +1004,15 @@
   // จำนวนปลอกตามยาว = 2·(โซนหัวเสา L_S1/S1) + (กลางช่วง L_S2/S2) + 1 ปลอกปิดท้าย
   //   (engine n_stirrups = n_legs//2 ไม่ใช่จำนวนตามยาว · ต้องคำนวณจาก zone เอง · เรขาคณิตล้วน)
   const stirrupCount = sh => {
-    if (!sh) return 0;
-    const n1 = sh.S1_cm ? (sh.L_S1_cm || 0) / sh.S1_cm : 0;
-    const n2 = sh.S2_cm ? (sh.L_S2_cm || 0) / sh.S2_cm : 0;
-    const n = Math.ceil(2 * n1 + n2) + 1;   // ceil — กันปัดลงแล้วระยะเรียงเกิน (ปลอกน้อยไป · Codex P2)
+    if (!sh || !sh.S1_cm) return 0;
+    const l1 = sh.L_S1_cm || 0, l2 = sh.L_S2_cm || 0, s1 = sh.S1_cm, s2 = sh.S2_cm;
+    let n;
+    if (sh.uniform || !s2 || Math.abs(s2 - s1) < 0.01 || !l2) {
+      n = Math.ceil((2 * l1 + l2) / s1) + 1;   // uniform → ทั้งคาน ปัดครั้งเดียว
+    } else {
+      // โซนแยก: ปัดขึ้นแต่ละโซนอิสระ (กันเศษ .5+.5 หักล้างแล้วปลอกขาด · Codex P2)
+      n = 2 * Math.ceil(l1 / s1) + Math.ceil(l2 / s2) + 1;
+    }
     return n > 1 ? n : 0;
   };
   // เหล็กเสริม = bars ที่เหลือหลังหัก 2 เส้นหลัก (เบอร์ใหญ่สุด) · คงขนาดผสมไว้ (ไม่ทิ้งเบอร์เล็ก · Codex P2)
