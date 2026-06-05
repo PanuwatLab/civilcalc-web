@@ -1975,6 +1975,106 @@ def _design_one_cantilever(cant, side, inp, adj_span_L):
     }
 
 
+def compute_curtailment(spans: list, supports: list, Ls: list,
+                        h_cm: float, cover_cm: float, d_stirrup_cm: float,
+                        db_default_cm: float, point_loads_per_span: list = None) -> dict:
+    """ระยะหยุดเหล็กตามมาตรฐาน รูปที่ 8.32 (มงคล C8 Bond · p215) + extension check.
+
+    New module · อ่าน output ที่ design เสร็จแล้ว (spans/supports) → คืนจุดตัดจริงต่อ bar group
+    ไม่แตะ flexure/shear core (zero-regression by construction · parity-safe).
+    ระยะหน่วย ม. · top วัดจากหน้าเสา · bottom L/8 วัดจากศูนย์กลางเสา.
+    ที่มา: [[Formula - Bar Curtailment & Cutoff Positions (RC-SDM)]] · ALL_SDM_BasicBOOK_DRMK บท 8.
+    """
+    n = len(Ls)
+
+    def _db_from(elem):  # ขนาดเหล็กใหญ่สุด (ซม.) · "DB25" → 2.5
+        rb = elem.get("rebar") if elem else None
+        if rb and getattr(rb, "main_bars", None):
+            dias = []
+            for name, _c in rb.main_bars:
+                digits = "".join(ch for ch in str(name) if ch.isdigit())
+                if digits:
+                    dias.append(int(digits) / 10.0)
+            if dias:
+                return max(dias)
+        return db_default_cm
+
+    def _d_from(elem):
+        if elem and elem.get("d_actual"):
+            return elem["d_actual"]
+        return compute_effective_depth(h_cm, cover_cm, d_stirrup_cm, db_default_cm)
+
+    top_out = []
+    for s in supports:
+        # รวมทุก support ที่มีเหล็กบน · interior = 2 ข้าง · exterior+คานยื่น = 1 ข้าง (ช่วงใน)
+        #   support ปลายแบบธรรมดา (ไม่มีคานยื่น) M_neg=0 → top=None → ถูกข้ามเอง (Codex P2)
+        if not s.get("top") or not s["top"].get("rebar"):
+            continue
+        idx = ord(s["label"]) - ord("A")
+        adj = []
+        if idx - 1 >= 0:
+            adj.append(Ls[idx - 1])
+        if idx < n:
+            adj.append(Ls[idx])
+        if not adj:                                 # ไม่มีช่วงข้างเคียง (ไม่ควรเกิด) → ข้าม
+            continue
+        is_ext = (idx == 0 or idx == n)             # exterior + มี top = ฝั่งนอกเป็นคานยื่น
+        d_cm, db_cm = _d_from(s["top"]), _db_from(s["top"])
+        Ln = max(adj)                               # clear span ≈ span (engine ไม่โมเดลกว้างเสา · conservative)
+        ext = max(d_cm / 100.0, 12.0 * db_cm / 100.0, Ln / 16.0)   # ม. · เลยจุดดัดกลับ (บน)
+        cut_half = max(adj) / 4.0                   # ครึ่งบน ยื่น L/4 (เข้าช่วงใน)
+        cut_third = max(max(adj) / 3.0, cut_half + ext)            # ≥1/3 ยื่น L/3 + ต้องเลยจุดดัดกลับ
+        top_out.append({
+            "support": s["label"], "exterior_cantilever": is_ext,
+            "L_left_m": round(Ls[idx - 1], 3) if idx - 1 >= 0 else None,
+            "L_right_m": round(Ls[idx], 3) if idx < n else None,
+            "cut_half_m": round(cut_half, 3), "cut_third_m": round(cut_third, 3),
+            "ext_min_m": round(ext, 3),
+            "note": (f"เหล็กบน {s.get('top_bars', '')}: ครึ่งหนึ่งยื่น L/4={cut_half:.2f} ม. · "
+                     f"≥1/3 ยื่น {cut_third:.2f} ม. (เลยจุดดัดกลับ ≥{ext:.2f}) · วัดจากหน้าเสา"
+                     + (" เข้าช่วงใน · ฝั่งคานยื่นเหล็กบนวิ่งเต็ม + Ld (ดู cantilevers)" if is_ext else "")),
+        })
+
+    bot_out = []
+    for sp in spans:
+        if not sp.get("bottom") or not sp["bottom"].get("rebar"):
+            continue
+        L = sp["L"]
+        d_cm, db_cm = _d_from(sp["bottom"]), _db_from(sp["bottom"])
+        ext = max(d_cm / 100.0, 12.0 * db_cm / 100.0)              # ม. · เลยจุดดัดกลับ (ล่าง)
+        bot_out.append({
+            "span": sp["label"], "L_m": round(L, 3),
+            "cut_eighth_m": round(L / 8.0, 3), "into_support_m": 0.15,
+            "ext_min_m": round(ext, 3),
+            "note": (f"เหล็กล่าง {sp.get('bottom_bars', '')}: ครึ่งหนึ่งตัดที่ L/8={L / 8.0:.2f} ม.(จากศูนย์เสา) · "
+                     f"≥1/4 ยื่นเข้าเสา 0.15 ม. · เลยจุดดัดกลับ ≥{ext:.2f} ม."),
+        })
+
+    # เงื่อนไขใช้ได้ของ รูปที่ 8.32: UDL + ช่วงใกล้เคียงกัน (DRMK p215) · นอกเงื่อนไข = flag (Codex P2)
+    #   จุดโหลด/ช่วงไม่เท่า → จุดดัดกลับเลื่อนจาก UDL · ค่า L/4·L/8 เป็นค่าประมาณ ต้องตรวจ envelope จริง
+    warns = []
+    if any(len(p or []) > 0 for p in (point_loads_per_span or [])):
+        warns.append("⚠️ มีจุดโหลด → จุดดัดกลับเลื่อนจาก UDL · ค่าตัด รูปที่ 8.32 เป็นค่าประมาณ · "
+                     "วิศวกรต้องตรวจจุดหยุดเหล็กจาก moment envelope จริง")
+    if len(Ls) >= 2 and min(Ls) > 0 and (max(Ls) / min(Ls)) > 1.5:
+        warns.append(f"⚠️ ช่วงไม่ใกล้เคียงกัน (ยาวสุด/สั้นสุด = {max(Ls) / min(Ls):.2f} > 1.5) → "
+                     f"รูปที่ 8.32 ใช้กับช่วงใกล้เท่า · ตรวจจุดดัดกลับจริง")
+    applicable = not warns
+
+    return {
+        "method": "มาตรฐานหยุดเหล็ก รูปที่ 8.32 (มงคล C8 Bond) · ช่วงใกล้เท่า + UDL",
+        "datum": "ระยะ ม. · เหล็กบนวัดจากหน้าเสา · เหล็กล่าง L/8 วัดจากศูนย์กลางเสา",
+        "applicable": applicable,   # True = เข้าเงื่อนไข รูปที่ 8.32 (UDL + ช่วงใกล้เท่า) · False = ดู warnings
+        "warnings": warns,
+        "top": top_out, "bottom": bot_out,
+        "citations": [
+            "หยุดเหล็กบน: ครึ่งยื่น L/4 · ≥1/3 ยื่น max(L₁/3,L₂/3) (มงคล รูปที่ 8.32)",
+            "หยุดเหล็กล่าง: ครึ่งตัดที่ L/8 · ≥1/4 ยื่นเข้าเสา 15 ซม. (มงคล รูปที่ 8.32)",
+            "ยื่นเลยจุดดัดกลับ ≥ max(d, 12db) ล่าง · max(d, 12db, Ln/16) บน (ว.ส.ท./ACI · มงคล C8 หน้า 210-215)",
+        ],
+    }
+
+
 def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
     """EXACT continuous-beam design (Three-Moment + point loads + cantilevers). Returns design + diagram data."""
     az = analyze_continuous_beam(inp)
@@ -2104,6 +2204,10 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         "end_left": inp.end_left, "end_right": inp.end_right,
         "spans": spans_out, "supports": supports_out, "reactions": reactions,
         "uplift_supports": uplift, "recommended_top": rec_top, "passes": all_pass,
+        "curtailment": compute_curtailment(
+            spans_out, supports_out, Ls, inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
+            # รวมจุดโหลดคานยื่นด้วย: คานยื่นมีจุดโหลด → exterior support moment ≠ UDL → flag (Codex P2)
+            point_loads_per_span=(list(pts) + [c["pts"] for c in (cant_L, cant_R) if c and c.get("pts")])),
         "support_moments_tonm": [round(m * KNM_TO_TONM, 3) for m in Ms],
         "total_L": round(total_L, 4), "node_x": node_x, "span_loads": span_loads,
         "diagram": {"x": diag_x, "V_ton": diag_V, "M_tonm": diag_M},
