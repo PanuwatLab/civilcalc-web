@@ -1435,6 +1435,8 @@
     },
     setPoints(arr) { ccModel.points = (arr || []).map((p, i) => ({ id: 900 + i, x: p.x, P: p.P, kind: p.kind === 'DL' ? 'DL' : 'LL' })); },
     recompute, render, renderWork,
+    drawMainSections, drawDetailing,
+    setCtab(t) { state.ctab = t; },
     res: () => state.res,
     lastInp: () => state._lastInp,
     engine: () => window.__civilCalc,
@@ -2191,7 +2193,8 @@
 
   /* ── cross-sections (rcBeamSection style) ── */
   function buildSection(loc) {
-    const m = state.mode === 'cont' ? MOCK.cont : MOCK.single;
+    const m = liveData();   // Phase 4B fix · ป้าย b×h = engine จริง (เดิมแช่ MOCK → รูปหน้าตัดโชว์ขนาดผิด) · bar counts ยัง schematic
+
     const W = 130, Hh = 150, pad = 22;
     const bw = W - pad * 2, bh = Hh - pad * 2;
     const svg = svgEl('svg', { viewBox: `0 0 ${W} ${Hh}`, class: 'svg-fit', 'font-family': 'JetBrains Mono, monospace' });
@@ -5038,6 +5041,107 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
     })();
   }
   console.log('[parity] window.runTests() — ตรวจ 6-param parity 2 โหมด');
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Phase 4B · Design-Drift Sensor — runDesignAudit()
+     ตรวจ "โครงสร้าง/สไตล์ UI ยังไม่เพี้ยน" (คนละเรื่องกับ runTests ที่ตรวจ
+     ค่าตัวเลข) — design tokens · verdict card · กราฟ/หน้าตัด/ตารางเรนเดอร์ ·
+     mode-switch · แท็บ detailing (BBS/elevation/หน้าตัด) populated · ทั้ง 2 โหมด
+     SENSOR-ONLY · index-only · อ่าน DOM อย่างเดียว ไม่แก้/ไม่แตะ engine
+     เรียก window.runDesignAudit() ใน console
+     ═══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function designAudit() {
+  const TT = () => window.__civilTest;
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const hasSvg = sel => { const h = document.querySelector(sel); return !!(h && h.querySelector('svg')); };
+  const rowsIn = sel => { const h = document.querySelector(sel); return h ? h.querySelectorAll('tr').length : 0; };
+
+  // เตรียมโหมด: set → recompute → render → (detailing) draw · คืนหลัง inspect
+  function prep(mode) {
+    TT().setMode(mode);
+    // ใช้หน้าตัด non-MOCK (≠ 25×50/30×50) → drift probe จับได้จริงถ้า display แช่ MOCK
+    TT().setSection(mode === 'cont' ? 40 : 35, mode === 'cont' ? 70 : 60, 240, 'SD40');
+    TT().setPoints([]);
+    TT().recompute(); TT().render(); TT().renderWork();
+    TT().drawMainSections();
+    TT().setCtab('detail'); TT().drawDetailing();
+  }
+
+  window.runDesignAudit = async function runDesignAudit() {
+    const checks = [];
+    const A = (name, cond, detail) => checks.push({ name, pass: !!cond, detail: detail == null ? '' : String(detail) });
+    const snap = TT() && TT().snapshot ? TT().snapshot() : null;
+    try {
+      if (!TT()) { console.warn('[design-audit] __civilTest ยังไม่พร้อม'); return null; }
+
+      // ── A · design tokens (drift guard) ──
+      ['--ink', '--accent', '--pass', '--fail', '--rebar', '--concrete'].forEach(v =>
+        A('token ' + v, css(v).length > 0, css(v)));
+
+      // ── B · render ทั้ง 2 โหมด ──
+      ['single', 'cont'].forEach(mode => {
+        prep(mode);
+        const lbl = mode === 'cont' ? 'ต่อเนื่อง' : 'ช่วงเดียว';
+        A(`${lbl}: กราฟ V/M เรนเดอร์ (#ccDiagHost svg)`, hasSvg('#ccDiagHost'));
+        A(`${lbl}: หน้าตัดเรนเดอร์ (#sectionMain svg)`, hasSvg('#sectionMain'));
+        const secSvg = document.querySelector('#sectionMain svg');
+        A(`${lbl}: หน้าตัด SVG responsive (svg-fit/viewBox)`,
+          !secSvg || secSvg.getAttribute('viewBox') != null, secSvg ? secSvg.getAttribute('viewBox') : 'n/a');
+        A(`${lbl}: ตารางสรุปมีแถว (#summaryRows)`, rowsIn('#summaryRows') >= 1, rowsIn('#summaryRows') + ' rows');
+        // verdict card: 1 ใบ visible
+        const vp = document.querySelector('#verdictPass'), vf = document.querySelector('#verdictFail');
+        const visP = vp && !vp.classList.contains('step-hidden'), visF = vf && !vf.classList.contains('step-hidden');
+        A(`${lbl}: verdict card แสดง 1 ใบ (pass XOR fail)`, !!visP !== !!visF, 'pass=' + !!visP + ' fail=' + !!visF);
+        // headline metric ตรง engine b×h
+        const res = TT().res(), bh = document.querySelector('#ls_bh');
+        A(`${lbl}: headline b×h ตรง engine (#ls_bh)`,
+          !res || !res.b || (bh && bh.textContent.indexOf(res.b + '×' + res.h) !== -1),
+          bh ? bh.textContent : 'n/a');
+        // detailing tab populated
+        A(`${lbl}: รูปด้านคานเรนเดอร์ (#ccDrawHost svg)`, hasSvg('#ccDrawHost'));
+        A(`${lbl}: หน้าตัด detailing 3 ช่อง (#sectionsRow svg)`,
+          document.querySelectorAll('#sectionsRow svg').length >= 1,
+          document.querySelectorAll('#sectionsRow svg').length + ' svg');
+        const bbsTxt = (document.querySelector('#bbsRows') || {}).textContent || '';
+        A(`${lbl}: BBS populated (ไม่ใช่ placeholder "รอผลคำนวณ")`,
+          rowsIn('#bbsRows') >= 1 && !/รอผลคำนวณ/.test(bbsTxt), rowsIn('#bbsRows') + ' rows');
+        // drift probe: section b×h label == engine (buildSection เคยใช้ MOCK)
+        const secTxt = (document.querySelector('#sectionMain') || {}).textContent || '';
+        A(`${lbl}: หน้าตัดป้าย b×h ตรง engine (drift probe)`,
+          !res || !res.b || secTxt.indexOf(res.b + '×' + res.h) !== -1,
+          'engine=' + (res ? res.b + '×' + res.h : '?') + ' · section="' + secTxt.replace(/\s+/g, '').slice(0, 24) + '"');
+      });
+
+      // ── C · mode-switch integrity (applyMode toggle) ──
+      TT().setMode('cont'); TT().render();
+      const contEl = document.querySelector('[data-mode-cont]'), singEl = document.querySelector('[data-mode-single]');
+      A('mode-switch: cont → data-mode-cont visible',
+        !contEl || !contEl.classList.contains('step-hidden'));
+      A('mode-switch: cont → data-mode-single hidden',
+        !singEl || singEl.classList.contains('step-hidden'));
+    } finally {
+      if (snap && TT()) { TT().restore(snap); TT().setCtab('work'); TT().render(); }
+    }
+
+    const passed = checks.filter(c => c.pass).length, failed = checks.length - passed;
+    console.log(`[design-audit] ${passed}/${checks.length} · ` +
+      (failed ? '⚠ DRIFT: ' + checks.filter(c => !c.pass).map(c => c.name).join(' | ') : '✓ ALL CONSISTENT'));
+    if (failed) try { console.table(checks.filter(c => !c.pass)); } catch (e) {}
+    window.__auditResults = { total: checks.length, passed, failed, fails: checks.filter(c => !c.pass), checks };
+    return window.__auditResults;
+  };
+
+  // auto-run ?audit=1 (รอ engine + test hook พร้อม)
+  if (new URLSearchParams(location.search).get('audit') === '1') {
+    (function autoRun() {
+      if (!(window.__civilCalc && window.__civilCalc.ready && window.__civilTest)) return setTimeout(autoRun, 200);
+      setTimeout(() => window.runDesignAudit(), 600);
+    })();
+  }
+  console.log('[design-audit] window.runDesignAudit() — ตรวจ UI drift 2 โหมด');
 })();
 </script>
 </body>
