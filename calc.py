@@ -2204,9 +2204,10 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         "end_left": inp.end_left, "end_right": inp.end_right,
         "spans": spans_out, "supports": supports_out, "reactions": reactions,
         "uplift_supports": uplift, "recommended_top": rec_top, "passes": all_pass,
-        "curtailment": compute_curtailment(spans_out, supports_out, Ls,
-                                           inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
-                                           point_loads_per_span=pts),
+        "curtailment": compute_curtailment(
+            spans_out, supports_out, Ls, inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
+            # รวมจุดโหลดคานยื่นด้วย: คานยื่นมีจุดโหลด → exterior support moment ≠ UDL → flag (Codex P2)
+            point_loads_per_span=(list(pts) + [c["pts"] for c in (cant_L, cant_R) if c and c.get("pts")])),
         "support_moments_tonm": [round(m * KNM_TO_TONM, 3) for m in Ms],
         "total_L": round(total_L, 4), "node_x": node_x, "span_loads": span_loads,
         "diagram": {"x": diag_x, "V_ton": diag_V, "M_tonm": diag_M},

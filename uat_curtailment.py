@@ -112,6 +112,27 @@ cuneq = design([3.0, 9.0], h=60, dl=8, ll=5)["curtailment"]
 check("ช่วงไม่เท่า max/min=3 → applicable=False", cuneq["applicable"] is False, cuneq["applicable"])
 check("ช่วงไม่เท่า → warning เรื่องช่วง", any("ช่วง" in w for w in cuneq["warnings"]), cuneq["warnings"])
 
+# ---- Case 7 · คานยื่นมีจุดโหลด (ช่วงใน UDL) → applicable=False (Codex P2) ----
+print("\nCase 7 · คานยื่นมีจุดโหลด → applicable=False")
+inp7 = calc.ContinuousBeamInput(
+    b=30, h=55, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9,
+    spans=[calc.SpanInput(L=5, DL=20, LL=12, point_loads=[]),
+           calc.SpanInput(L=5, DL=20, LL=12, point_loads=[])],
+    load_combo="1.4D+1.7L",
+    left_cantilever={"L": 2.0, "DL": 10, "LL": 5, "point_loads": [{"kind": "LL", "P": 40, "x": 1.8}]})
+c7 = calc.design_continuous_beam_exact(inp7)["curtailment"]
+check("คานยื่นมีจุดโหลด → applicable=False", c7["applicable"] is False, c7["applicable"])
+check("คานยื่นมีจุดโหลด → warning เรื่องจุดโหลด", any("จุดโหลด" in w for w in c7["warnings"]), c7["warnings"])
+# คานยื่น UDL ล้วน (ไม่มีจุดโหลด) + ช่วงในเท่า → ยัง applicable=True
+inp7b = calc.ContinuousBeamInput(
+    b=30, h=55, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9,
+    spans=[calc.SpanInput(L=5, DL=20, LL=12, point_loads=[]),
+           calc.SpanInput(L=5, DL=20, LL=12, point_loads=[])],
+    load_combo="1.4D+1.7L",
+    left_cantilever={"L": 1.5, "DL": 12, "LL": 6, "point_loads": []})
+c7b = calc.design_continuous_beam_exact(inp7b)["curtailment"]
+check("คานยื่น UDL ล้วน + ช่วงเท่า → applicable=True", c7b["applicable"] is True, c7b["applicable"])
+
 # ---- Case 4 · citations + method ครบ ----
 print("\nCase 4 · metadata")
 check("method อ้าง รูปที่ 8.32", "8.32" in c["method"], c["method"])
