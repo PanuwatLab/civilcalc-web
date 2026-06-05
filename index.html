@@ -1436,7 +1436,17 @@
     setPoints(arr) { ccModel.points = (arr || []).map((p, i) => ({ id: 900 + i, x: p.x, P: p.P, kind: p.kind === 'DL' ? 'DL' : 'LL' })); },
     recompute, render, renderWork,
     drawMainSections, drawDetailing,
+    ctab: () => state.ctab,
     setCtab(t) { state.ctab = t; },
+    // selectCtab — สลับแท็บผ่าน DOM-updating path เดียวกับ click handler (sync state+DOM · Codex P3)
+    selectCtab(t) {
+      state.ctab = t;
+      document.querySelectorAll('.calc-tab').forEach(x => x.setAttribute('aria-selected', String(x.dataset.ctab === t)));
+      const w = document.getElementById('ctab-work'), d = document.getElementById('ctab-detail');
+      if (w) w.classList.toggle('step-hidden', t !== 'work');
+      if (d) d.classList.toggle('step-hidden', t !== 'detail');
+      if (t === 'detail') drawDetailing();
+    },
     res: () => state.res,
     lastInp: () => state._lastInp,
     engine: () => window.__civilCalc,
@@ -5074,6 +5084,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
     const checks = [];
     const A = (name, cond, detail) => checks.push({ name, pass: !!cond, detail: detail == null ? '' : String(detail) });
     const snap = TT() && TT().snapshot ? TT().snapshot() : null;
+    const origCtab = TT() && TT().ctab ? TT().ctab() : 'work';   // restore แท็บเดิม (Codex P3)
     try {
       if (!TT()) { console.warn('[design-audit] __civilTest ยังไม่พร้อม'); return null; }
 
@@ -5123,7 +5134,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('mode-switch: cont → data-mode-single hidden',
         !singEl || singEl.classList.contains('step-hidden'));
     } finally {
-      if (snap && TT()) { TT().restore(snap); TT().setCtab('work'); TT().render(); }
+      if (snap && TT()) { TT().restore(snap); TT().render(); TT().selectCtab(origCtab); }   // restore state+แท็บเดิม ผ่าน DOM-updating path
     }
 
     const passed = checks.filter(c => c.pass).length, failed = checks.length - passed;
