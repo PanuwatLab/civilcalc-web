@@ -1,0 +1,88 @@
+# -*- coding: utf-8 -*-
+"""UAT · compute_curtailment() — ระยะหยุดเหล็กตามมาตรฐาน รูปที่ 8.32 (มงคล C8 Bond).
+
+Verify closed-form ตามกฎ [[Formula - Bar Curtailment & Cutoff Positions (RC-SDM)]]:
+  top  : cut_half = max(Ll,Lr)/4 · cut_third = max(maxL/3, cut_half+ext) · ext = max(d, 12db, Ln/16)
+  bot  : cut_eighth = L/8 · into_support = 0.15 · ext = max(d, 12db)
+ไม่แตะ engine core · zero-regression แยกไฟล์ (uat_recheck/uat_continuous คุม core).
+"""
+import sys
+sys.stdout.reconfigure(encoding="utf-8")
+import calc
+
+PASS = 0
+FAIL = 0
+
+
+def check(name, cond, got=None, exp=None):
+    global PASS, FAIL
+    if cond:
+        PASS += 1
+        print(f"  [PASS] {name}")
+    else:
+        FAIL += 1
+        print(f"  [FAIL] {name} · got={got} exp={exp}")
+
+
+def near(a, b, tol=0.01):
+    return abs(a - b) <= tol
+
+
+def design(spans, b=30, h=55, fc=240, fy=4000, cover=4, db=2.5, dstir=0.9, dl=20, ll=12):
+    inp = calc.ContinuousBeamInput(
+        b=b, h=h, fc=fc, fy=fy, cover=cover, db_assume=db, d_stirrup=dstir,
+        spans=[calc.SpanInput(L=L, DL=dl, LL=ll, point_loads=[]) for L in spans],
+        load_combo="1.4D+1.7L")
+    return calc.design_continuous_beam_exact(inp)
+
+
+print("=" * 60)
+print(" UAT · compute_curtailment (รูปที่ 8.32 · มงคล C8)")
+print("=" * 60)
+
+# ---- Case 1 · 3-span (5,6,5) — กฎพื้นฐานทุกตัว ----
+print("\nCase 1 · 3-span [5,6,5]")
+c = design([5.0, 6.0, 5.0])["curtailment"]
+check("มี 2 interior support (B,C) ใน top", len(c["top"]) == 2, len(c["top"]))
+check("มี 3 span ใน bottom", len(c["bottom"]) == 3, len(c["bottom"]))
+tB = next(t for t in c["top"] if t["support"] == "B")
+check("top B cut_half = max(5,6)/4 = 1.5", near(tB["cut_half_m"], 1.5), tB["cut_half_m"], 1.5)
+check("top B cut_third = max(6/3, half+ext) = 2.0", near(tB["cut_third_m"], 2.0), tB["cut_third_m"], 2.0)
+check("top B ext ≥ 12db = 0.30", tB["ext_min_m"] >= 0.30 - 1e-9, tB["ext_min_m"])
+bAB = next(b for b in c["bottom"] if b["span"] == "A-B")
+check("bot A-B cut_eighth = 5/8 = 0.625", near(bAB["cut_eighth_m"], 0.625), bAB["cut_eighth_m"], 0.625)
+check("bot A-B into_support = 0.15", near(bAB["into_support_m"], 0.15), bAB["into_support_m"], 0.15)
+bBC = next(b for b in c["bottom"] if b["span"] == "B-C")
+check("bot B-C cut_eighth = 6/8 = 0.75", near(bBC["cut_eighth_m"], 0.75), bBC["cut_eighth_m"], 0.75)
+
+# ---- Case 2 · 2-span unequal (4,7) — cut_half/third ใช้ span ที่ยาวกว่า ----
+print("\nCase 2 · 2-span [4,7]")
+c2 = design([4.0, 7.0])["curtailment"]
+check("2-span → 1 interior support (B)", len(c2["top"]) == 1, len(c2["top"]))
+tB2 = c2["top"][0]
+check("top B cut_half = max(4,7)/4 = 1.75", near(tB2["cut_half_m"], 1.75), tB2["cut_half_m"], 1.75)
+check("top B cut_third ≥ 7/3 = 2.33", tB2["cut_third_m"] >= 7.0 / 3.0 - 0.01, tB2["cut_third_m"])
+b2 = {b["span"]: b for b in c2["bottom"]}
+check("bot A-B cut_eighth = 4/8 = 0.5", near(b2["A-B"]["cut_eighth_m"], 0.5), b2["A-B"]["cut_eighth_m"], 0.5)
+check("bot B-C cut_eighth = 7/8 = 0.875", near(b2["B-C"]["cut_eighth_m"], 0.875), b2["B-C"]["cut_eighth_m"], 0.875)
+
+# ---- Case 3 · shallow long span → Ln/16 governs top ext (โหลดเบาให้ผ่าน) ----
+print("\nCase 3 · long shallow [9,9] h=50 โหลดเบา → Ln/16 ครอง ext (บน)")
+c3 = design([9.0, 9.0], h=50, dl=6, ll=4)["curtailment"]
+check("3: มี interior support (top ผ่าน)", len(c3["top"]) >= 1, len(c3["top"]))
+if c3["top"]:
+    tB3 = c3["top"][0]
+    # Ln/16 = 9/16 = 0.5625 · d ≈ (50-4-0.9-1.25)/100=0.439 → Ln/16 ครอง
+    check("top ext = max(d,12db,Ln/16) ≈ Ln/16 = 0.5625", near(tB3["ext_min_m"], 0.5625, 0.02), tB3["ext_min_m"], 0.5625)
+    check("top cut_third > cut_half (เลยจุดดัดกลับ)", tB3["cut_third_m"] > tB3["cut_half_m"], tB3["cut_third_m"])
+
+# ---- Case 4 · citations + method ครบ ----
+print("\nCase 4 · metadata")
+check("method อ้าง รูปที่ 8.32", "8.32" in c["method"], c["method"])
+check("มี ≥3 citations", len(c["citations"]) >= 3, len(c["citations"]))
+check("datum ระบุจุดอ้างอิง (หน้าเสา/ศูนย์เสา)", "เสา" in c["datum"], c["datum"])
+
+print("\n" + "=" * 60)
+print(f" RESULT: {PASS} PASS / {FAIL} FAIL" + ("  ALL GREEN" if FAIL == 0 else "  *** FAIL ***"))
+print("=" * 60)
+sys.exit(1 if FAIL else 0)
