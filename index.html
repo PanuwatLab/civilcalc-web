@@ -350,7 +350,6 @@
               <div class="grid grid-cols-[120px_1fr] items-center gap-3">
                 <label for="in_nspan" class="text-[14px]">จำนวนช่วง</label>
                 <select id="in_nspan" class="num-field !font-sans !w-[120px]" aria-label="จำนวนช่วง">
-                  <option value="1">1 ช่วง</option>
                   <option value="2">2 ช่วง</option>
                   <option value="3" selected>3 ช่วง</option>
                   <option value="4">4 ช่วง</option>
@@ -1078,7 +1077,7 @@
     }));
     // continuous span count → rebuild span-length inputs + redraw
     $('#in_nspan').addEventListener('change', e => {
-      state.nspan = +e.target.value; syncSpanLens(); buildSpanLenInputs(); render();
+      state.nspan = Math.max(2, +e.target.value || 2); syncSpanLens(); buildSpanLenInputs(); render();   // ต่อเนื่องต้อง ≥2 ช่วง (engine reject 1 · Codex P2)
     });
     buildSpanLenInputs();
     recalcBase();
@@ -2276,6 +2275,12 @@
       const gM = extraBarGroups(sb.list), lenM = +(L * 2 / 3).toFixed(2);   // คงขนาดผสม (Codex P2)
       gM.forEach((g, k) => rows.push([`M1${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, 'ล่าง·เสริมกลาง']));
       if (m.stirN) rows.push(['S1', m.stirBar || 'RB9', m.stirN * (m.stirLegs === 4 ? 2 : 1), perim, 'ปลอกปิด' + (m.stirLegs === 4 ? ' (2ป·4ขา)' : '')]);   // 2ป = 2 ชิ้น/station (Codex P2)
+    }
+    // fallback กัน BBS ว่าง (เช่น ต่อเนื่อง+engine ยังไม่พร้อม · Codex P2 · ต่อเนื่อง ≥2 ช่วงกันที่ dropdown แล้ว)
+    if (!rows.length) {
+      $('#bbsRows').innerHTML = `<tr><td colspan="5" class="py-3 text-center text-ink-muted text-[12px]">${cont ? 'รอผลคำนวณ — คานต่อเนื่องต้อง ≥ 2 ช่วง' : 'รอผลคำนวณ'}</td></tr>`;
+      $('#bbsCard').classList.toggle('step-hidden', !$('#tgBBS').checked);
+      return;
     }
     $('#bbsRows').innerHTML = rows.map(r => `<tr>
       <td class="py-2 pr-3">${r[0]}</td><td class="py-2 pr-3">${r[1]}</td>
