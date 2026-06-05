@@ -1434,6 +1434,7 @@
       if (fc != null) P.fc = fc; if (grade != null) P.grade = grade;
     },
     setPoints(arr) { ccModel.points = (arr || []).map((p, i) => ({ id: 900 + i, x: p.x, P: p.P, kind: p.kind === 'DL' ? 'DL' : 'LL' })); },
+    setPartials(arr) { ccModel.partials = (arr || []).map((q, i) => ({ id: 950 + i, x0: q.x0, x1: q.x1, w: q.w })); },
     recompute, render, renderWork,
     drawMainSections, drawDetailing,
     ctab: () => state.ctab,
@@ -1451,8 +1452,8 @@
     lastInp: () => state._lastInp,
     engine: () => window.__civilCalc,
     MOCK: () => MOCK,
-    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)) }; },
-    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; applyMode(); recompute(); },
+    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)), partials: JSON.parse(JSON.stringify(ccModel.partials)) }; },
+    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; if (s.partials) ccModel.partials = s.partials; applyMode(); recompute(); },
   };
 
   /* sync verdict (pass/fail) + D/C จากผล engine จริง (Phase 2b · override mock toggle เมื่อ engine พร้อม) */
@@ -5074,7 +5075,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
     TT().setMode(mode);
     // ใช้หน้าตัด non-MOCK (≠ 25×50/30×50) → drift probe จับได้จริงถ้า display แช่ MOCK
     TT().setSection(mode === 'cont' ? 40 : 35, mode === 'cont' ? 70 : 60, 240, 'SD40');
-    TT().setPoints([]);
+    TT().setPoints([]); TT().setPartials([]);   // isolate ทั้ง point + partial loads (Codex P2 · ผลไม่ขึ้นกับ layout ผู้ใช้)
     TT().recompute(); TT().render(); TT().renderWork();
     TT().drawMainSections();
     TT().setCtab('detail'); TT().drawDetailing();
