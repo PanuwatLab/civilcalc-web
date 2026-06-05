@@ -76,6 +76,24 @@ if c3["top"]:
     check("top ext = max(d,12db,Ln/16) ≈ Ln/16 = 0.5625", near(tB3["ext_min_m"], 0.5625, 0.02), tB3["ext_min_m"], 0.5625)
     check("top cut_third > cut_half (เลยจุดดัดกลับ)", tB3["cut_third_m"] > tB3["cut_half_m"], tB3["cut_third_m"])
 
+# ---- Case 5 · คานยื่น → exterior support ต้องถูกรวม (Codex P2) ----
+print("\nCase 5 · 2-span + คานยื่นซ้าย → exterior support A มีเหล็กบน")
+inp5 = calc.ContinuousBeamInput(
+    b=30, h=55, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9,
+    spans=[calc.SpanInput(L=5, DL=20, LL=12, point_loads=[]),
+           calc.SpanInput(L=5, DL=20, LL=12, point_loads=[])],
+    load_combo="1.4D+1.7L", left_cantilever={"L": 1.5, "DL": 15, "LL": 8, "point_loads": []})
+c5 = calc.design_continuous_beam_exact(inp5)["curtailment"]
+tops5 = {t["support"]: t for t in c5["top"]}
+check("exterior support A (คานยื่น) ถูกรวมใน top", "A" in tops5, list(tops5))
+check("A.exterior_cantilever = True", tops5.get("A", {}).get("exterior_cantilever") is True, tops5.get("A", {}).get("exterior_cantilever"))
+check("A ใช้ช่วงในข้างเดียว (L_left None · L_right=5)",
+      tops5.get("A", {}).get("L_left_m") is None and near(tops5.get("A", {}).get("L_right_m", 0), 5.0),
+      (tops5.get("A", {}).get("L_left_m"), tops5.get("A", {}).get("L_right_m")))
+check("A cut_half = 5/4 = 1.25", near(tops5.get("A", {}).get("cut_half_m", 0), 1.25), tops5.get("A", {}).get("cut_half_m"))
+check("interior support B ยังอยู่ (exterior_cantilever False)",
+      tops5.get("B", {}).get("exterior_cantilever") is False, tops5.get("B", {}).get("exterior_cantilever"))
+
 # ---- Case 4 · citations + method ครบ ----
 print("\nCase 4 · metadata")
 check("method อ้าง รูปที่ 8.32", "8.32" in c["method"], c["method"])
