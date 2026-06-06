@@ -145,20 +145,25 @@ check("single: bottom 1 แถว (กลางช่วง)", len(c8["bottom"])
 check("single: ext = max(d,12db) (ที่จุดตัด)", c8["bottom"][0]["ext_min_m"] > 0, c8["bottom"][0]["ext_min_m"])
 check("single: UDL → applicable=True", c8["applicable"] is True, c8["applicable"])
 check("single: method อ้าง รูป 8.23 (ช่วงเดียว)", "8.23" in c8["method"], c8["method"])
-# เหล็กหลัก 2 มุมวิ่งเต็ม · ตัดเฉพาะเสริม (Codex P2)
+# ตัด ≤ ครึ่ง + main เต็ม (Codex P1+P2) · unit test ตรง (deterministic · ไม่ขึ้น select_rebar)
 b8 = c8["bottom"][0]
-check("single: n_main_full = 2", b8["n_main_full"] == 2 or b8["n_extra_cut"] == 0, b8.get("n_main_full"))
 if b8["n_extra_cut"] > 0:
-    check("single: มีเสริม → cut L/8 = 4.8/8 = 0.6", near(b8["cut_eighth_m"], 0.6), b8["cut_eighth_m"], 0.6)
-# unit test extra-bar logic ตรง (deterministic · ไม่ขึ้นกับ select_rebar · Codex P2)
+    check("single: cont + cut = n_total · cont ≥ ครึ่ง",
+          b8["n_continuous_past_L8"] >= b8["n_extra_cut"], (b8["n_continuous_past_L8"], b8["n_extra_cut"]))
 rb2 = calc.RebarSelection(main_bars=[("DB16", 2)], As_provided=4.0)
 b2 = calc.compute_curtailment_single(rb2, 4.0, 45.0, 1.6)["bottom"][0]
-check("2-bar: cut_eighth_m = None (เหล็กหลักวิ่งเต็ม ไม่มีเสริม)", b2["cut_eighth_m"] is None, b2["cut_eighth_m"])
-check("2-bar: n_extra_cut = 0", b2["n_extra_cut"] == 0, b2["n_extra_cut"])
+check("2-bar: cut None · ต่อเนื่อง 2 (ไม่ตัด)", b2["cut_eighth_m"] is None and b2["n_extra_cut"] == 0, b2["n_extra_cut"])
 rb4 = calc.RebarSelection(main_bars=[("DB16", 4)], As_provided=8.0)
 b4 = calc.compute_curtailment_single(rb4, 4.0, 45.0, 1.6)["bottom"][0]
-check("4-bar: n_extra_cut = 2 (4−2 main)", b4["n_extra_cut"] == 2, b4["n_extra_cut"])
-check("4-bar: cut L/8 = 4/8 = 0.5", near(b4["cut_eighth_m"], 0.5), b4["cut_eighth_m"], 0.5)
+check("4-bar: ตัด 2 · ต่อเนื่อง 2 (50%)", b4["n_extra_cut"] == 2 and b4["n_continuous_past_L8"] == 2, (b4["n_extra_cut"], b4["n_continuous_past_L8"]))
+# 🔴 Codex P1: 6 บาร์ ต้องตัด 3 (ไม่ใช่ 4) → ต่อเนื่อง 3 = 50% ≥ 43.75% (M ที่ L/8)
+rb6 = calc.RebarSelection(main_bars=[("DB12", 6)], As_provided=6.78)
+b6 = calc.compute_curtailment_single(rb6, 4.0, 45.0, 1.2)["bottom"][0]
+check("6-bar: ตัด ≤ ครึ่ง = 3 (ไม่ใช่ 4)", b6["n_extra_cut"] == 3, b6["n_extra_cut"])
+check("6-bar: ต่อเนื่องผ่าน L/8 = 3 (50% ≥ 43.75%)", b6["n_continuous_past_L8"] == 3, b6["n_continuous_past_L8"])
+check("5-bar: ตัด 2 · ต่อเนื่อง 3 (60%)",
+      calc.compute_curtailment_single(calc.RebarSelection(main_bars=[("DB12", 5)], As_provided=5.65), 4.0, 45.0, 1.2)["bottom"][0]["n_extra_cut"] == 2,
+      None)
 # single + จุดโหลด → applicable=False
 o8p = calc.design_beam(calc.BeamInput(b=30, h=55, L=5, fc=240, fy=4000, cover=4,
                                       db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,

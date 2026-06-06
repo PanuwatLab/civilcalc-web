@@ -2108,21 +2108,24 @@ def compute_curtailment_single(rebar, L_m: float, d_cm: float, db_default_cm: fl
         warns.append("⚠️ มีจุดโหลด/น้ำหนักแผ่บางช่วง → จุดตัดเลื่อนจาก UDL เต็มช่วง · ค่าตัดเป็นค่าประมาณ · "
                      "วิศวกรต้องตรวจจุดหยุดเหล็กจาก moment envelope จริง")
     bars_str = " + ".join(f"{n}-{nm}" for nm, n in rebar.main_bars)
-    # เหล็กหลัก 2 มุมวิ่งเต็มช่วง (convention main+extra) · ตัดได้เฉพาะเหล็กเสริม (n−2) · Codex P2
+    # ตัดที่ L/8 จำกัด 2 เงื่อนไข (Codex P1+P2):
+    #   (1) เหล็กหลัก 2 มุมวิ่งเต็มช่วง (convention) → ตัดได้ ≤ n−2
+    #   (2) ที่ L/8 โมเมนต์ยังเหลือ 7/16=43.75% ของกลางช่วง → ห้ามตัด >ครึ่ง (รูป 8.32) → ตัด ≤ n//2
     n_total = sum(c for _nm, c in rebar.main_bars)
-    n_extra = max(0, n_total - 2)
+    n_extra = max(0, min(n_total - 2, n_total // 2))
+    n_cont = n_total - n_extra                                   # เส้นที่ต่อเนื่องผ่าน L/8 (≥ ครึ่ง)
     if n_extra > 0:
         bot = {
-            "span": "กลางช่วง", "L_m": round(L_m, 3), "n_main_full": 2, "n_extra_cut": n_extra,
+            "span": "กลางช่วง", "L_m": round(L_m, 3), "n_continuous_past_L8": n_cont, "n_extra_cut": n_extra,
             "cut_eighth_m": round(L_m / 8.0, 3), "into_support_m": 0.15, "ext_min_m": round(ext, 3),
-            "note": (f"เหล็กหลัก 2 เส้นวิ่งเต็มช่วง · เหล็กเสริม {n_extra} เส้นตัดที่ L/8={L_m / 8.0:.2f} ม."
-                     f"(จากศูนย์เสา) · เลยจุดตัด ≥{ext:.2f} ม. (ที่ support ยกเว้น)"),
+            "note": (f"ต่อเนื่องผ่าน L/8 {n_cont} เส้น (≥ครึ่ง · M ที่ L/8 = 43.75%) · "
+                     f"ตัด {n_extra} เส้นที่ L/8={L_m / 8.0:.2f} ม.(จากศูนย์เสา) · เลยจุดตัด ≥{ext:.2f} ม. (ที่ support ยกเว้น)"),
         }
     else:
         bot = {
-            "span": "กลางช่วง", "L_m": round(L_m, 3), "n_main_full": n_total, "n_extra_cut": 0,
+            "span": "กลางช่วง", "L_m": round(L_m, 3), "n_continuous_past_L8": n_total, "n_extra_cut": 0,
             "cut_eighth_m": None, "into_support_m": 0.15, "ext_min_m": round(ext, 3),
-            "note": f"เหล็กหลัก {n_total} เส้นวิ่งเต็มช่วง · ไม่มีเหล็กเสริมให้ตัด",
+            "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (ตัด >ครึ่งไม่ได้ · M ที่ L/8 = 43.75%)",
         }
     return {
         "method": "ระยะหยุดเหล็กล่าง คานช่วงเดียว (DRMK รูป 8.23 · simply-supported)",
