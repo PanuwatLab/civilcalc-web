@@ -133,6 +133,25 @@ inp7b = calc.ContinuousBeamInput(
 c7b = calc.design_continuous_beam_exact(inp7b)["curtailment"]
 check("คานยื่น UDL ล้วน + ช่วงเท่า → applicable=True", c7b["applicable"] is True, c7b["applicable"])
 
+# ---- Case 8 · single-span (bottom-only · simple-support exception) ----
+print("\nCase 8 · คานช่วงเดียว bottom-only")
+_LC = calc.LoadCombo("1.4D+1.7L")
+o8 = calc.design_beam(calc.BeamInput(b=25, h=50, L=4.8, fc=240, fy=4000, cover=4,
+                                     db_assume=1.6, d_stirrup=0.9, DL=14, LL=9, load_combo=_LC))
+c8 = o8.to_dict()["curtailment"]
+check("single: มี curtailment", c8 is not None, c8 is not None)
+check("single: top ว่าง (ไม่มีเหล็กบนรับแรง)", len(c8["top"]) == 0, len(c8["top"]))
+check("single: bottom 1 แถว (กลางช่วง)", len(c8["bottom"]) == 1, len(c8["bottom"]))
+check("single: cut L/8 = 4.8/8 = 0.6", near(c8["bottom"][0]["cut_eighth_m"], 0.6), c8["bottom"][0]["cut_eighth_m"], 0.6)
+check("single: ext = max(d,12db) (ที่จุดตัด)", c8["bottom"][0]["ext_min_m"] > 0, c8["bottom"][0]["ext_min_m"])
+check("single: UDL → applicable=True", c8["applicable"] is True, c8["applicable"])
+check("single: method อ้าง รูป 8.23 (ช่วงเดียว)", "8.23" in c8["method"], c8["method"])
+# single + จุดโหลด → applicable=False
+o8p = calc.design_beam(calc.BeamInput(b=30, h=55, L=5, fc=240, fy=4000, cover=4,
+                                      db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,
+                                      point_loads=[calc.PointLoad(kind="LL", P=40, x=2.5)], load_combo=_LC))
+check("single + จุดโหลด → applicable=False", o8p.to_dict()["curtailment"]["applicable"] is False, o8p.to_dict()["curtailment"]["applicable"])
+
 # ---- Case 4 · citations + method ครบ ----
 print("\nCase 4 · metadata")
 check("method อ้าง รูปที่ 8.32", "8.32" in c["method"], c["method"])

@@ -255,6 +255,9 @@ class BeamOutput:
     notes: list[str] = field(default_factory=list)
     citations: list[str] = field(default_factory=list)
 
+    # detailing · ระยะหยุดเหล็กล่าง คานช่วงเดียว (Phase detailing · bottom-only)
+    curtailment: Optional[dict] = None
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["input"] = self.input.to_dict()
@@ -1544,6 +1547,10 @@ def design_beam(inp: BeamInput) -> BeamOutput:
         )
     out.citations = flex_citations + list(out.citations)
 
+    # detailing · ระยะหยุดเหล็กล่าง คานช่วงเดียว (bottom-only · อ่าน rebar ที่เลือกแล้ว · ไม่แตะ flexure core)
+    out.curtailment = compute_curtailment_single(
+        out.rebar, inp.L, out.d_actual or out.d_assumed, inp.db_assume, inp.point_loads)
+
     return out
 
 
@@ -2071,6 +2078,48 @@ def compute_curtailment(spans: list, supports: list, Ls: list,
             "หยุดเหล็กบน: ครึ่งยื่น L/4 · ≥1/3 ยื่น max(L₁/3,L₂/3) (มงคล รูปที่ 8.32)",
             "หยุดเหล็กล่าง: ครึ่งตัดที่ L/8 · ≥1/4 ยื่นเข้าเสา 15 ซม. (มงคล รูปที่ 8.32)",
             "ยื่นเลยจุดดัดกลับ ≥ max(d, 12db) ล่าง · max(d, 12db, Ln/16) บน (ว.ส.ท./ACI · มงคล C8 หน้า 210-215)",
+        ],
+    }
+
+
+def compute_curtailment_single(rebar, L_m: float, d_cm: float, db_default_cm: float,
+                               point_loads: list = None) -> dict:
+    """ระยะหยุดเหล็กล่าง คานช่วงเดียว (simply-supported · DRMK รูป 8.23 + มาตรฐาน).
+
+    เหล็กล่าง (+M): ครึ่งตัดที่ L/8 จากเสา · ≥1/4 วิ่งเข้า support (ACI คานช่วงเดียว) ·
+    ยกเว้นที่จุดรองรับช่วงเดียว ไม่ต้องยื่นเลย d (ext ใช้เฉพาะจุดตัดในช่วง).
+    คานช่วงเดียวไม่มีเหล็กบนรับแรง (top=[]). New module · ไม่แตะ flexure core.
+    ที่มา: [[Formula - Bar Curtailment & Cutoff Positions (RC-SDM)]] · DRMK บท 8 รูป 8.23.
+    """
+    if not rebar or not getattr(rebar, "main_bars", None):
+        return None
+    dias = []
+    for name, _c in rebar.main_bars:
+        digits = "".join(ch for ch in str(name) if ch.isdigit())
+        if digits:
+            dias.append(int(digits) / 10.0)
+    db_cm = max(dias) if dias else db_default_cm
+    ext = max(d_cm / 100.0, 12.0 * db_cm / 100.0)   # ม. · ที่จุดตัดในช่วง (ไม่ใช่ที่ support · ยกเว้น)
+    warns = []
+    if point_loads and len(point_loads) > 0:
+        warns.append("⚠️ มีจุดโหลด → จุดตัดเลื่อนจาก UDL · ค่าตัดเป็นค่าประมาณ · "
+                     "วิศวกรต้องตรวจจุดหยุดเหล็กจาก moment envelope จริง")
+    bars_str = " + ".join(f"{n}-{nm}" for nm, n in rebar.main_bars)
+    return {
+        "method": "ระยะหยุดเหล็กล่าง คานช่วงเดียว (DRMK รูป 8.23 · simply-supported)",
+        "datum": "ระยะ ม. · เหล็กล่าง L/8 วัดจากศูนย์กลางเสา · ที่ support ไม่ต้องยื่น d (ยกเว้นช่วงเดียว)",
+        "applicable": not warns, "warnings": warns,
+        "top": [],   # คานช่วงเดียวไม่มีเหล็กบนรับแรง
+        "bottom": [{
+            "span": "กลางช่วง", "L_m": round(L_m, 3),
+            "cut_eighth_m": round(L_m / 8.0, 3), "into_support_m": 0.15,
+            "ext_min_m": round(ext, 3),
+            "note": (f"เหล็กล่าง {bars_str}: ครึ่งหนึ่งตัดที่ L/8={L_m / 8.0:.2f} ม.(จากศูนย์เสา) · "
+                     f"≥1/4 วิ่งเข้า support · เลยจุดตัดในช่วง ≥{ext:.2f} ม. (ที่ support ยกเว้น)"),
+        }],
+        "citations": [
+            "เหล็กล่างคานช่วงเดียว: ครึ่งตัดที่ L/8 · ≥1/4 เข้า support (มาตรฐาน · DRMK รูป 8.23)",
+            "ยื่นเลยจุดตัด ≥ max(d, 12db) · ยกเว้นที่จุดรองรับช่วงเดียว (DRMK C8 หน้า 210)",
         ],
     }
 
