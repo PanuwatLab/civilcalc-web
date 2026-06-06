@@ -651,9 +651,9 @@
                 <p class="mt-3 text-[12px] text-ink-muted">* ความยาว = ระยะช่วง/cutoff (ไม่รวมระยะทาบ·ระยะงอ·ฝังยึด) · หลัก(MT/MB)วิ่งเต็มคาน · เสริมหัวเสา(TS)ยื่น L/3 ต่อข้าง · เสริมกลาง(M)ยาว 2L/3 · เสริมปลาย(TE)nominal · ปลอก = เส้นรอบรูป · schematic guide · วิศวกร ก.ว. ตรวจ detailing จริง</p>
               </div>
 
-              <div id="ccCurtailCard" class="card p-5 overflow-x-auto" data-mode-cont>
+              <div id="ccCurtailCard" class="card p-5 overflow-x-auto">
                 <h4 class="text-[14px] font-semibold mb-1">ระยะหยุดเหล็ก (Curtailment)</h4>
-                <p class="text-[12px] text-ink-muted mb-3">ตามมาตรฐาน รูปที่ 8.32 (มงคล · ว.ส.ท./ACI) — ค่าจาก engine</p>
+                <p id="ccCurtailMethod" class="text-[12px] text-ink-muted mb-3">ตามมาตรฐาน รูปที่ 8.32 (มงคล · ว.ส.ท./ACI) — ค่าจาก engine</p>
                 <div id="ccCurtailWarn" class="step-hidden mb-3 rounded-md px-3 py-2 text-[12px]" style="background:#FEF9C3;border:1px solid #FDE68A;color:#854D0E"></div>
                 <table class="w-full text-[13px] mono whitespace-nowrap">
                   <thead class="text-ink-muted text-[12px] border-b border-border">
@@ -1970,23 +1970,32 @@
     const host = $('#ccCurtailRows'); if (!host) return;
     const warn = $('#ccCurtailWarn');
     const hideWarn = () => { if (warn) { warn.classList.add('step-hidden'); warn.innerHTML = ''; } };
-    if (state.mode !== 'cont') { host.innerHTML = ''; hideWarn(); return; }
-    const ac = analyzeContinuous(), o = ac && ac.out, c = o && o.curtailment;
+    let c;
+    if (state.mode === 'cont') { const ac = analyzeContinuous(), o = ac && ac.out; c = o && o.curtailment; }
+    else { c = state._lastInp && state._lastInp.out && state._lastInp.out.curtailment; }   // single-span (bottom-only)
     if (!c) {
-      host.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-ink-muted text-[12px]">รอผลคำนวณ — คานต่อเนื่อง ≥ 2 ช่วง</td></tr>';
+      host.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-ink-muted text-[12px]">รอผลคำนวณ</td></tr>';
       hideWarn(); return;
     }
     // warning banner เมื่อ applicable=false (มีจุดโหลด / ช่วงไม่เท่า → ค่าเป็นค่าประมาณ)
     if (c.applicable === false && c.warnings && c.warnings.length) {
       if (warn) { warn.innerHTML = c.warnings.map(w => `<div>${w}</div>`).join(''); warn.classList.remove('step-hidden'); }
     } else hideWarn();
+    // caption ตามมาตรฐานจริงของโหมด (รูป 8.32 ต่อเนื่อง · 8.23 ช่วงเดียว · Codex P3)
+    const methodEl = $('#ccCurtailMethod');
+    if (methodEl && c.method) methodEl.textContent = c.method;
     const rows = [];
     (c.top || []).forEach(t => rows.push([
       `หัวเสา ${t.support}${t.exterior_cantilever ? ' (คานยื่น)' : ''}`, 'บน (−M)',
       `ครึ่ง L/4=${t.cut_half_m} · ≥⅓=${t.cut_third_m}`, `${t.ext_min_m} ม`]));
     (c.bottom || []).forEach(b => rows.push([
       `ช่วง ${b.span}`, 'ล่าง (+M)',
-      `ตัด L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`, `${b.ext_min_m} ม`]));
+      // single-span มี field n_continuous_past_L8 (ตัด ≤ครึ่ง · area-aware) · continuous (#18) ไม่มี → fallback เดิม (Codex P2)
+      (b.n_continuous_past_L8 === undefined
+        ? `ตัด L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`
+        : (b.cut_eighth_m == null ? `${b.n_continuous_past_L8} เส้นวิ่งเต็ม · ไม่ตัด`
+           : `ต่อเนื่อง ${b.n_continuous_past_L8} · ตัด ${b.cut_bars || b.n_extra_cut} ที่ L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`)),
+      `${b.ext_min_m} ม`]));
     host.innerHTML = rows.length
       ? rows.map(r => `<tr><td class="py-2 pr-3">${r[0]}</td><td class="py-2 pr-3 text-ink-muted">${r[1]}</td><td class="py-2 pr-3 text-right">${r[2]}</td><td class="py-2 text-right">${r[3]}</td></tr>`).join('')
       : '<tr><td colspan="4" class="py-3 text-center text-ink-muted text-[12px]">—</td></tr>';
@@ -2730,6 +2739,9 @@ class BeamOutput:
     warnings: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     citations: list[str] = field(default_factory=list)
+
+    # detailing · ระยะหยุดเหล็กล่าง คานช่วงเดียว (Phase detailing · bottom-only)
+    curtailment: Optional[dict] = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -4020,6 +4032,13 @@ def design_beam(inp: BeamInput) -> BeamOutput:
         )
     out.citations = flex_citations + list(out.citations)
 
+    # detailing · ระยะหยุดเหล็กล่าง คานช่วงเดียว (bottom-only · อ่าน rebar ที่เลือกแล้ว · ไม่แตะ flexure core)
+    #   เฉพาะ simply-supported · คานยื่น (CANTILEVER) เหล็กหลัก = บน (fixed-end) ไม่ใช่ bottom-cut (Codex P2)
+    out.curtailment = (
+        compute_curtailment_single(out.rebar, inp.L, out.d_actual or out.d_assumed,
+                                   inp.db_assume, inp.point_loads, inp.partial_udls)
+        if inp.support == SupportType.SIMPLY_SUPPORTED else None)
+
     return out
 
 
@@ -4547,6 +4566,79 @@ def compute_curtailment(spans: list, supports: list, Ls: list,
             "หยุดเหล็กบน: ครึ่งยื่น L/4 · ≥1/3 ยื่น max(L₁/3,L₂/3) (มงคล รูปที่ 8.32)",
             "หยุดเหล็กล่าง: ครึ่งตัดที่ L/8 · ≥1/4 ยื่นเข้าเสา 15 ซม. (มงคล รูปที่ 8.32)",
             "ยื่นเลยจุดดัดกลับ ≥ max(d, 12db) ล่าง · max(d, 12db, Ln/16) บน (ว.ส.ท./ACI · มงคล C8 หน้า 210-215)",
+        ],
+    }
+
+
+def compute_curtailment_single(rebar, L_m: float, d_cm: float, db_default_cm: float,
+                               point_loads: list = None, partial_udls: list = None) -> dict:
+    """ระยะหยุดเหล็กล่าง คานช่วงเดียว (simply-supported · DRMK รูป 8.23 + มาตรฐาน).
+
+    เหล็กล่าง (+M): ครึ่งตัดที่ L/8 จากเสา · ≥1/4 วิ่งเข้า support (ACI คานช่วงเดียว) ·
+    ยกเว้นที่จุดรองรับช่วงเดียว ไม่ต้องยื่นเลย d (ext ใช้เฉพาะจุดตัดในช่วง).
+    คานช่วงเดียวไม่มีเหล็กบนรับแรง (top=[]). New module · ไม่แตะ flexure core.
+    ที่มา: [[Formula - Bar Curtailment & Cutoff Positions (RC-SDM)]] · DRMK บท 8 รูป 8.23.
+    """
+    if not rebar or not getattr(rebar, "main_bars", None):
+        return None
+    dias = []
+    for name, _c in rebar.main_bars:
+        digits = "".join(ch for ch in str(name) if ch.isdigit())
+        if digits:
+            dias.append(int(digits) / 10.0)
+    db_cm = max(dias) if dias else db_default_cm
+    ext = max(d_cm / 100.0, 12.0 * db_cm / 100.0)   # ม. · ที่จุดตัดในช่วง (ไม่ใช่ที่ support · ยกเว้น)
+    warns = []
+    if (point_loads and len(point_loads) > 0) or (partial_udls and len(partial_udls) > 0):
+        warns.append("⚠️ มีจุดโหลด/น้ำหนักแผ่บางช่วง → จุดตัดเลื่อนจาก UDL เต็มช่วง · ค่าตัดเป็นค่าประมาณ · "
+                     "วิศวกรต้องตรวจจุดหยุดเหล็กจาก moment envelope จริง")
+    # เลือกเส้นที่ตัดที่ L/8 — เส้นเล็กสุดก่อน + คุม 3 เงื่อนไข (Codex P1+P2):
+    #   (1) เก็บ ≥2 มุมวิ่งเต็ม (convention)  (2) ตัด ≤ ครึ่ง (count · รูป 8.32)
+    #   (3) remaining As ≥ 7/16 = 43.75% ของ total As (M ที่ L/8 · mixed-size ต้องคิดพื้นที่ ไม่ใช่จำนวน)
+    def _bar_area(nm):
+        digits = "".join(ch for ch in str(nm) if ch.isdigit())
+        dbq = (int(digits) / 10.0) if digits else db_default_cm
+        return math.pi / 4.0 * dbq * dbq
+    bars = [(_bar_area(nm), nm) for nm, cnt in rebar.main_bars for _ in range(cnt)]
+    n_total = len(bars)
+    total_As = sum(a for a, _ in bars) or 1.0
+    MIN_FRAC = 7.0 / 16.0                                        # 0.4375 · M ที่ L/8 (UDL)
+    cut_idx, rem_As, rem_cnt = [], total_As, n_total
+    for i in sorted(range(n_total), key=lambda j: bars[j][0]):   # เส้นเล็กสุดก่อน
+        if rem_cnt - 1 < 2:                                      # เก็บ ≥2 มุม
+            break
+        if len(cut_idx) + 1 > n_total // 2:                      # ตัด ≤ ครึ่ง (count)
+            break
+        if rem_As - bars[i][0] < MIN_FRAC * total_As - 1e-9:     # remaining As ≥ 43.75%
+            break
+        cut_idx.append(i); rem_As -= bars[i][0]; rem_cnt -= 1
+    n_extra, n_cont = len(cut_idx), n_total - len(cut_idx)
+    _cs = {}
+    for i in cut_idx:
+        _cs[bars[i][1]] = _cs.get(bars[i][1], 0) + 1
+    cut_str = " + ".join(f"{c}-{nm}" for nm, c in _cs.items())   # เบอร์ที่ตัด (เล็กสุด)
+    if n_extra > 0:
+        bot = {
+            "span": "กลางช่วง", "L_m": round(L_m, 3), "n_continuous_past_L8": n_cont, "n_extra_cut": n_extra,
+            "cut_bars": cut_str, "cut_eighth_m": round(L_m / 8.0, 3), "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+            "note": (f"ต่อเนื่องผ่าน L/8 {n_cont} เส้น (As ≥43.75% · M ที่ L/8) · "
+                     f"ตัด {cut_str} (เบอร์เล็กสุด) ที่ L/8={L_m / 8.0:.2f} ม.(จากศูนย์เสา) · เลยจุดตัด ≥{ext:.2f} ม. (support ยกเว้น)"),
+        }
+    else:
+        bot = {
+            "span": "กลางช่วง", "L_m": round(L_m, 3), "n_continuous_past_L8": n_total, "n_extra_cut": 0,
+            "cut_bars": "", "cut_eighth_m": None, "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+            "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (ตัดแล้ว As < 43.75% · M ที่ L/8)",
+        }
+    return {
+        "method": "ระยะหยุดเหล็กล่าง คานช่วงเดียว (DRMK รูป 8.23 · simply-supported)",
+        "datum": "ระยะ ม. · เหล็กล่าง L/8 วัดจากศูนย์กลางเสา · ที่ support ไม่ต้องยื่น d (ยกเว้นช่วงเดียว)",
+        "applicable": not warns, "warnings": warns,
+        "top": [],   # คานช่วงเดียวไม่มีเหล็กบนรับแรง
+        "bottom": [bot],
+        "citations": [
+            "เหล็กหลัก 2 เส้นวิ่งเต็ม · เสริมตัดที่ L/8 · ≥1/4 +As เข้า support (มาตรฐาน · DRMK รูป 8.23)",
+            "ยื่นเลยจุดตัด ≥ max(d, 12db) · ยกเว้นที่จุดรองรับช่วงเดียว (DRMK C8 หน้า 210)",
         ],
     }
 
@@ -5266,11 +5358,10 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         const bbsTxt = (document.querySelector('#bbsRows') || {}).textContent || '';
         A(`${lbl}: BBS populated (ไม่ใช่ placeholder "รอผลคำนวณ")`,
           rowsIn('#bbsRows') >= 1 && !/รอผลคำนวณ/.test(bbsTxt), rowsIn('#bbsRows') + ' rows');
-        if (mode === 'cont') {   // ตารางระยะหยุดเหล็ก (อ่าน out.curtailment) · continuous เท่านั้น
-          const curtTxt = (document.querySelector('#ccCurtailRows') || {}).textContent || '';
-          A(`${lbl}: ตารางระยะหยุดเหล็ก populated (#ccCurtailRows)`,
-            rowsIn('#ccCurtailRows') >= 1 && !/รอผลคำนวณ/.test(curtTxt), rowsIn('#ccCurtailRows') + ' rows');
-        }
+        // ตารางระยะหยุดเหล็ก (อ่าน out.curtailment) · ทั้ง 2 โหมด (cont=top+bottom · single=bottom-only)
+        const curtTxt = (document.querySelector('#ccCurtailRows') || {}).textContent || '';
+        A(`${lbl}: ตารางระยะหยุดเหล็ก populated (#ccCurtailRows)`,
+          rowsIn('#ccCurtailRows') >= 1 && !/รอผลคำนวณ/.test(curtTxt), rowsIn('#ccCurtailRows') + ' rows');
         // drift probe: section b×h label == engine (buildSection เคยใช้ MOCK)
         const secTxt = (document.querySelector('#sectionMain') || {}).textContent || '';
         A(`${lbl}: หน้าตัดป้าย b×h ตรง engine (drift probe)`,
