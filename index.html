@@ -2113,7 +2113,9 @@
     const botSize = (bars && maxSize(bars.spanBot.map(s => s.size))) || 'DB16';
     const topSize = (bars && maxSize(bars.supTop.filter(s => s.n > 0).map(s => s.size))) || botSize;
 
-    // MAIN-BOTTOM (เต็ม) + EXTRA-MID (+M · ตัดที่ L/8 จากศูนย์เสา · engine out.curtailment · เดิม hardcode L/6)
+    // MAIN-BOTTOM (เต็ม) + EXTRA-MID (+M) · engine out.curtailment · ตัด L/8 จากศูนย์เสา (เดิม hardcode L/6)
+    //   single area-aware: ตัดเฉพาะ n_extra_cut · ที่เหลือ (n_continuous_past_L8 − 2 มุม) วิ่งเต็ม = กัน over-curtail (Codex P2)
+    //   continuous: ตัด gM ทั้งกลุ่ม (engine "half" textual · ไม่มี n_extra_cut)
     const curt = c.curt, curtAppx = !!(curt && curt.applicable === false);
     const yBot = beamBot - inset, yBotX = yBot - 7;
     rebar(svg, X(x0), X(xN), yBot, 'up');
@@ -2123,15 +2125,23 @@
       const gM = (bars && bars.spanBot[si]) ? extraBarGroups(bars.spanBot[si].list) : [];   // คงขนาดผสม (Codex P2)
       if (!gM.length) return;
       const cb = curt && curt.bot && curt.bot[si];
-      // ตำแหน่งตัดล่าง: engine cut_eighth_m (L/8 จากศูนย์เสา) · null=วิ่งเต็มไม่ตัด(single) · ไม่มี data=fallback L/6
-      let aB, bB;
-      if (cb && cb.cut_eighth_m != null) { aB = xA + cb.cut_eighth_m; bB = xB - cb.cut_eighth_m; }
-      else if (cb) { aB = xA; bB = xB; }
-      else { aB = xA + sp / 6; bB = xB - sp / 6; }
-      rebar(svg, X(aB), X(bB), yBotX, 'none', true, curtAppx);   // เหล็กล่างเสริมตัด L/8 = หยุดเรียบ
-      if (!compact) {
-        labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2563EB', 'middle', 9);
-        if (cb && cb.cut_eighth_m != null) labelBar(svg, X(aB), yBotX + 13, `L/8=${cb.cut_eighth_m.toFixed(2)}`, '#2563EB', 'middle', 8);
+      const cut8 = !!(cb && cb.cut_eighth_m != null);
+      const nContExtra = (cb && cb.n_continuous_past_L8 != null) ? Math.max(0, cb.n_continuous_past_L8 - mainN) : 0;   // เสริมที่วิ่งเต็ม (single)
+      if (cut8) {
+        const aB = xA + cb.cut_eighth_m, bB = xB - cb.cut_eighth_m;
+        if (nContExtra > 0) rebar(svg, X(x0), X(xN), yBotX, 'none', true, curtAppx);          // เสริมส่วนวิ่งเต็ม (single)
+        rebar(svg, X(aB), X(bB), nContExtra > 0 ? yBotX - 6 : yBotX, 'none', true, curtAppx);  // เสริมส่วนตัด L/8
+        if (!compact) {
+          const lbl = cb.cut_bars ? `ตัด ${cb.cut_bars} ที่ L/8${nContExtra > 0 ? ` · +${nContExtra} วิ่งเต็ม` : ''}` : `+${fmtBars(gM)} เสริมกลาง`;
+          labelBar(svg, X((xA + xB) / 2), yBotX - (nContExtra > 0 ? 14 : 4), lbl, '#2563EB', 'middle', 9);
+          labelBar(svg, X(aB), yBotX + 13, `L/8=${cb.cut_eighth_m.toFixed(2)}`, '#2563EB', 'middle', 8);
+        }
+      } else if (cb) {   // single ไม่ตัด → เสริมวิ่งเต็มหมด
+        rebar(svg, X(x0), X(xN), yBotX, 'none', true, curtAppx);
+        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} วิ่งเต็ม (ไม่ตัด)`, '#2563EB', 'middle', 9);
+      } else {           // ไม่มี curt data → fallback schematic L/6
+        rebar(svg, X(xA + sp / 6), X(xB - sp / 6), yBotX, 'none', true, curtAppx);
+        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2563EB', 'middle', 9);
       }
     });
 
@@ -2403,7 +2413,9 @@
         });
         // เสริมกลาง (+M · ยาว 2L/3) + ปลอก — รายช่วง
         o.spans.forEach((sp, i) => {
-          const gM = extraBarGroups(bars.spanBot[i].list), lenM = +((sp.L || 0) * 2 / 3).toFixed(2);   // คงขนาดผสม
+          const gM = extraBarGroups(bars.spanBot[i].list);
+          const _c8 = ((o.curtailment && o.curtailment.bottom && o.curtailment.bottom[i]) || {}).cut_eighth_m;   // ฐาน L/8 ให้ตรงรูป/ตาราง (Codex P2 · เดิม L×2/3)
+          const lenM = +(_c8 != null ? (sp.L - 2 * _c8) : (sp.L || 0) * 3 / 4).toFixed(2);
           gM.forEach((g, k) => rows.push([`M${i + 1}${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, `ล่าง·เสริมกลาง ${sp.label}`]));
           const sh = sp.shear || {}, nStir = stirrupCount(sh) * (sh.n_legs === 4 ? 2 : 1);   // 2ป = 2 ชิ้น/station (Codex P2)
           if (nStir) rows.push([`S${i + 1}`, sh.bar || 'RB9', nStir, perim, `ปลอก·ช่วง ${sp.label}`]);
@@ -2415,8 +2427,19 @@
       const sb = bars ? bars.spanBot[0] : { n: 3, size: 'DB16', list: [['DB16', 3]] };
       rows.push(['MT', sb.size, 2, L, 'บน·หลัก (ยึดปลอก)']);
       rows.push(['MB', sb.size, 2, L, 'ล่าง·หลัก·เต็มคาน']);
-      const gM = extraBarGroups(sb.list), lenM = +(L * 2 / 3).toFixed(2);   // คงขนาดผสม (Codex P2)
-      gM.forEach((g, k) => rows.push([`M1${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, 'ล่าง·เสริมกลาง']));
+      const gM = extraBarGroups(sb.list);
+      const _sc0 = (((state._lastInp && state._lastInp.out && state._lastInp.out.curtailment) || {}).bottom || [])[0];
+      if (_sc0 && _sc0.cut_eighth_m != null && _sc0.cut_bars) {
+        // single area-aware: ตัด cut_bars (ยาว L−2·L/8) + ที่เหลือวิ่งเต็ม (ยาว L) — ตรงรูป/ตาราง (Codex P2 · เดิม L×2/3 รวมก้อน)
+        const lenCut = +(L - 2 * _sc0.cut_eighth_m).toFixed(2);
+        const cutG = _sc0.cut_bars.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean).map(mm => [mm[2], +mm[1]]);
+        const rem = {}; gM.forEach(([s, c]) => rem[s] = (rem[s] || 0) + c); cutG.forEach(([s, c]) => rem[s] = (rem[s] || 0) - c);
+        cutG.forEach((g, k) => rows.push([`M1c${k + 1}`, g[0], g[1], lenCut, 'ล่าง·เสริมกลาง·ตัด L/8']));
+        Object.keys(rem).filter(s => rem[s] > 0).forEach((s, k) => rows.push([`M1f${k + 1}`, s, rem[s], +L.toFixed(2), 'ล่าง·เสริมกลาง·วิ่งเต็ม']));
+      } else {
+        const lenM = +L.toFixed(2);   // ไม่ตัด (cut_eighth=null) → เสริมวิ่งเต็ม (ยาว L · เดิม L×2/3)
+        gM.forEach((g, k) => rows.push([`M1${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, 'ล่าง·เสริมกลาง·วิ่งเต็ม']));
+      }
       if (m.stirN) rows.push(['S1', m.stirBar || 'RB9', m.stirN * (m.stirLegs === 4 ? 2 : 1), perim, 'ปลอกปิด' + (m.stirLegs === 4 ? ' (2ป·4ขา)' : '')]);   // 2ป = 2 ชิ้น/station (Codex P2)
     }
     // fallback กัน BBS ว่าง (เช่น ต่อเนื่อง+engine ยังไม่พร้อม · Codex P2 · ต่อเนื่อง ≥2 ช่วงกันที่ dropdown แล้ว)
