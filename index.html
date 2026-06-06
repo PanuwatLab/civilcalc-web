@@ -4025,8 +4025,11 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     out.citations = flex_citations + list(out.citations)
 
     # detailing · ระยะหยุดเหล็กล่าง คานช่วงเดียว (bottom-only · อ่าน rebar ที่เลือกแล้ว · ไม่แตะ flexure core)
-    out.curtailment = compute_curtailment_single(
-        out.rebar, inp.L, out.d_actual or out.d_assumed, inp.db_assume, inp.point_loads)
+    #   เฉพาะ simply-supported · คานยื่น (CANTILEVER) เหล็กหลัก = บน (fixed-end) ไม่ใช่ bottom-cut (Codex P2)
+    out.curtailment = (
+        compute_curtailment_single(out.rebar, inp.L, out.d_actual or out.d_assumed,
+                                   inp.db_assume, inp.point_loads, inp.partial_udls)
+        if inp.support == SupportType.SIMPLY_SUPPORTED else None)
 
     return out
 
@@ -4560,7 +4563,7 @@ def compute_curtailment(spans: list, supports: list, Ls: list,
 
 
 def compute_curtailment_single(rebar, L_m: float, d_cm: float, db_default_cm: float,
-                               point_loads: list = None) -> dict:
+                               point_loads: list = None, partial_udls: list = None) -> dict:
     """ระยะหยุดเหล็กล่าง คานช่วงเดียว (simply-supported · DRMK รูป 8.23 + มาตรฐาน).
 
     เหล็กล่าง (+M): ครึ่งตัดที่ L/8 จากเสา · ≥1/4 วิ่งเข้า support (ACI คานช่วงเดียว) ·
@@ -4578,8 +4581,8 @@ def compute_curtailment_single(rebar, L_m: float, d_cm: float, db_default_cm: fl
     db_cm = max(dias) if dias else db_default_cm
     ext = max(d_cm / 100.0, 12.0 * db_cm / 100.0)   # ม. · ที่จุดตัดในช่วง (ไม่ใช่ที่ support · ยกเว้น)
     warns = []
-    if point_loads and len(point_loads) > 0:
-        warns.append("⚠️ มีจุดโหลด → จุดตัดเลื่อนจาก UDL · ค่าตัดเป็นค่าประมาณ · "
+    if (point_loads and len(point_loads) > 0) or (partial_udls and len(partial_udls) > 0):
+        warns.append("⚠️ มีจุดโหลด/น้ำหนักแผ่บางช่วง → จุดตัดเลื่อนจาก UDL เต็มช่วง · ค่าตัดเป็นค่าประมาณ · "
                      "วิศวกรต้องตรวจจุดหยุดเหล็กจาก moment envelope จริง")
     bars_str = " + ".join(f"{n}-{nm}" for nm, n in rebar.main_bars)
     return {

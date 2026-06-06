@@ -151,6 +151,16 @@ o8p = calc.design_beam(calc.BeamInput(b=30, h=55, L=5, fc=240, fy=4000, cover=4,
                                       db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,
                                       point_loads=[calc.PointLoad(kind="LL", P=40, x=2.5)], load_combo=_LC))
 check("single + จุดโหลด → applicable=False", o8p.to_dict()["curtailment"]["applicable"] is False, o8p.to_dict()["curtailment"]["applicable"])
+# single + partial UDL → applicable=False (Codex P2)
+o8q = calc.design_beam(calc.BeamInput(b=30, h=55, L=5, fc=240, fy=4000, cover=4,
+                                      db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,
+                                      partial_udls=[calc.PartialUDL(kind="LL", w=20, x1=1.5, x2=3.5)], load_combo=_LC))
+check("single + partial UDL → applicable=False", o8q.to_dict()["curtailment"]["applicable"] is False, o8q.to_dict()["curtailment"]["applicable"])
+# cantilever support → curtailment None (เหล็กหลัก=บน · ไม่ใช่ bottom-cut · Codex P2)
+o8c = calc.design_beam(calc.BeamInput(b=30, h=55, L=2.5, fc=240, fy=4000, cover=4,
+                                      db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,
+                                      support=calc.SupportType.CANTILEVER, load_combo=_LC))
+check("cantilever support → curtailment None", o8c.to_dict()["curtailment"] is None, o8c.to_dict()["curtailment"])
 
 # ---- Case 4 · citations + method ครบ ----
 print("\nCase 4 · metadata")
