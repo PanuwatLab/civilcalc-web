@@ -164,6 +164,10 @@ check("6-bar: ต่อเนื่องผ่าน L/8 = 3 (50% ≥ 43.75%)",
 check("5-bar: ตัด 2 · ต่อเนื่อง 3 (60%)",
       calc.compute_curtailment_single(calc.RebarSelection(main_bars=[("DB12", 5)], As_provided=5.65), 4.0, 45.0, 1.2)["bottom"][0]["n_extra_cut"] == 2,
       None)
+# 🔴 Codex P2: mixed-size 2-DB12+2-DB10 → ต้องตัดเส้นเล็ก (DB10) เก็บ DB12 (As ≥43.75%)
+bm = calc.compute_curtailment_single(calc.RebarSelection(main_bars=[("DB12", 2), ("DB10", 2)], As_provided=3.83), 4.0, 45.0, 1.6)["bottom"][0]
+check("mixed: ตัดเบอร์เล็กสุด (DB10) ไม่ใช่ DB12", bm["cut_bars"] == "2-DB10", bm["cut_bars"])
+check("mixed: ต่อเนื่อง 2 (DB12 · As 59% ≥43.75%)", bm["n_continuous_past_L8"] == 2, bm["n_continuous_past_L8"])
 # single + จุดโหลด → applicable=False
 o8p = calc.design_beam(calc.BeamInput(b=30, h=55, L=5, fc=240, fy=4000, cover=4,
                                       db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,

@@ -1992,7 +1992,7 @@
       `ช่วง ${b.span}`, 'ล่าง (+M)',
       // ตัด ≤ ครึ่งที่ L/8 (M เหลือ 43.75%) · cut_eighth_m = null → วิ่งเต็มไม่ตัด
       (b.cut_eighth_m == null ? `${b.n_continuous_past_L8 || ''} เส้นวิ่งเต็ม · ไม่ตัด`
-        : `ต่อเนื่อง ${b.n_continuous_past_L8} · ตัด ${b.n_extra_cut} ที่ L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`),
+        : `ต่อเนื่อง ${b.n_continuous_past_L8} · ตัด ${b.cut_bars || b.n_extra_cut} ที่ L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`),
       `${b.ext_min_m} ม`]));
     host.innerHTML = rows.length
       ? rows.map(r => `<tr><td class="py-2 pr-3">${r[0]}</td><td class="py-2 pr-3 text-ink-muted">${r[1]}</td><td class="py-2 pr-3 text-right">${r[2]}</td><td class="py-2 text-right">${r[3]}</td></tr>`).join('')
@@ -4590,25 +4590,43 @@ def compute_curtailment_single(rebar, L_m: float, d_cm: float, db_default_cm: fl
     if (point_loads and len(point_loads) > 0) or (partial_udls and len(partial_udls) > 0):
         warns.append("⚠️ มีจุดโหลด/น้ำหนักแผ่บางช่วง → จุดตัดเลื่อนจาก UDL เต็มช่วง · ค่าตัดเป็นค่าประมาณ · "
                      "วิศวกรต้องตรวจจุดหยุดเหล็กจาก moment envelope จริง")
-    bars_str = " + ".join(f"{n}-{nm}" for nm, n in rebar.main_bars)
-    # ตัดที่ L/8 จำกัด 2 เงื่อนไข (Codex P1+P2):
-    #   (1) เหล็กหลัก 2 มุมวิ่งเต็มช่วง (convention) → ตัดได้ ≤ n−2
-    #   (2) ที่ L/8 โมเมนต์ยังเหลือ 7/16=43.75% ของกลางช่วง → ห้ามตัด >ครึ่ง (รูป 8.32) → ตัด ≤ n//2
-    n_total = sum(c for _nm, c in rebar.main_bars)
-    n_extra = max(0, min(n_total - 2, n_total // 2))
-    n_cont = n_total - n_extra                                   # เส้นที่ต่อเนื่องผ่าน L/8 (≥ ครึ่ง)
+    # เลือกเส้นที่ตัดที่ L/8 — เส้นเล็กสุดก่อน + คุม 3 เงื่อนไข (Codex P1+P2):
+    #   (1) เก็บ ≥2 มุมวิ่งเต็ม (convention)  (2) ตัด ≤ ครึ่ง (count · รูป 8.32)
+    #   (3) remaining As ≥ 7/16 = 43.75% ของ total As (M ที่ L/8 · mixed-size ต้องคิดพื้นที่ ไม่ใช่จำนวน)
+    def _bar_area(nm):
+        digits = "".join(ch for ch in str(nm) if ch.isdigit())
+        dbq = (int(digits) / 10.0) if digits else db_default_cm
+        return math.pi / 4.0 * dbq * dbq
+    bars = [(_bar_area(nm), nm) for nm, cnt in rebar.main_bars for _ in range(cnt)]
+    n_total = len(bars)
+    total_As = sum(a for a, _ in bars) or 1.0
+    MIN_FRAC = 7.0 / 16.0                                        # 0.4375 · M ที่ L/8 (UDL)
+    cut_idx, rem_As, rem_cnt = [], total_As, n_total
+    for i in sorted(range(n_total), key=lambda j: bars[j][0]):   # เส้นเล็กสุดก่อน
+        if rem_cnt - 1 < 2:                                      # เก็บ ≥2 มุม
+            break
+        if len(cut_idx) + 1 > n_total // 2:                      # ตัด ≤ ครึ่ง (count)
+            break
+        if rem_As - bars[i][0] < MIN_FRAC * total_As - 1e-9:     # remaining As ≥ 43.75%
+            break
+        cut_idx.append(i); rem_As -= bars[i][0]; rem_cnt -= 1
+    n_extra, n_cont = len(cut_idx), n_total - len(cut_idx)
+    _cs = {}
+    for i in cut_idx:
+        _cs[bars[i][1]] = _cs.get(bars[i][1], 0) + 1
+    cut_str = " + ".join(f"{c}-{nm}" for nm, c in _cs.items())   # เบอร์ที่ตัด (เล็กสุด)
     if n_extra > 0:
         bot = {
             "span": "กลางช่วง", "L_m": round(L_m, 3), "n_continuous_past_L8": n_cont, "n_extra_cut": n_extra,
-            "cut_eighth_m": round(L_m / 8.0, 3), "into_support_m": 0.15, "ext_min_m": round(ext, 3),
-            "note": (f"ต่อเนื่องผ่าน L/8 {n_cont} เส้น (≥ครึ่ง · M ที่ L/8 = 43.75%) · "
-                     f"ตัด {n_extra} เส้นที่ L/8={L_m / 8.0:.2f} ม.(จากศูนย์เสา) · เลยจุดตัด ≥{ext:.2f} ม. (ที่ support ยกเว้น)"),
+            "cut_bars": cut_str, "cut_eighth_m": round(L_m / 8.0, 3), "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+            "note": (f"ต่อเนื่องผ่าน L/8 {n_cont} เส้น (As ≥43.75% · M ที่ L/8) · "
+                     f"ตัด {cut_str} (เบอร์เล็กสุด) ที่ L/8={L_m / 8.0:.2f} ม.(จากศูนย์เสา) · เลยจุดตัด ≥{ext:.2f} ม. (support ยกเว้น)"),
         }
     else:
         bot = {
             "span": "กลางช่วง", "L_m": round(L_m, 3), "n_continuous_past_L8": n_total, "n_extra_cut": 0,
-            "cut_eighth_m": None, "into_support_m": 0.15, "ext_min_m": round(ext, 3),
-            "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (ตัด >ครึ่งไม่ได้ · M ที่ L/8 = 43.75%)",
+            "cut_bars": "", "cut_eighth_m": None, "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+            "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (ตัดแล้ว As < 43.75% · M ที่ L/8)",
         }
     return {
         "method": "ระยะหยุดเหล็กล่าง คานช่วงเดียว (DRMK รูป 8.23 · simply-supported)",
