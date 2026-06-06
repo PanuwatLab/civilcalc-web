@@ -592,7 +592,7 @@
 
               <div class="hairline pt-4 space-y-2">
                 <div class="text-[13px] font-semibold text-ink-muted">ความยาวเหล็ก</div>
-                <p class="text-[12px] text-ink-muted leading-relaxed">คำนวณอัตโนมัติจากช่วงคาน · เหล็กหลัก(2 มุม)วิ่งเต็มความยาว · เหล็กเสริมหัวเสา ยื่น L/3 ต่อข้าง · เหล็กเสริมกลางช่วง ตัดที่ L/6 จากเสา</p>
+                <p class="text-[12px] text-ink-muted leading-relaxed">รูปด้านเป็น schematic (เหล็กหลัก 2 มุมวิ่งเต็ม · เสริมหัวเสา/กลางช่วงโดยประมาณ) · <b>ระยะหยุดเหล็กจริงตามมาตรฐาน รูปที่ 8.32 ดูตาราง “ระยะหยุดเหล็ก (Curtailment)”</b> ด้านล่าง</p>
               </div>
 
               <div class="hairline pt-4 space-y-2">
@@ -632,7 +632,7 @@
                   <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 inline-block" style="background:var(--rebar)"></span> เหล็กเสริม</span>
                   <span class="flex items-center gap-1.5"><span class="w-3 h-3 inline-grid place-items-center text-[8px]" style="color:var(--ink-muted)">‖</span> ปลอก</span>
                 </div>
-                <p class="mt-1 text-[11px] text-ink-muted">รูป schematic เป็นแนวทาง (guide) — เหล็กหลัก 2 เส้น(เบอร์ใหญ่สุด)วิ่งเต็ม · เสริมหัวเสายื่น L/3 · เสริมกลาง L/6 จากเสา · * เสริมปลาย = nominal กันร้าว (ปลายโมเดล M=0) · หัวเสา/ช่วงที่ต้องการ 2 เส้น = เหล็กหลักพอ ไม่มีเสริม · วิศวกร ก.ว. จัด detailing/curtailment จริงก่อนก่อสร้าง</p>
+                <p class="mt-1 text-[11px] text-ink-muted">รูป schematic เป็นแนวทาง (guide) — เหล็กหลัก 2 เส้น(เบอร์ใหญ่สุด)วิ่งเต็ม · เสริมหัวเสา/กลางช่วงวาดโดยประมาณ · <b>ระยะหยุดเหล็กจริง (L/4·L/3 บน · L/8 ล่าง · รูปที่ 8.32) ดูตารางระยะหยุดเหล็กด้านล่าง</b> · เสริมปลาย = nominal กันร้าว · วิศวกร ก.ว. จัด detailing/curtailment จริงก่อนก่อสร้าง</p>
               </div>
 
               <div class="card p-5">
@@ -649,6 +649,19 @@
                   <tbody id="bbsRows" class="divide-y divide-border"></tbody>
                 </table>
                 <p class="mt-3 text-[12px] text-ink-muted">* ความยาว = ระยะช่วง/cutoff (ไม่รวมระยะทาบ·ระยะงอ·ฝังยึด) · หลัก(MT/MB)วิ่งเต็มคาน · เสริมหัวเสา(TS)ยื่น L/3 ต่อข้าง · เสริมกลาง(M)ยาว 2L/3 · เสริมปลาย(TE)nominal · ปลอก = เส้นรอบรูป · schematic guide · วิศวกร ก.ว. ตรวจ detailing จริง</p>
+              </div>
+
+              <div id="ccCurtailCard" class="card p-5 overflow-x-auto" data-mode-cont>
+                <h4 class="text-[14px] font-semibold mb-1">ระยะหยุดเหล็ก (Curtailment)</h4>
+                <p class="text-[12px] text-ink-muted mb-3">ตามมาตรฐาน รูปที่ 8.32 (มงคล · ว.ส.ท./ACI) — ค่าจาก engine</p>
+                <div id="ccCurtailWarn" class="step-hidden mb-3 rounded-md px-3 py-2 text-[12px]" style="background:#FEF9C3;border:1px solid #FDE68A;color:#854D0E"></div>
+                <table class="w-full text-[13px] mono whitespace-nowrap">
+                  <thead class="text-ink-muted text-[12px] border-b border-border">
+                    <tr><th class="text-left font-semibold py-2 pr-3">ตำแหน่ง</th><th class="text-left font-semibold py-2 pr-3">เหล็ก</th><th class="text-right font-semibold py-2 pr-3">ตัด/ยื่น (ม)</th><th class="text-right font-semibold py-2 pr-3">เลยจุดดัดกลับ ≥</th></tr>
+                  </thead>
+                  <tbody id="ccCurtailRows" class="divide-y divide-border"></tbody>
+                </table>
+                <p class="mt-3 text-[11px] text-ink-muted">เหล็กบน (−M หัวเสา): ครึ่งยื่น L/4 · ≥1/3 ยื่น L/3 · วัดจากหน้าเสา · เหล็กล่าง (+M): ครึ่งตัดที่ L/8 · ≥1/4 ยื่นเข้าเสา 15 ซม. · เลยจุดดัดกลับ ≥ max(d, 12db[, Ln/16]). วิศวกร ก.ว. ตรวจก่อนก่อสร้าง</p>
               </div>
             </div>
           </div>
@@ -1948,6 +1961,35 @@
     drawElevation();
     drawSections3();
     renderBBS();
+    renderCurtailment();
+  }
+
+  // renderCurtailment — ตารางระยะหยุดเหล็กจาก engine (out.curtailment · มาตรฐาน รูปที่ 8.32)
+  //   display-only · อ่าน engine ตรงๆ (parity-safe) · continuous เท่านั้น (card auto-hide ใน single ผ่าน data-mode-cont)
+  function renderCurtailment() {
+    const host = $('#ccCurtailRows'); if (!host) return;
+    const warn = $('#ccCurtailWarn');
+    const hideWarn = () => { if (warn) { warn.classList.add('step-hidden'); warn.innerHTML = ''; } };
+    if (state.mode !== 'cont') { host.innerHTML = ''; hideWarn(); return; }
+    const ac = analyzeContinuous(), o = ac && ac.out, c = o && o.curtailment;
+    if (!c) {
+      host.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-ink-muted text-[12px]">รอผลคำนวณ — คานต่อเนื่อง ≥ 2 ช่วง</td></tr>';
+      hideWarn(); return;
+    }
+    // warning banner เมื่อ applicable=false (มีจุดโหลด / ช่วงไม่เท่า → ค่าเป็นค่าประมาณ)
+    if (c.applicable === false && c.warnings && c.warnings.length) {
+      if (warn) { warn.innerHTML = c.warnings.map(w => `<div>${w}</div>`).join(''); warn.classList.remove('step-hidden'); }
+    } else hideWarn();
+    const rows = [];
+    (c.top || []).forEach(t => rows.push([
+      `หัวเสา ${t.support}${t.exterior_cantilever ? ' (คานยื่น)' : ''}`, 'บน (−M)',
+      `ครึ่ง L/4=${t.cut_half_m} · ≥⅓=${t.cut_third_m}`, `${t.ext_min_m} ม`]));
+    (c.bottom || []).forEach(b => rows.push([
+      `ช่วง ${b.span}`, 'ล่าง (+M)',
+      `ตัด L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`, `${b.ext_min_m} ม`]));
+    host.innerHTML = rows.length
+      ? rows.map(r => `<tr><td class="py-2 pr-3">${r[0]}</td><td class="py-2 pr-3 text-ink-muted">${r[1]}</td><td class="py-2 pr-3 text-right">${r[2]}</td><td class="py-2 text-right">${r[3]}</td></tr>`).join('')
+      : '<tr><td colspan="4" class="py-3 text-center text-ink-muted text-[12px]">—</td></tr>';
   }
 
   // detailBars — จำนวน/ขนาดเหล็กจาก engine ต่อตำแหน่ง · แยก หลัก(2 มุม) + เสริม
@@ -5224,6 +5266,11 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         const bbsTxt = (document.querySelector('#bbsRows') || {}).textContent || '';
         A(`${lbl}: BBS populated (ไม่ใช่ placeholder "รอผลคำนวณ")`,
           rowsIn('#bbsRows') >= 1 && !/รอผลคำนวณ/.test(bbsTxt), rowsIn('#bbsRows') + ' rows');
+        if (mode === 'cont') {   // ตารางระยะหยุดเหล็ก (อ่าน out.curtailment) · continuous เท่านั้น
+          const curtTxt = (document.querySelector('#ccCurtailRows') || {}).textContent || '';
+          A(`${lbl}: ตารางระยะหยุดเหล็ก populated (#ccCurtailRows)`,
+            rowsIn('#ccCurtailRows') >= 1 && !/รอผลคำนวณ/.test(curtTxt), rowsIn('#ccCurtailRows') + ' rows');
+        }
         // drift probe: section b×h label == engine (buildSection เคยใช้ MOCK)
         const secTxt = (document.querySelector('#sectionMain') || {}).textContent || '';
         A(`${lbl}: หน้าตัดป้าย b×h ตรง engine (drift probe)`,
@@ -5231,7 +5278,17 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           'engine=' + (res ? res.b + '×' + res.h : '?') + ' · section="' + secTxt.replace(/\s+/g, '').slice(0, 24) + '"');
       });
 
-      // ── C · mode-switch integrity (applyMode toggle) ──
+      // ── C · curtailment warning: continuous + จุดโหลด → applicable=false → banner โผล่ ──
+      TT().setMode('cont'); TT().setSection(35, 65, 240, 'SD40');
+      TT().setPoints([{ x: 2.5, P: 6000, kind: 'LL' }]);   // จุดโหลด → นอกเงื่อนไข รูป 8.32
+      TT().recompute(); TT().setCtab('detail'); TT().drawDetailing();
+      const warnEl = document.getElementById('ccCurtailWarn');
+      A('curtailment: จุดโหลด → warning banner แสดง (applicable=false)',
+        !!(warnEl && !warnEl.classList.contains('step-hidden') && warnEl.textContent.trim().length > 0),
+        warnEl ? ('hidden=' + warnEl.classList.contains('step-hidden')) : 'n/a');
+      TT().setPoints([]);
+
+      // ── D · mode-switch integrity (applyMode toggle) ──
       TT().setMode('cont'); TT().render();
       const contEl = document.querySelector('[data-mode-cont]'), singEl = document.querySelector('[data-mode-single]');
       A('mode-switch: cont → data-mode-cont visible',
