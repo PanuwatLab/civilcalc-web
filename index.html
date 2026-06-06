@@ -2406,7 +2406,10 @@
           if (isEnd && !groups.length) groups = [[topSize, 2]];   // EXTRA-END nominal
           if (!groups.length) return;
           const spL = i > 0 ? (o.spans[i - 1].L || 0) : 0, spR = i < ns ? (o.spans[i].L || 0) : 0;
-          const len = +((isEnd ? (spL || spR) : (spL + spR)) / 3).toFixed(2);
+          // ยาวเหล็กบน: ถ้ามี engine curtailment top → col + 2·cut_third_m (ตรงรูป/ตาราง · Codex P2 · เดิม (spL+spR)/3 under-report) · ปลาย nominal คงสคีมาติก
+          const _ct = ((o.curtailment && o.curtailment.top) || []).find(t => t.support === su.label);
+          const _colW = parseFloat($('[data-draw="col"]')?.value) || MOCK.cont.col || 0.30;
+          const len = +(_ct ? (_colW + 2 * _ct.cut_third_m) : ((isEnd ? (spL || spR) : (spL + spR)) / 3)).toFixed(2);
           const mark = isEnd ? (i === 0 ? 'TE1' : 'TE2') : `T${i}`;
           const pos = isEnd ? `บน·เสริมปลาย* ${su.label}` : `บน·เสริมหัวเสา ${su.label}`;
           groups.forEach((g, k) => rows.push([mark + (groups.length > 1 ? String.fromCharCode(97 + k) : ''), g[0], g[1], len, pos]));
