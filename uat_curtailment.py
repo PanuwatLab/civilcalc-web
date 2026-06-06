@@ -142,10 +142,23 @@ c8 = o8.to_dict()["curtailment"]
 check("single: มี curtailment", c8 is not None, c8 is not None)
 check("single: top ว่าง (ไม่มีเหล็กบนรับแรง)", len(c8["top"]) == 0, len(c8["top"]))
 check("single: bottom 1 แถว (กลางช่วง)", len(c8["bottom"]) == 1, len(c8["bottom"]))
-check("single: cut L/8 = 4.8/8 = 0.6", near(c8["bottom"][0]["cut_eighth_m"], 0.6), c8["bottom"][0]["cut_eighth_m"], 0.6)
 check("single: ext = max(d,12db) (ที่จุดตัด)", c8["bottom"][0]["ext_min_m"] > 0, c8["bottom"][0]["ext_min_m"])
 check("single: UDL → applicable=True", c8["applicable"] is True, c8["applicable"])
 check("single: method อ้าง รูป 8.23 (ช่วงเดียว)", "8.23" in c8["method"], c8["method"])
+# เหล็กหลัก 2 มุมวิ่งเต็ม · ตัดเฉพาะเสริม (Codex P2)
+b8 = c8["bottom"][0]
+check("single: n_main_full = 2", b8["n_main_full"] == 2 or b8["n_extra_cut"] == 0, b8.get("n_main_full"))
+if b8["n_extra_cut"] > 0:
+    check("single: มีเสริม → cut L/8 = 4.8/8 = 0.6", near(b8["cut_eighth_m"], 0.6), b8["cut_eighth_m"], 0.6)
+# unit test extra-bar logic ตรง (deterministic · ไม่ขึ้นกับ select_rebar · Codex P2)
+rb2 = calc.RebarSelection(main_bars=[("DB16", 2)], As_provided=4.0)
+b2 = calc.compute_curtailment_single(rb2, 4.0, 45.0, 1.6)["bottom"][0]
+check("2-bar: cut_eighth_m = None (เหล็กหลักวิ่งเต็ม ไม่มีเสริม)", b2["cut_eighth_m"] is None, b2["cut_eighth_m"])
+check("2-bar: n_extra_cut = 0", b2["n_extra_cut"] == 0, b2["n_extra_cut"])
+rb4 = calc.RebarSelection(main_bars=[("DB16", 4)], As_provided=8.0)
+b4 = calc.compute_curtailment_single(rb4, 4.0, 45.0, 1.6)["bottom"][0]
+check("4-bar: n_extra_cut = 2 (4−2 main)", b4["n_extra_cut"] == 2, b4["n_extra_cut"])
+check("4-bar: cut L/8 = 4/8 = 0.5", near(b4["cut_eighth_m"], 0.5), b4["cut_eighth_m"], 0.5)
 # single + จุดโหลด → applicable=False
 o8p = calc.design_beam(calc.BeamInput(b=30, h=55, L=5, fc=240, fy=4000, cover=4,
                                       db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,

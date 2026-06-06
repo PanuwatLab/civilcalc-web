@@ -2108,20 +2108,30 @@ def compute_curtailment_single(rebar, L_m: float, d_cm: float, db_default_cm: fl
         warns.append("⚠️ มีจุดโหลด/น้ำหนักแผ่บางช่วง → จุดตัดเลื่อนจาก UDL เต็มช่วง · ค่าตัดเป็นค่าประมาณ · "
                      "วิศวกรต้องตรวจจุดหยุดเหล็กจาก moment envelope จริง")
     bars_str = " + ".join(f"{n}-{nm}" for nm, n in rebar.main_bars)
+    # เหล็กหลัก 2 มุมวิ่งเต็มช่วง (convention main+extra) · ตัดได้เฉพาะเหล็กเสริม (n−2) · Codex P2
+    n_total = sum(c for _nm, c in rebar.main_bars)
+    n_extra = max(0, n_total - 2)
+    if n_extra > 0:
+        bot = {
+            "span": "กลางช่วง", "L_m": round(L_m, 3), "n_main_full": 2, "n_extra_cut": n_extra,
+            "cut_eighth_m": round(L_m / 8.0, 3), "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+            "note": (f"เหล็กหลัก 2 เส้นวิ่งเต็มช่วง · เหล็กเสริม {n_extra} เส้นตัดที่ L/8={L_m / 8.0:.2f} ม."
+                     f"(จากศูนย์เสา) · เลยจุดตัด ≥{ext:.2f} ม. (ที่ support ยกเว้น)"),
+        }
+    else:
+        bot = {
+            "span": "กลางช่วง", "L_m": round(L_m, 3), "n_main_full": n_total, "n_extra_cut": 0,
+            "cut_eighth_m": None, "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+            "note": f"เหล็กหลัก {n_total} เส้นวิ่งเต็มช่วง · ไม่มีเหล็กเสริมให้ตัด",
+        }
     return {
         "method": "ระยะหยุดเหล็กล่าง คานช่วงเดียว (DRMK รูป 8.23 · simply-supported)",
         "datum": "ระยะ ม. · เหล็กล่าง L/8 วัดจากศูนย์กลางเสา · ที่ support ไม่ต้องยื่น d (ยกเว้นช่วงเดียว)",
         "applicable": not warns, "warnings": warns,
         "top": [],   # คานช่วงเดียวไม่มีเหล็กบนรับแรง
-        "bottom": [{
-            "span": "กลางช่วง", "L_m": round(L_m, 3),
-            "cut_eighth_m": round(L_m / 8.0, 3), "into_support_m": 0.15,
-            "ext_min_m": round(ext, 3),
-            "note": (f"เหล็กล่าง {bars_str}: ครึ่งหนึ่งตัดที่ L/8={L_m / 8.0:.2f} ม.(จากศูนย์เสา) · "
-                     f"≥1/4 วิ่งเข้า support · เลยจุดตัดในช่วง ≥{ext:.2f} ม. (ที่ support ยกเว้น)"),
-        }],
+        "bottom": [bot],
         "citations": [
-            "เหล็กล่างคานช่วงเดียว: ครึ่งตัดที่ L/8 · ≥1/4 เข้า support (มาตรฐาน · DRMK รูป 8.23)",
+            "เหล็กหลัก 2 เส้นวิ่งเต็ม · เสริมตัดที่ L/8 · ≥1/4 +As เข้า support (มาตรฐาน · DRMK รูป 8.23)",
             "ยื่นเลยจุดตัด ≥ max(d, 12db) · ยกเว้นที่จุดรองรับช่วงเดียว (DRMK C8 หน้า 210)",
         ],
     }
