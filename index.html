@@ -2020,6 +2020,19 @@
     return { spanBot: [fromStr(m.rebarMain)], supTop: [{ n: 0, size: 'DB16' }, { n: 0, size: 'DB16' }], spanStir: [{ bar: m.stirBar || 'RB9', s1: m.S1, s2: m.S2 }] };  // ปลายคานเดี่ยว = ไม่มี −M
   }
 
+  // curtData — ระยะหยุดเหล็กจาก engine (out.curtailment) จัดเรียงตาม index span/node เหมือน detailBars · parity-safe (อ่านตรง ไม่คำนวณซ้ำ)
+  function curtData() {
+    let cur;
+    if (state.mode === 'cont') { const ac = analyzeContinuous(), o = ac && ac.out; cur = o && o.curtailment; }
+    else { cur = state._lastInp && state._lastInp.out && state._lastInp.out.curtailment; }   // single (bottom-only)
+    if (!cur) return null;
+    const top = [];   // index ตาม node (support "A"→0 · sparse: simple-end ไม่มี top)
+    (cur.top || []).forEach(t => { const i = (t.support || '').charCodeAt(0) - 65; if (i >= 0) top[i] = t; });
+    const bot = [];   // index ตาม span (engine bottom_out เรียงตาม span)
+    (cur.bottom || []).forEach((b, k) => { bot[k] = b; });
+    return { top, bot, applicable: cur.applicable !== false };
+  }
+
   const D = () => {  // detailing config from inputs + mode geometry
     const m = state.mode === 'cont' ? MOCK.cont : MOCK.single;
     const g = geom();
@@ -2029,6 +2042,7 @@
       col: get('col') || m.col,
       legs: state.legs,
       bars: detailBars(),   // {spanBot[], supTop[]} จาก engine · null ก่อน ready
+      curt: curtData(),     // {top[], bot[], applicable} ระยะหยุดเหล็กจาก engine · null ก่อน ready
     };
   };
   // stirrup symbol incl. leg count: e.g. 1ป-RB9@.15 / 2ป-RB9@.20
@@ -2046,7 +2060,7 @@
     else { pxm = 3779.5 / (+state.scale); vbW = totalLen * pxm + 2 * marginX; fitWidth = false; }
 
     const colExt = compact ? 0.30 : 0.42;
-    const beamH = c.h * pxm;
+    const beamH = Math.max(c.h * pxm * (compact ? 1.5 : 1.9), compact ? 46 : 78);   // ยืดความสูงคาน (vertical exaggeration · ไม่ใช่ scale จริงแนวตั้ง) ให้ชั้นเหล็กบน/ล่างแยกชัด อ่านง่าย (pi 2026-06-07)
     const topPad = compact ? 40 : 78;
     const beamTop = topPad + colExt * pxm, beamBot = beamTop + beamH;
     const colTop = beamTop - colExt * pxm, colBot = beamBot + colExt * pxm;
@@ -2059,6 +2073,8 @@
     const svg = svgEl('svg', { viewBox: `0 0 ${vbW} ${H}`, 'font-family': 'JetBrains Mono, monospace' });
     if (fitWidth) svg.setAttribute('class', 'svg-fit');
     else { svg.setAttribute('width', vbW); svg.setAttribute('height', H); }
+    // ระยะหยุดเหล็กจาก engine: engine=wired · approx=มีจุดโหลด(เส้นประ) · schematic=fallback (audit guard กัน regress กลับ L/6)
+    svg.setAttribute('data-curt', !c.curt ? 'schematic' : (c.curt.applicable === false ? 'approx' : 'engine'));
 
     // beam body
     svg.appendChild(svgEl('rect', { x: X(node0), y: beamTop, width: totalLen * pxm, height: beamH, fill: '#EEF2F6', stroke: '#94A3B8', 'stroke-width': 1.2 }));
@@ -2097,7 +2113,8 @@
     const botSize = (bars && maxSize(bars.spanBot.map(s => s.size))) || 'DB16';
     const topSize = (bars && maxSize(bars.supTop.filter(s => s.n > 0).map(s => s.size))) || botSize;
 
-    // MAIN-BOTTOM (เต็ม) + EXTRA-MID (+M · ตัด L/6 จากเสา)
+    // MAIN-BOTTOM (เต็ม) + EXTRA-MID (+M · ตัดที่ L/8 จากศูนย์เสา · engine out.curtailment · เดิม hardcode L/6)
+    const curt = c.curt, curtAppx = !!(curt && curt.applicable === false);
     const yBot = beamBot - inset, yBotX = yBot - 7;
     rebar(svg, X(x0), X(xN), yBot, 'up');
     if (!compact) labelBar(svg, X(x0) + 6, yBot + 13, `${mainN}-${botSize} หลักล่าง`, '#1D4ED8', 'start');
@@ -2105,12 +2122,22 @@
       const xA = c.nodes[si], xB = c.nodes[si + 1];
       const gM = (bars && bars.spanBot[si]) ? extraBarGroups(bars.spanBot[si].list) : [];   // คงขนาดผสม (Codex P2)
       if (!gM.length) return;
-      rebar(svg, X(xA + sp / 6), X(xB - sp / 6), yBotX, 'up', true);
-      if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2563EB', 'middle', 9);
+      const cb = curt && curt.bot && curt.bot[si];
+      // ตำแหน่งตัดล่าง: engine cut_eighth_m (L/8 จากศูนย์เสา) · null=วิ่งเต็มไม่ตัด(single) · ไม่มี data=fallback L/6
+      let aB, bB;
+      if (cb && cb.cut_eighth_m != null) { aB = xA + cb.cut_eighth_m; bB = xB - cb.cut_eighth_m; }
+      else if (cb) { aB = xA; bB = xB; }
+      else { aB = xA + sp / 6; bB = xB - sp / 6; }
+      rebar(svg, X(aB), X(bB), yBotX, 'none', true, curtAppx);   // เหล็กล่างเสริมตัด L/8 = หยุดเรียบ
+      if (!compact) {
+        labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2563EB', 'middle', 9);
+        if (cb && cb.cut_eighth_m != null) labelBar(svg, X(aB), yBotX + 13, `L/8=${cb.cut_eighth_m.toFixed(2)}`, '#2563EB', 'middle', 8);
+      }
     });
 
-    // MAIN-TOP (เต็ม) + EXTRA หัวเสา (−M · L/3 ต่อข้าง)
+    // MAIN-TOP (เต็ม) + EXTRA หัวเสา (−M · จากหน้าเสา: ครึ่ง L/4 · ≥⅓ L/3 · engine out.curtailment · stepped · เดิม hardcode L/3 จากศูนย์)
     const yTop = beamTop + inset, yTopX = yTop + 7;
+    const halfCol = (c.col || 0.4) / 2;
     rebar(svg, X(x0), X(xN), yTop, 'down');
     if (!compact) labelBar(svg, X(x0) + 4, beamTop - 5, `${mainN}-${topSize} หลักบน`, '#1D4ED8', 'start');
     const isCont = state.mode === 'cont';
@@ -2124,14 +2151,32 @@
       const isRealEnd = c.endFlags ? !!c.endFlags[i] : isEnd;
       if (isCont && isRealEnd && !groups.length) { groups = [[topSize, 2]]; nominal = true; }
       if (!groups.length) return;
-      const spL = i > 0 ? c.spans[i - 1] : 0, spR = i < c.spans.length ? c.spans[i] : 0;
-      let a = isL ? nx : nx - spL / 3, b = isR ? nx : nx + spR / 3;
-      a = Math.max(x0, a); b = Math.min(xN, b);
-      rebar(svg, X(a), X(b), yTopX, 'down', true);
       const lbl = isRealEnd ? (nominal ? 'เสริมปลาย*' : 'เสริมปลาย') : 'เสริมหัวเสา';
-      if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 11, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
-      if (showDim && !compact) dim(svg, X(a), X(b), beamTop - 24, (b - a).toFixed(2));
+      const ct = curt && curt.top && curt.top[i];
+      if (ct && !nominal) {
+        // engine-driven: เหล็กบนยื่นจากหน้าเสา ≥⅓ ถึง cut_third_m (extent เดียว · มาตรฐาน DRMK รูป 8.32/A2 · L/4 บอกด้วยป้าย ไม่วาดเส้นซ้อน)
+        const faceL = nx - halfCol, faceR = nx + halfCol;
+        let aO = faceL - ct.cut_third_m, bO = faceR + ct.cut_third_m;
+        if (isL) aO = ct.exterior_cantilever ? x0 : faceR;   // ปลายซ้าย: คานยื่นวิ่งเต็ม · ไม่งั้นไม่มีช่วงซ้าย
+        if (isR) bO = ct.exterior_cantilever ? xN : faceL;   // ปลายขวา: เช่นกัน
+        aO = Math.max(x0, aO); bO = Math.min(xN, bO);
+        rebar(svg, X(aO), X(bO), yTopX, 'none', true, curtAppx);   // เส้นเดียว หยุดเรียบ (ไม่มีตะขอ · ไม่ซ้อนกล่อง)
+        if (!compact) {
+          labelBar(svg, X((aO + bO) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
+          labelBar(svg, X(nx), beamTop - 26, `ยื่น L/4=${ct.cut_half_m.toFixed(2)} · L/3=${ct.cut_third_m.toFixed(2)}`, '#64748B', 'middle', 8);
+        }
+      } else {
+        // nominal/fallback schematic — คงเดิม (กัน regression nominal-end convention · ปลายจริงไม่มี −M engine)
+        const spL = i > 0 ? c.spans[i - 1] : 0, spR = i < c.spans.length ? c.spans[i] : 0;
+        let a = isL ? nx : nx - spL / 3, b = isR ? nx : nx + spR / 3;
+        a = Math.max(x0, a); b = Math.min(xN, b);
+        rebar(svg, X(a), X(b), yTopX, 'none', true);   // nominal ปลาย = หยุดเรียบเช่นกัน
+        if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
+        if (showDim && !compact) dim(svg, X(a), X(b), beamTop - 24, (b - a).toFixed(2));
+      }
     });
+    // ป้ายเตือนค่าประมาณในรูป (มีจุดโหลด/ช่วงไม่เท่า · ตรงกับ warning banner ในตาราง · End User Fix-2)
+    if (!compact && curtAppx) labelBar(svg, vbW - marginX, topPad - 18, '≈ ระยะตัดเป็นค่าประมาณ · ตรวจ moment envelope', '#B45309', 'end', 9);
 
     // ระยะปลอก (#4) — ป้ายราย span กลางความสูงคาน (เหนือเส้นปลอกเทาๆ · ไม่ทับ bar บน/ล่าง)
     if (!compact) {
@@ -2208,7 +2253,8 @@
       card.appendChild(head);
       const sub = { spans: [sp], nodes: [c.nodes[si], c.nodes[si + 1]], h: c.h, b: c.b, col: c.col,
         endFlags: [si === 0, si === c.spans.length - 1],   // node ไหนเป็นปลายจริงของคานเต็ม (Codex P2)
-        bars: c.bars ? { spanBot: [c.bars.spanBot[si]], supTop: [c.bars.supTop[si], c.bars.supTop[si + 1]] } : null };
+        bars: c.bars ? { spanBot: [c.bars.spanBot[si]], supTop: [c.bars.supTop[si], c.bars.supTop[si + 1]] } : null,
+        curt: c.curt ? { top: [c.curt.top[si], c.curt.top[si + 1]], bot: [c.curt.bot[si]], applicable: c.curt.applicable } : null };
       const { svg } = buildElevationSVG(sub, { compact: true, marginX: 22, pxm: sharedPxm, showDim: true });
       svg.style.maxWidth = '100%'; svg.style.height = 'auto'; card.appendChild(svg);
       const mom = spanMoments(si, c.spans.length);
@@ -2225,9 +2271,12 @@
   }
 
   // rebar line with end hooks
-  function rebar(svg, x1, x2, y, hook, thin) {
+  function rebar(svg, x1, x2, y, hook, thin, dashed) {
     const w = thin ? 1.6 : 2.4;
-    svg.appendChild(svgEl('line', { x1, y1: y, x2, y2: y, stroke: '#1D4ED8', 'stroke-width': w, 'stroke-linecap': 'round' }));
+    const ln = { x1, y1: y, x2, y2: y, stroke: '#1D4ED8', 'stroke-width': w, 'stroke-linecap': 'round' };
+    if (dashed) ln['stroke-dasharray'] = '6 4';   // ค่าประมาณ (applicable=false · มีจุดโหลด/ช่วงไม่เท่า) → เส้นประ
+    svg.appendChild(svgEl('line', ln));
+    if (hook === 'none') return;                   // เหล็กตัด (cutoff) = หยุดเรียบ ไม่มีตะขอ (มาตรฐาน DRMK รูป 8.32 · A2 · ตะขอเหลือเฉพาะปลายคานจริง)
     const hk = hook === 'down' ? 8 : -8;
     svg.appendChild(svgEl('line', { x1, y1: y, x2: x1, y2: y + hk, stroke: '#1D4ED8', 'stroke-width': w }));
     svg.appendChild(svgEl('line', { x1: x2, y1: y, x2: x2, y2: y + hk, stroke: '#1D4ED8', 'stroke-width': w }));
@@ -5362,6 +5411,11 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         const curtTxt = (document.querySelector('#ccCurtailRows') || {}).textContent || '';
         A(`${lbl}: ตารางระยะหยุดเหล็ก populated (#ccCurtailRows)`,
           rowsIn('#ccCurtailRows') >= 1 && !/รอผลคำนวณ/.test(curtTxt), rowsIn('#ccCurtailRows') + ' rows');
+        // รูปด้านคาน wire ระยะตัด engine (data-curt='engine' · UDL) — กัน regress กลับ schematic L/6 hardcode
+        const elSvg = document.querySelector('#ccDrawHost svg[data-curt]');
+        A(`${lbl}: รูปด้านคาน wire ระยะตัด engine (data-curt)`,
+          !!elSvg && elSvg.getAttribute('data-curt') === 'engine',
+          elSvg ? elSvg.getAttribute('data-curt') : 'no-attr');
         // drift probe: section b×h label == engine (buildSection เคยใช้ MOCK)
         const secTxt = (document.querySelector('#sectionMain') || {}).textContent || '';
         A(`${lbl}: หน้าตัดป้าย b×h ตรง engine (drift probe)`,
@@ -5377,6 +5431,11 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('curtailment: จุดโหลด → warning banner แสดง (applicable=false)',
         !!(warnEl && !warnEl.classList.contains('step-hidden') && warnEl.textContent.trim().length > 0),
         warnEl ? ('hidden=' + warnEl.classList.contains('step-hidden')) : 'n/a');
+      // รูปด้านคาน: จุดโหลด → data-curt='approx' (เหล็กเสริมเส้นประ · ตรงกับ warning) — End User Fix-2
+      const elApx = document.querySelector('#ccDrawHost svg[data-curt]');
+      A('curtailment: จุดโหลด → รูปด้านคาน data-curt=approx (เส้นประ)',
+        !!elApx && elApx.getAttribute('data-curt') === 'approx',
+        elApx ? elApx.getAttribute('data-curt') : 'n/a');
       TT().setPoints([]);
 
       // ── D · mode-switch integrity (applyMode toggle) ──
