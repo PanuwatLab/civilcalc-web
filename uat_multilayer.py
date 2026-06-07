@@ -73,6 +73,19 @@ except calc.CivilCalcError:
 chk("คานเล็กมาก+โหลดหนักมาก → graceful (domain error/None · ไม่ crash · n_layers ≤ 3)", ok6)
 chk("MAX_REBAR_LAYERS = 3 (cap)", calc.MAX_REBAR_LAYERS == 3)
 
+print("\nCase 7 · Codex review fixes (#26)")
+# P1: avail < db → 0 เส้น/ชั้น (ไม่ยอมรับ layout ที่เหล็กไม่ลอด)
+chk("max_bars_per_layer(0.2, DB12) = 0 (เหล็กไม่ลอด · Codex P1)", calc.max_bars_per_layer(0.2, 1.2) == 0)
+chk("max_bars_per_layer(2.2, DB25) = 0 (DB25 2.5cm ไม่ลอด bay 2.2cm)", calc.max_bars_per_layer(2.2, 2.5) == 0)
+o7 = calc.design_beam(calc.BeamInput(b=10, h=50, L=4, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9, DL=5, LL=3))
+chk("b=10cm (avail 0.2) → rebar=None/fail (แนะขยาย · ไม่ยอมรับ impossible)", o7.rebar is None or not o7.passes)
+# P2 1373: tie-break ต้องเลือก db เล็ก (d ใหญ่ · pass) ไม่ใช่ db ใหญ่ (false-fail) ในเคส multilayer
+o8 = calc.design_beam(calc.BeamInput(b=18, h=45, L=7, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9, DL=10, LL=6))
+chk("b=18×45 multilayer → solve ได้ (db เล็ก d ใหญ่ · ไม่ false-fail · Codex 1373)", o8.rebar is not None and o8.passes)
+if o8.rebar:
+    maxdb8 = max(int("".join(c for c in nm if c.isdigit())) for nm, _ in o8.rebar.main_bars)
+    chk("→ ไม่เลือก DB ใหญ่สุด (DB28) ที่ d ต่ำ → เลือก db ≤ 25 (d ใหญ่กว่า)", maxdb8 <= 25, f"maxdb={maxdb8}")
+
 print("\n" + "=" * 64)
 print(f" RESULT: {PASS} PASS / {FAIL} FAIL" + ("  ALL GREEN" if FAIL == 0 else "  *** FAIL ***"))
 print("=" * 64)

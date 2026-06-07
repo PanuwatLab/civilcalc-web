@@ -388,11 +388,12 @@ def min_clear_spacing(db_cm: float) -> float:
 
 def max_bars_per_layer(available_cm: float, db_cm: float) -> int:
     """จำนวนเหล็กสูงสุดต่อ 1 ชั้น เมื่อช่องในระหว่างปลอก = available_cm.
-    n·db + (n−1)·s ≤ available → n ≤ (available+s)/(db+s). คืน ≥1.
-    (verified vs DRMK ตาราง 3.3)"""
+    n·db + (n−1)·s ≤ available → n ≤ (available+s)/(db+s).
+    คืน **0** ถ้า available < db (เหล็กเส้นเดียวยังไม่ลอด → caller ต้องขยายหน้าตัด · Codex P1) ·
+    ไม่ floor เป็น 1 มิฉะนั้นยอมรับ layout ที่เหล็กไม่ลอดจริง. (verified vs DRMK ตาราง 3.3)"""
+    if available_cm < db_cm - 1e-9:        # แม้แต่ 1 เส้นยังไม่ลอด
+        return 0
     s = min_clear_spacing(db_cm)
-    if available_cm <= 0:
-        return 1
     return max(1, int((available_cm + s) / (db_cm + s) + 1e-9))
 
 
@@ -1369,8 +1370,13 @@ def select_rebar(
     best: Optional[RebarSelection] = None
 
     def _key(c: RebarSelection):
-        # prefer (1) ชั้นน้อย → single-layer ชนะ multi เสมอ (2) over-provision น้อย (3) จำนวนเส้นน้อย (กัน 8-เส้นจิ๋วชนะ 2-เส้นปกติ)
-        return (c.n_layers, round(c.As_provided, 4), sum(n for _, n in c.main_bars))
+        # prefer (1) ชั้นน้อย → single ชนะ multi เสมอ
+        # (2) MULTILAYER: db เล็กกว่าก่อน (db เล็ก → c.g. ตื้น → d ใหญ่ → กำลังมากกว่าที่ As ใกล้กัน · Codex P2 false-failure)
+        #     single-layer: slot=0 (db ไม่กระทบ d มาก → ใช้ As เป็นหลัก = baseline เดิม)
+        # (3) over-provision น้อย (4) จำนวนเส้นน้อย (กัน 8-เส้นจิ๋วชนะ 2-เส้นปกติ)
+        maxdb = max((int("".join(ch for ch in nm if ch.isdigit()) or 0) for nm, _ in c.main_bars), default=0)
+        db_pref = maxdb if c.n_layers >= 2 else 0
+        return (c.n_layers, db_pref, round(c.As_provided, 4), sum(n for _, n in c.main_bars))
 
     def _consider(combo: RebarSelection):
         nonlocal best
@@ -1383,6 +1389,8 @@ def select_rebar(
         area_per_bar = size["area_cm2"]
         mc = min_clear_spacing(db)
         per = min(max_bars_per_layer(available, db), PRACTICAL_MAX_PER_LAYER)   # เส้น/ชั้น · cap practical 6
+        if per < 1:                                     # เหล็กเส้นนี้ไม่ลอดความกว้าง → ข้าม (Codex P1)
+            continue
         n_cap = MAX_REBAR_LAYERS * per
         for n in range(2, n_cap + 1):
             if n * area_per_bar < As_required:
@@ -1405,6 +1413,8 @@ def select_rebar(
                 continue
             mc = min_clear_spacing(big["diameter_cm"])          # ใช้ db ใหญ่ = conservative
             per = min(max_bars_per_layer(available, big["diameter_cm"]), PRACTICAL_MAX_PER_LAYER)
+            if per < 1:                                 # bar ใหญ่ไม่ลอดความกว้าง → ข้าม (Codex P1 · กัน div-by-zero)
+                continue
             for n_big in range(2, 5):
                 for n_small in range(1, 3):
                     total_area = n_big * big["area_cm2"] + n_small * small["area_cm2"]
