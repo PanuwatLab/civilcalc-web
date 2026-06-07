@@ -2024,14 +2024,21 @@
 
   // curtData — ระยะหยุดเหล็กจาก engine (out.curtailment) จัดเรียงตาม index span/node เหมือน detailBars · parity-safe (อ่านตรง ไม่คำนวณซ้ำ)
   function curtData() {
-    let cur;
-    if (state.mode === 'cont') { const ac = analyzeContinuous(), o = ac && ac.out; cur = o && o.curtailment; }
+    let cur, oSpans = null;
+    if (state.mode === 'cont') { const ac = analyzeContinuous(), o = ac && ac.out; cur = o && o.curtailment; oSpans = o && o.spans; }
     else { cur = state._lastInp && state._lastInp.out && state._lastInp.out.curtailment; }   // single (bottom-only)
     if (!cur) return null;
     const top = [];   // index ตาม node (support "A"→0 · sparse: simple-end ไม่มี top)
     (cur.top || []).forEach(t => { const i = (t.support || '').charCodeAt(0) - 65; if (i >= 0) top[i] = t; });
-    const bot = [];   // index ตาม span (engine bottom_out เรียงตาม span)
-    (cur.bottom || []).forEach((b, k) => { bot[k] = b; });
+    // bot: index ตาม span · ⚠️ engine skip ช่วง M_pos=0 (ไม่มีเหล็กล่าง) → bottom[] positional ≠ span index
+    //   → align ด้วย span label (ไม่ใช่ตำแหน่ง) กัน misalign เมื่อช่วงกลางถูก skip (Codex P2 · ครอบ no-cut under-report)
+    let bot = [];
+    if (oSpans) {
+      const byLabel = {}; (cur.bottom || []).forEach(b => { byLabel[b.span] = b; });
+      bot = oSpans.map(sp => byLabel[sp.label] || null);
+    } else {
+      (cur.bottom || []).forEach((b, k) => { bot[k] = b; });
+    }
     // bottomExact: A2a continuous — เหล็กล่างคำนวณจาก moment envelope จริง (exact) แม้ applicable=false (เหล็กบนยัง approx)
     return { top, bot, applicable: cur.applicable !== false, bottomExact: cur.bottom_exact === true };
   }
@@ -2425,9 +2432,11 @@
           groups.forEach((g, k) => rows.push([mark + (groups.length > 1 ? String.fromCharCode(97 + k) : ''), g[0], g[1], len, pos]));
         });
         // เสริมกลาง (+M) + ปลอก — รายช่วง · envelope (A2a) = ตัด cut_bars (L−ซ้าย−ขวา) + ที่เหลือวิ่งเต็ม · fig-8.32 = L−2·L/8
+        // align curtailment.bottom ด้วย span label (ไม่ใช่ตำแหน่ง) — engine skip ช่วง M_pos=0 → positional misalign (Codex P2)
+        const _botByLabel = {}; ((o.curtailment && o.curtailment.bottom) || []).forEach(b => { _botByLabel[b.span] = b; });
         o.spans.forEach((sp, i) => {
           const gM = extraBarGroups(bars.spanBot[i].list);
-          const _cb = (o.curtailment && o.curtailment.bottom && o.curtailment.bottom[i]) || {};
+          const _cb = _botByLabel[sp.label] || {};
           const _env = _cb.cut_left_m != null && _cb.cut_bars;   // envelope continuous = asymmetric ซ้าย/ขวา (Path A2a)
           if (_env) {
             const lenCut = +(sp.L - _cb.cut_left_m - _cb.cut_right_m).toFixed(2);
@@ -2435,8 +2444,12 @@
             const rem = {}; gM.forEach(([s, c]) => rem[s] = (rem[s] || 0) + c); cutG.forEach(([s, c]) => rem[s] = (rem[s] || 0) - c);
             cutG.forEach((g, k) => rows.push([`M${i + 1}c${k + 1}`, g[0], g[1], lenCut, `ล่าง·เสริมกลาง·ตัด envelope ${sp.label}`]));
             Object.keys(rem).filter(s => rem[s] > 0).forEach((s, k) => rows.push([`M${i + 1}f${k + 1}`, s, rem[s], +(sp.L || 0).toFixed(2), `ล่าง·เสริมกลาง·วิ่งเต็ม ${sp.label}`]));
+          } else if (_cb.cut_eighth_m == null && _cb.n_continuous_past_L8 != null) {
+            // envelope no-cut: เหล็กเสริมวิ่งเต็มช่วง (ตรง table/figure "วิ่งเต็ม·ไม่ตัด" · Codex P2 — เดิม fallback 0.75L under-report)
+            const lenF = +(sp.L || 0).toFixed(2);
+            gM.forEach((g, k) => rows.push([`M${i + 1}${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenF, `ล่าง·เสริมกลาง·วิ่งเต็ม ${sp.label}`]));
           } else {
-            const lenM = +(_cb.cut_eighth_m != null ? (sp.L - 2 * _cb.cut_eighth_m) : (sp.L || 0) * 3 / 4).toFixed(2);   // ฐาน L/8 (Codex P2 · เดิม L×2/3)
+            const lenM = +(_cb.cut_eighth_m != null ? (sp.L - 2 * _cb.cut_eighth_m) : (sp.L || 0) * 3 / 4).toFixed(2);   // fig-8.32 L−2·L/8 · ไม่มี data → 3L/4 schematic
             gM.forEach((g, k) => rows.push([`M${i + 1}${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, `ล่าง·เสริมกลาง ${sp.label}`]));
           }
           const sh = sp.shear || {}, nStir = stirrupCount(sh) * (sh.n_legs === 4 ? 2 : 1);   // 2ป = 2 ชิ้น/station (Codex P2)
