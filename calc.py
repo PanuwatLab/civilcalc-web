@@ -1770,10 +1770,20 @@ def _flexure_design_for_moment(
             phi_Mn = PHI_FLEXURE * Mn
         break
 
+    passes = phi_Mn >= Mu_kgcm - FLOAT_TOL
+    notes_out = list(limit_notes)
+    # ρ_provided ที่ความลึกจริง ต้อง ≤ ρmax — กัน over-reinforced ที่ multilayer ทำให้ d เล็กลง
+    #   (เหมือน design_beam · ครอบ continuous/cantilever path · Codex P1 #26 round-4)
+    if rebar and d_actual > 0:
+        rho_prov = rebar.As_provided / (b * d_actual)
+        if rho_prov > rho_max + 1e-9:
+            passes = False
+            notes_out.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({rho_max:.4f}) ที่ความลึกจริง d={d_actual:.2f} ซม. "
+                             "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
     out.update({"As_required": As_req, "rho_final": rho_final, "rebar": rebar,
-                "Rn": Rn, "notes": limit_notes,
+                "Rn": Rn, "notes": notes_out,
                 "d_actual": d_actual, "a_stress_block": a, "Mn": Mn, "phi_Mn": phi_Mn,
-                "passes": phi_Mn >= Mu_kgcm - FLOAT_TOL,
+                "passes": passes,
                 "safety_margin_pct": (phi_Mn - Mu_kgcm) / Mu_kgcm * 100.0})
     return out
 
