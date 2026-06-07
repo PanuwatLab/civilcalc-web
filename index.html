@@ -3976,6 +3976,8 @@ def select_rebar(
     b: float,
     cover: float,
     d_stirrup: float,
+    h_cm: float = None,
+    rho_max: float = None,
 ) -> Optional[RebarSelection]:
     """Pick a practical rebar combination satisfying As_provided ≥ As_required.
 
@@ -3983,7 +3985,11 @@ def select_rebar(
     Clear spacing = max(db, 2.5, 1.33·d_agg) (รวมมวลรวม · กัน honeycomb). ถ้าชั้นเดียวกว้างไม่พอ →
     จัด multi-layer (≤ MAX_REBAR_LAYERS). Tie-break: **ชั้นน้อยกว่าชนะ** (single-layer ถ้า fit เสมอ) แล้ว As น้อยสุด.
 
-    Returns RebarSelection (มี n_layers) หรือ None ถ้าเกิน MAX_REBAR_LAYERS (caller enlarge section).
+    ถ้าให้ h_cm + rho_max → **กรอง candidate ที่ over-reinforced** (ρ_provided=As/(b·d) ที่ความลึกจริง
+    ของ combo นั้น > rho_max) ออก → กัน false-failure ที่เลือก combo ชั้นน้อยแต่ over-reinforced
+    ทั้งที่ combo ชั้นมากกว่า (As น้อยกว่า) ผ่านได้ (Codex P2 #26). ไม่ให้ → ไม่กรอง (backward-compat).
+
+    Returns RebarSelection (มี n_layers) หรือ None ถ้าเกิน MAX_REBAR_LAYERS / over-reinforced ทุก combo.
     """
     table = _load_rebar_table()
     sizes = table["sizes"]
@@ -3993,6 +3999,15 @@ def select_rebar(
         return None
 
     best: Optional[RebarSelection] = None
+
+    def _over_reinforced(c: RebarSelection) -> bool:
+        # ρ_provided ที่ความลึกจริงของ combo นี้ > rho_max ? (ใช้ db ใหญ่สุด · n_layers ของ combo)
+        if not (h_cm and rho_max):
+            return False
+        nb = sum(n for _, n in c.main_bars)
+        mdb = max((int("".join(ch for ch in nm if ch.isdigit()) or 0) for nm, _ in c.main_bars), default=16) / 10.0
+        d = effective_depth_multilayer(h_cm, cover, d_stirrup, mdb, nb, c.n_layers)
+        return d <= 0 or (c.As_provided / (b * d)) > rho_max + 1e-9
 
     def _key(c: RebarSelection):
         # prefer (1) ชั้นน้อย → single ชนะ multi เสมอ
@@ -4005,6 +4020,8 @@ def select_rebar(
 
     def _consider(combo: RebarSelection):
         nonlocal best
+        if _over_reinforced(combo):     # ข้าม combo ที่ over-reinforced ที่ความลึกจริง (Codex P2 #26 · กัน false-failure)
+            return
         if best is None or _key(combo) < _key(best):
             best = combo
 
@@ -4140,7 +4157,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
 
     # Step 9 · rebar selection
     out.rebar = select_rebar(
-        out.As_required, inp.b, inp.cover, inp.d_stirrup
+        out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max
     )
     if out.rebar is None:
         out.notes.append("ไม่พบ rebar combo ที่ fit ในหน้าตัดนี้ · ต้องขยาย b หรือ ใช้ multi-layer (เกิน MVP)")
@@ -4167,7 +4184,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
         except CivilCalcError:
             break   # ที่ d จริงหน้าตัดไม่พอ → หยุด · ρ_provided check ด้านล่างจะจับ over-reinforced (Codex P1 #26)
         As2 = compute_As(rf2, inp.b, out.d_actual)
-        rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup)
+        rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max)
         if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
             break   # ไม่มี combo ดีกว่า → หยุด (รับผลปัจจุบัน)
         out.rebar, out.As_required, out.rho_final, out.Rn, out.rho_design = rb2, As2, rf2, Rn2, rho2
@@ -4370,7 +4387,7 @@ def _flexure_design_for_moment(
         rho_design = compute_rho_design(fc, fy, Rn)   # raises SectionTooSmallError if too small
         rho_final, limit_notes = apply_rho_limits(rho_design, rho_min, rho_max)
         As_req = compute_As(rho_final, b, d)
-        rebar = select_rebar(As_req, b, cover, d_stirrup)
+        rebar = select_rebar(As_req, b, cover, d_stirrup, h, rho_max)
         if rebar is None:
             out.update({"As_required": As_req, "rebar": None, "passes": False,
                         "note": "ไม่พบ rebar combo ที่ fit · ต้องขยาย b หรือ multi-layer"})
@@ -4386,7 +4403,7 @@ def _flexure_design_for_moment(
             continue
         # depth stable but capacity short → bump steel proportional to shortfall
         As_target = As_req * (Mu_kgcm / max(phi_Mn, 1.0)) * 1.02
-        bumped = select_rebar(As_target, b, cover, d_stirrup)
+        bumped = select_rebar(As_target, b, cover, d_stirrup, h, rho_max)
         if bumped is not None:
             rebar = bumped
             d_actual = _rebar_d(h, cover, d_stirrup, rebar, _db_cm(rebar))

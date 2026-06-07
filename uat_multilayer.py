@@ -88,17 +88,23 @@ if o8.rebar:
 
 print("\nCase 8 · Codex P1 #26 round-2 — over-reinforced ที่ d จริงหลายชั้น → FAIL (ไม่ accept ด้วย phi_Mn อย่างเดียว)")
 o9 = calc.design_beam(calc.BeamInput(b=14, h=35, L=4, fc=240, fy=4000, cover=4, d_stirrup=0.9, DL=15, LL=9))
-chk("b=14×35 → passes=False (ρ>ρmax ที่ d_actual หลายชั้น · ไม่ false-pass)", not o9.passes)
-chk("→ มี note เตือน singly-reinforced/ρ เกิน", any(("singly" in n or "ρ" in n) for n in o9.notes))
+chk("b=14×35 narrow+heavy → passes=False (ไม่ false-pass · capacity/ρ ไม่พอ)", not o9.passes)
+chk("→ combo ที่เลือกไม่ over-reinforced (select กรอง ρ_prov ≤ ρmax) หรือไม่มี combo",
+    (not o9.rebar) or o9.rebar.As_provided / (14 * o9.d_actual) <= o9.rho_max + 1e-9)
 # Codex P1 round-3 (#26 · 1551): over-reinforced path ที่ recompute ไม่ raise → ρ_provided check ต้องจับ
 o10 = calc.design_beam(calc.BeamInput(b=12, h=30, L=5, fc=240, fy=4000, cover=3, d_stirrup=0.9, DL=5, LL=3))
-chk("b=12×30 → passes=False (ρ_provided > ρmax ที่ d จริง · general check)", not o10.passes)
-if o10.rebar:
-    chk("→ ρ_provided > ρmax จริง (ยืนยัน over-reinforced)",
-        o10.rebar.As_provided / (12 * o10.d_actual) > o10.rho_max + 1e-9)
-# Codex P1 round-4 (#26 · 1753): continuous/cantilever path (_safe_flexure_design) ก็ต้อง guard ρ_provided
+chk("b=12×30 L5 → passes=False (section ไม่พอ · ไม่ false-pass)", not o10.passes)
+if o10.rebar:   # select กรอง over-reinforced → combo ที่เลือกต้อง ρ_prov ≤ ρmax
+    chk("→ combo ที่เลือก ρ_provided ≤ ρmax (select กรอง over-reinforced)",
+        o10.rebar.As_provided / (12 * o10.d_actual) <= o10.rho_max + 1e-9)
+# Codex P2 #26 (1379): false-failure fix — เคยเลือก 2-DB20(2ชั้น over) → fail · ตอนนี้เลือก 3-ชั้น valid → solve
+o11 = calc.design_beam(calc.BeamInput(b=12, h=30, L=3, fc=240, fy=4000, cover=3, d_stirrup=0.9, DL=12, LL=7.2))
+chk("b=12×30 L3 → solve ได้ (select เลี่ยง over-reinforced → 3-ชั้น valid · ไม่ false-fail · Codex P2)", o11.passes)
+if o11.rebar:
+    chk("→ combo valid ρ_provided ≤ ρmax", o11.rebar.As_provided / (12 * o11.d_actual) <= o11.rho_max + 1e-9)
+# safety-net: design ρ_provided guard (continuous path) ยังทำงานเมื่อ select คืน over (กรณีไม่ส่ง h/rho_max)
 _rc = calc._safe_flexure_design(30, 12, 30, 240, 4000, 4, 0.9, 1.6)
-chk("continuous _safe_flexure_design over-reinforced → passes=False (ρ_provided guard ครบ 2 path)", not _rc["passes"])
+chk("continuous _safe_flexure_design narrow → passes=False (guard ครบ 2 path)", not _rc["passes"])
 
 print("\n" + "=" * 64)
 print(f" RESULT: {PASS} PASS / {FAIL} FAIL" + ("  ALL GREEN" if FAIL == 0 else "  *** FAIL ***"))
