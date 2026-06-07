@@ -33,6 +33,10 @@ EPS_TENSION_LIMIT: float = 0.005   # ACI 318-08 strain-based limit (not used in 
 
 PHI_FLEXURE: float = 0.90          # Strength reduction factor for flexure (Thai compliance default)
 PHI_SHEAR: float = 0.85            # Strength reduction factor for shear (ว.ส.ท. compliant)
+MAX_AGGREGATE_CM: float = 2.0      # ขนาดมวลรวมหยาบโตสุด (default ~3/4"-1") · clear spacing ≥ 1.33·d_agg (ACI 25.2 · DRMK รูป1.13)
+MAX_REBAR_LAYERS: int = 3          # cap จำนวนชั้นเหล็กนอน (เกินนี้ → แนะขยายหน้าตัด)
+PRACTICAL_MAX_PER_LAYER: int = 6   # เส้น/ชั้น เชิงปฏิบัติ (industry norm · กันเหล็กจิ๋วหลายเส้นเบียดแถวเดียว · เกิน→ขึ้นชั้น)
+REBAR_LAYER_VCLEAR_CM: float = 2.5 # ระยะห่างแนวดิ่งระหว่างชั้นเหล็ก (clear · ACI 25.2.2)
 
 # Unit conversion · Thai engineering uses ตัน (tonf) / กก. (kgf) / ksc · NOT kN/SI
 # 1 kN = 101.97 kgf = 0.10197 tonf  (matches kNm_to_kgcm = 10197 kg·cm/kN·m · g=9.80665)
@@ -199,6 +203,7 @@ class RebarSelection:
     As_provided: float = 0.0                                          # cm²
     spacing_min_clear: float = 0.0                                    # cm (min clear spacing)
     fits_in_one_layer: bool = True
+    n_layers: int = 1                                                 # จำนวนชั้นเหล็ก (1 ปกติ · ≥2 เมื่อกว้างไม่พอ · multi-layer)
     notes: list[str] = field(default_factory=list)
 
 
@@ -371,8 +376,59 @@ def validate_input(inp: BeamInput) -> list[str]:
 
 
 def compute_effective_depth(h: float, cover: float, d_stirrup: float, db: float) -> float:
-    """d = h − cover − d_stirrup − db/2 (single layer assumption · MVP)"""
+    """d = h − cover − d_stirrup − db/2 (single layer · c.g. ของเหล็กชั้นเดียว)"""
     return h - cover - d_stirrup - db / 2.0
+
+
+def min_clear_spacing(db_cm: float) -> float:
+    """ระยะช่องว่างน้อยสุดระหว่างเหล็กนอน = max(db, 2.5 ซม., 1.33·มวลรวมโตสุด)
+    (ACI 25.2 · DRMK รูป 1.13 · [[Formula - Rebar Clear Spacing & Multi-Layer Arrangement]])"""
+    return max(db_cm, 2.5, 1.33 * MAX_AGGREGATE_CM)
+
+
+def max_bars_per_layer(available_cm: float, db_cm: float) -> int:
+    """จำนวนเหล็กสูงสุดต่อ 1 ชั้น เมื่อช่องในระหว่างปลอก = available_cm.
+    n·db + (n−1)·s ≤ available → n ≤ (available+s)/(db+s). คืน ≥1.
+    (verified vs DRMK ตาราง 3.3)"""
+    s = min_clear_spacing(db_cm)
+    if available_cm <= 0:
+        return 1
+    return max(1, int((available_cm + s) / (db_cm + s) + 1e-9))
+
+
+def _layer_counts(n_bars: int, n_layers: int) -> list:
+    """แจกแจงเหล็ก n เส้นลง n_layers ชั้น — ชั้นที่อยู่ห่างแกนสะเทินสุด (tension-most · index 0)
+    ได้จำนวนมากก่อน (≥ ชั้นถัดไป) → c.g. ใกล้ผิวรับแรงดึง = d มากสุดเท่าที่จัดได้ (conservative-friendly)."""
+    if n_layers <= 1:
+        return [n_bars]
+    base, rem = divmod(n_bars, n_layers)
+    return [base + 1] * rem + [base] * (n_layers - rem)
+
+
+def effective_depth_multilayer(h: float, cover: float, d_stirrup: float, db: float,
+                               n_bars: int, n_layers: int,
+                               s_vert: float = None) -> float:
+    """d = h − c.g. ของกลุ่มเหล็กหลายชั้น (วัดจากผิวรับแรงดึง).
+    ชั้น i ศูนย์กลางห่างผิวรับแรงดึง = cover + d_stirrup + db/2 + i·(db + s_vert).
+    n_layers==1 → เท่ากับ compute_effective_depth เดิม. รับประกัน d(multi) ≤ d(single)."""
+    if n_layers <= 1 or n_bars <= 0:
+        return compute_effective_depth(h, cover, d_stirrup, db)
+    if s_vert is None:
+        s_vert = REBAR_LAYER_VCLEAR_CM
+    counts = _layer_counts(n_bars, n_layers)
+    y0 = cover + d_stirrup + db / 2.0                 # ศูนย์กลางชั้นแรก (ห่างผิวรับแรงดึง)
+    pitch = db + s_vert                               # ระยะศูนย์กลาง-ศูนย์กลางระหว่างชั้น
+    cg = sum(c * (y0 + i * pitch) for i, c in enumerate(counts)) / float(n_bars)
+    return h - cg
+
+
+def _rebar_d(h: float, cover: float, d_stirrup: float, rebar, db_cm: float) -> float:
+    """d ของกลุ่มเหล็ก (multilayer-aware) จาก RebarSelection · single layer → เท่าสูตรเดิม."""
+    if not rebar or not rebar.main_bars:
+        return compute_effective_depth(h, cover, d_stirrup, db_cm)
+    n_bars = sum(c for _, c in rebar.main_bars)
+    return effective_depth_multilayer(h, cover, d_stirrup, db_cm, n_bars,
+                                      getattr(rebar, "n_layers", 1))
 
 
 def compute_beta1(fc: float) -> float:
@@ -1294,17 +1350,17 @@ def select_rebar(
     b: float,
     cover: float,
     d_stirrup: float,
-    max_bars_per_layer: int = 6,
 ) -> Optional[RebarSelection]:
     """Pick a practical rebar combination satisfying As_provided ≥ As_required.
 
-    Strategy: try uniform-size combos first (3-DB16 · 4-DB16 · ...) then 2-size mixes.
-    Constraint: bars must fit within b with min clear spacing.
+    Strategy: single-size combos first, then 2-size mixes.
+    Clear spacing = max(db, 2.5, 1.33·d_agg) (รวมมวลรวม · กัน honeycomb). ถ้าชั้นเดียวกว้างไม่พอ →
+    จัด multi-layer (≤ MAX_REBAR_LAYERS). Tie-break: **ชั้นน้อยกว่าชนะ** (single-layer ถ้า fit เสมอ) แล้ว As น้อยสุด.
 
-    Returns RebarSelection or None if no realistic combo found (caller should enlarge section).
+    Returns RebarSelection (มี n_layers) หรือ None ถ้าเกิน MAX_REBAR_LAYERS (caller enlarge section).
     """
     table = _load_rebar_table()
-    sizes = table["sizes"]  # list of {"name": "DB16", "diameter_cm": 1.6, "area_cm2": 2.011}
+    sizes = table["sizes"]
 
     available = b - 2 * cover - 2 * d_stirrup
     if available <= 0:
@@ -1312,62 +1368,59 @@ def select_rebar(
 
     best: Optional[RebarSelection] = None
 
-    # 1) Try single-size combos (cheaper · cleaner)
+    def _key(c: RebarSelection):
+        # prefer (1) ชั้นน้อย → single-layer ชนะ multi เสมอ (2) over-provision น้อย (3) จำนวนเส้นน้อย (กัน 8-เส้นจิ๋วชนะ 2-เส้นปกติ)
+        return (c.n_layers, round(c.As_provided, 4), sum(n for _, n in c.main_bars))
+
+    def _consider(combo: RebarSelection):
+        nonlocal best
+        if best is None or _key(combo) < _key(best):
+            best = combo
+
+    # 1) single-size combos
     for size in sizes:
         db = size["diameter_cm"]
         area_per_bar = size["area_cm2"]
-        # min clear spacing = max(db, 2.5 cm)
-        min_clear = max(db, 2.5)
-        for n in range(2, max_bars_per_layer + 1):
+        mc = min_clear_spacing(db)
+        per = min(max_bars_per_layer(available, db), PRACTICAL_MAX_PER_LAYER)   # เส้น/ชั้น · cap practical 6
+        n_cap = MAX_REBAR_LAYERS * per
+        for n in range(2, n_cap + 1):
             if n * area_per_bar < As_required:
                 continue
-            # check fit: n bars + (n-1) clear spacing + n*db ≤ available
-            required_width = n * db + (n - 1) * min_clear
-            if required_width > available:
+            n_layers = -(-n // per)                     # ceil(n/per)
+            if n_layers > MAX_REBAR_LAYERS:
                 continue
-            # accept
-            combo = RebarSelection(
-                main_bars=[(size["name"], n)],
-                As_provided=n * area_per_bar,
-                spacing_min_clear=min_clear,
-                fits_in_one_layer=True,
-            )
-            # prefer combo closest to As_required (minimize over-provision)
-            if best is None or combo.As_provided < best.As_provided:
-                best = combo
-            break  # found smallest n for this size · move to next size
+            note = [] if n_layers == 1 else [
+                f"เหล็ก {n} เส้นจัด {n_layers} ชั้น (กว้างไม่พอชั้นเดียว · d ลดตาม c.g. · ระยะดิ่ง ≥{REBAR_LAYER_VCLEAR_CM} ซม.)"]
+            _consider(RebarSelection(
+                main_bars=[(size["name"], n)], As_provided=n * area_per_bar,
+                spacing_min_clear=mc, fits_in_one_layer=(n_layers == 1),
+                n_layers=n_layers, notes=note))
+            break  # smallest n for this size
 
-    # 2) Try 2-size mixes (e.g., 3-DB16 + 2-DB12) for efficiency
+    # 2) 2-size mixes
     for big in sizes:
         for small in sizes:
             if small["diameter_cm"] >= big["diameter_cm"]:
                 continue
+            mc = min_clear_spacing(big["diameter_cm"])          # ใช้ db ใหญ่ = conservative
+            per = min(max_bars_per_layer(available, big["diameter_cm"]), PRACTICAL_MAX_PER_LAYER)
             for n_big in range(2, 5):
                 for n_small in range(1, 3):
                     total_area = n_big * big["area_cm2"] + n_small * small["area_cm2"]
                     if total_area < As_required:
                         continue
                     n_total = n_big + n_small
-                    if n_total > max_bars_per_layer:
+                    n_layers = -(-n_total // per)
+                    if n_layers > MAX_REBAR_LAYERS:
                         continue
-                    # check fit
-                    min_clear = max(big["diameter_cm"], 2.5)
-                    required_width = n_total * big["diameter_cm"] + (n_total - 1) * min_clear
-                    # (use big db for conservative spacing)
-                    if required_width > available:
-                        continue
-                    combo = RebarSelection(
-                        main_bars=[
-                            (big["name"], n_big),
-                            (small["name"], n_small),
-                        ],
-                        As_provided=total_area,
-                        spacing_min_clear=min_clear,
-                        fits_in_one_layer=True,
-                        notes=["mixed-size combo · check production detailing"],
-                    )
-                    if best is None or combo.As_provided < best.As_provided:
-                        best = combo
+                    notes = ["mixed-size combo · check production detailing"]
+                    if n_layers > 1:
+                        notes.append(f"จัด {n_layers} ชั้น · d ลดตาม c.g.")
+                    _consider(RebarSelection(
+                        main_bars=[(big["name"], n_big), (small["name"], n_small)],
+                        As_provided=total_area, spacing_min_clear=mc,
+                        fits_in_one_layer=(n_layers == 1), n_layers=n_layers, notes=notes))
 
     return best
 
@@ -1459,14 +1512,34 @@ def design_beam(inp: BeamInput) -> BeamOutput:
         out.passes = False
         return out
 
-    # Step 10 · d_actual after rebar selection
-    db_actual = out.rebar.main_bars[0][0]  # use primary bar
+    # Step 10 · d_actual after rebar selection (multilayer-aware · c.g. หลายชั้น)
     rebar_table = _load_rebar_table()
-    db_actual_cm = next(
-        (s["diameter_cm"] for s in rebar_table["sizes"] if s["name"] == db_actual),
-        inp.db_assume,
-    )
-    out.d_actual = compute_effective_depth(inp.h, inp.cover, inp.d_stirrup, db_actual_cm)
+
+    def _db_of(rb):
+        return next((s["diameter_cm"] for s in rebar_table["sizes"]
+                     if s["name"] == rb.main_bars[0][0]), inp.db_assume)
+
+    out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
+    # multilayer (nl≥2) → c.g. ลึกขึ้น → d เล็กลง → recompute As ที่ d จริง · bounded · honest
+    #   single-layer (nl=1) → d_actual = baseline เดิมเป๊ะ (h−cover−stir−db/2) · ไม่ iterate (zero-reg)
+    for _ in range(3):
+        if out.rebar.n_layers < 2 or out.d_actual >= out.d_assumed - 0.01:
+            break
+        try:
+            Rn2 = compute_Rn(out.Mu_kg_cm, inp.b, out.d_actual, PHI_FLEXURE)
+            rho2 = compute_rho_design(inp.fc, inp.fy, Rn2)
+            rf2, _n2 = apply_rho_limits(rho2, out.rho_min, out.rho_max)
+        except CivilCalcError:
+            break   # ที่ d เล็กลงหน้าตัดไม่พอ → คงผลเดิม · passes_flexure จะสะท้อนความจริงด้านล่าง
+        As2 = compute_As(rf2, inp.b, out.d_actual)
+        rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup)
+        if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
+            break   # ไม่มี combo ดีกว่า → หยุด (รับผลปัจจุบัน)
+        out.rebar, out.As_required, out.rho_final, out.Rn, out.rho_design = rb2, As2, rf2, Rn2, rho2
+        d_prev = out.d_actual
+        out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
+        if abs(out.d_actual - d_prev) < 0.01:
+            break
 
     # Step 11 · final check (flexure)
     out.a_stress_block = compute_stress_block_depth(
@@ -1659,7 +1732,7 @@ def _flexure_design_for_moment(
             out.update({"As_required": As_req, "rebar": None, "passes": False,
                         "note": "ไม่พบ rebar combo ที่ fit · ต้องขยาย b หรือ multi-layer"})
             return out
-        d_actual = compute_effective_depth(h, cover, d_stirrup, _db_cm(rebar))
+        d_actual = _rebar_d(h, cover, d_stirrup, rebar, _db_cm(rebar))
         a = compute_stress_block_depth(rebar.As_provided, fy, fc, b)
         Mn = compute_Mn(rebar.As_provided, fy, d_actual, a)
         phi_Mn = PHI_FLEXURE * Mn
@@ -1673,7 +1746,7 @@ def _flexure_design_for_moment(
         bumped = select_rebar(As_target, b, cover, d_stirrup)
         if bumped is not None:
             rebar = bumped
-            d_actual = compute_effective_depth(h, cover, d_stirrup, _db_cm(rebar))
+            d_actual = _rebar_d(h, cover, d_stirrup, rebar, _db_cm(rebar))
             a = compute_stress_block_depth(rebar.As_provided, fy, fc, b)
             Mn = compute_Mn(rebar.As_provided, fy, d_actual, a)
             phi_Mn = PHI_FLEXURE * Mn
