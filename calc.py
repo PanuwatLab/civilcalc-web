@@ -1532,7 +1532,6 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
     # multilayer (nl≥2) → c.g. ลึกขึ้น → d เล็กลง → recompute As ที่ d จริง · bounded · honest
     #   single-layer (nl=1) → d_actual = baseline เดิมเป๊ะ (h−cover−stir−db/2) · ไม่ iterate (zero-reg)
-    ml_inadequate = None     # ตั้งเมื่อ over-reinforced/section-too-small ที่ d จริงหลายชั้น (Codex P1 #26)
     for _ in range(3):
         if out.rebar.n_layers < 2 or out.d_actual >= out.d_assumed - 0.01:
             break
@@ -1540,11 +1539,8 @@ def design_beam(inp: BeamInput) -> BeamOutput:
             Rn2 = compute_Rn(out.Mu_kg_cm, inp.b, out.d_actual, PHI_FLEXURE)
             rho2 = compute_rho_design(inp.fc, inp.fy, Rn2)
             rf2, _n2 = apply_rho_limits(rho2, out.rho_min, out.rho_max)
-        except CivilCalcError as _exc:
-            # ที่ d จริง (หลายชั้น) หน้าตัดเกิน rho_max / เล็กเกิน → singly-reinforced ไม่ผ่าน
-            #   ห้าม accept เหล็กเดิมด้วย phi_Mn อย่างเดียว (Codex P1: 2-DB25 over-reinforced ที่ d_actual)
-            ml_inadequate = type(_exc).__name__
-            break
+        except CivilCalcError:
+            break   # ที่ d จริงหน้าตัดไม่พอ → หยุด · ρ_provided check ด้านล่างจะจับ over-reinforced (Codex P1 #26)
         As2 = compute_As(rf2, inp.b, out.d_actual)
         rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup)
         if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
@@ -1564,10 +1560,14 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
     if out.Mu_kg_cm > FLOAT_TOL:
         out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
-    if ml_inadequate:   # over-reinforced/too-small ที่ d จริงหลายชั้น → FAIL แม้ phi_Mn ผ่าน (Codex P1 #26)
-        out.passes_flexure = False
-        out.notes.append("🔴 หน้าตัดเกินขีดจำกัด singly-reinforced ที่ความลึกจริงของเหล็กหลายชั้น "
-                         f"(ρ > ρmax · {ml_inadequate} ที่ d_actual={out.d_actual:.2f}) — ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
+    # ρ ที่ใช้จริง (As_provided) ที่ความลึกจริง ต้อง ≤ ρmax (singly-reinforced) — กัน over-reinforced
+    #   ที่ multilayer ทำให้ d เล็กลง (ครอบทุก path · แม้ recompute ไม่ raise · Codex P1 #26 round-2/3)
+    if out.rebar and out.d_actual > 0:
+        rho_prov = out.rebar.As_provided / (inp.b * out.d_actual)
+        if rho_prov > out.rho_max + 1e-9:
+            out.passes_flexure = False
+            out.notes.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({out.rho_max:.4f}) ที่ความลึกจริง d={out.d_actual:.2f} ซม. "
+                             "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
 
     # Step 11.5 · Session 2 · Shear stirrup design (only for simply-supported · Session 2 scope)
     if inp.support == SupportType.SIMPLY_SUPPORTED:
