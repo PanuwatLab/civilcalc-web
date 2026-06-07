@@ -124,8 +124,11 @@ inp7 = calc.ContinuousBeamInput(
     load_combo="1.4D+1.7L",
     left_cantilever={"L": 2.0, "DL": 10, "LL": 5, "point_loads": [{"kind": "LL", "P": 40, "x": 1.8}]})
 c7 = calc.design_continuous_beam_exact(inp7)["curtailment"]
-check("คานยื่นมีจุดโหลด → applicable=True (envelope exact)", c7["applicable"] is True, c7["applicable"])
-check("คานยื่นมีจุดโหลด → bottom_exact (เหล็กล่าง envelope)", bool(c7.get("bottom_exact")), c7.get("bottom_exact"))
+# A2b: คานยื่นมีจุดโหลด → เหล็กล่าง+บนหัวเสาในเป็น envelope · แต่เหล็กบน "ฝั่งคานยื่น" = full+Ld (ไม่ใช่ envelope crossing)
+#   → applicable=False (honest · ฝั่งคานยื่นยังไม่ได้ envelope-check · Codex P2)
+check("คานยื่นมีจุดโหลด → applicable=False (ฝั่งคานยื่นยังไม่ envelope · honest)", c7["applicable"] is False, c7["applicable"])
+check("คานยื่นมีจุดโหลด → bottom_exact=True + warning คานยื่น",
+      bool(c7.get("bottom_exact")) and any("คานยื่น" in w for w in c7["warnings"]), (c7.get("bottom_exact"), c7["warnings"]))
 # คานยื่น UDL ล้วน (ไม่มีจุดโหลด) + ช่วงในเท่า → ยัง applicable=True
 inp7b = calc.ContinuousBeamInput(
     b=30, h=55, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9,

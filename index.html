@@ -4977,11 +4977,15 @@ def compute_curtailment_continuous_envelope(spans_out: list, supports_out: list,
         if not getattr(rebar_t, "main_bars", None):
             continue
         idx = ord(s["label"]) - ord("A")
+        # A2b: envelope เฉพาะ interior support (2 ข้างเป็น main span จริง) · exterior+คานยื่น top คง fig-8.32
+        #   เพราะ top คานยื่น = วิ่งเต็ม+Ld (determinate · ไม่ใช่ envelope crossing) → ฝั่งนอกไม่ได้ envelope-check (Codex P2)
+        if idx == 0 or idx == n_spans:
+            continue
         has_left = (idx - 1 >= 0) and (idx - 1 < n_spans)    # span ซ้าย = idx-1
         has_right = idx < n_spans                            # span ขวา = idx
-        if not (has_left or has_right):
+        if not (has_left and has_right):                     # interior ต้องมีครบ 2 ข้าง
             continue
-        is_ext = (idx == 0 or idx == n_spans)
+        is_ext = False
         d_t = s["top"].get("d_actual") or compute_effective_depth(h_cm, cover_cm, d_stirrup_cm, db_default_cm)
         dias_t = []
         for name, _c in rebar_t.main_bars:
@@ -5198,19 +5202,31 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
             cur["bottom"] = env["bottom"]
             cur["bottom_exact"] = True
             cur["citations"] = cur["citations"] + env["citations"]
-            if env.get("top"):                          # A2b: เหล็กบน envelope จริงด้วย
-                cur["top"] = env["top"]
+            # A2b: merge เหล็กบน envelope (interior เท่านั้น) ทับ fig-8.32 ตาม support label · exterior+คานยื่น คง fig-8.32 (Codex P2)
+            n_top_supports = len(cur.get("top") or [])
+            env_top = {t["support"]: t for t in (env.get("top") or [])}
+            if env_top:
+                cur["top"] = [env_top.get(t["support"], t) for t in cur["top"]]
+            # top_exact เฉพาะเมื่อ envelope คลุม "ทุก" support ที่มีเหล็กบน (ไม่มี exterior คานยื่นเหลือ fig-8.32)
+            top_all_exact = bool(env_top) and len(env_top) == n_top_supports
+            if top_all_exact:
                 cur["top_exact"] = True
             if cur.get("bottom_exact") and cur.get("top_exact"):
-                # บน-ล่าง exact ครบ → ลบ half-state · applicable=True · ไม่มี ⚠️ (ตรงรูป/ตาราง solid เต็ม)
+                # บน-ล่าง exact ครบ (ไม่มีคานยื่น top) → ลบ half-state · applicable=True · ไม่มี ⚠️
                 cur["applicable"] = True
                 cur["warnings"] = []
                 cur["method"] = cur["method"] + " · เหล็กบน-ล่างคำนวณจาก moment envelope จริง (exact ทั้งหมด)"
-            else:                                       # เหล็กล่าง exact แต่บนยัง fig-8.32 (เช่นไม่มี interior top) · honest half-state
+            elif env_top:                               # interior top exact แต่ยังมี exterior/คานยื่น top = fig-8.32 + full+Ld (honest)
+                cur["method"] = cur["method"] + " · เหล็กล่าง + เหล็กบนหัวเสาในคำนวณจาก moment envelope จริง (exact)"
+                cur["warnings"] = [
+                    "✅ เหล็กล่าง (+M) + เหล็กบนหัวเสาภายใน (−M) คำนวณจาก moment envelope จริง (exact · asymmetric)",
+                    "⚠️ เหล็กบนฝั่งคานยื่น/ปลาย ใช้มาตรฐาน รูปที่ 8.32 + วิ่งเต็ม+Ld — ตรวจระยะฝัง (anchorage) คานยื่นแยก",
+                ]
+            else:                                       # ไม่มี interior top envelope (เช่นไม่มี interior support) · เหล็กล่าง exact เท่านั้น
                 cur["method"] = cur["method"] + " · เหล็กล่างคำนวณจาก moment envelope จริง (exact)"
                 cur["warnings"] = [
                     "✅ เหล็กล่าง (+M) คำนวณจาก moment envelope จริง — ระยะตัดแม่นยำ (อาจไม่สมมาตร ซ้าย≠ขวา)",
-                    "⚠️ เหล็กบน (−M) ยังใช้มาตรฐาน รูปที่ 8.32 (ค่าประมาณเมื่อมีจุดโหลด/ช่วงไม่เท่า) · ควรตรวจ moment envelope",
+                    "⚠️ เหล็กบน (−M) ยังใช้มาตรฐาน รูปที่ 8.32 (ค่าประมาณเมื่อมีจุดโหลด) · ควรตรวจ moment envelope",
                 ]
 
     return {
