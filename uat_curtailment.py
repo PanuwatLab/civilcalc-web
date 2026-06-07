@@ -168,16 +168,29 @@ check("5-bar: ตัด 2 · ต่อเนื่อง 3 (60%)",
 bm = calc.compute_curtailment_single(calc.RebarSelection(main_bars=[("DB12", 2), ("DB10", 2)], As_provided=3.83), 4.0, 45.0, 1.6)["bottom"][0]
 check("mixed: ตัดเบอร์เล็กสุด (DB10) ไม่ใช่ DB12", bm["cut_bars"] == "2-DB10", bm["cut_bars"])
 check("mixed: ต่อเนื่อง 2 (DB12 · As 59% ≥43.75%)", bm["n_continuous_past_L8"] == 2, bm["n_continuous_past_L8"])
-# single + จุดโหลด → applicable=False
-o8p = calc.design_beam(calc.BeamInput(b=30, h=55, L=5, fc=240, fy=4000, cover=4,
+# single + จุดโหลด → envelope จริง (applicable=True · Path A · ไม่ใช่ approx อีกต่อไป)
+o8p = calc.design_beam(calc.BeamInput(b=50, h=55, L=5, fc=240, fy=4000, cover=4,
                                       db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,
-                                      point_loads=[calc.PointLoad(kind="LL", P=40, x=2.5)], load_combo=_LC))
-check("single + จุดโหลด → applicable=False", o8p.to_dict()["curtailment"]["applicable"] is False, o8p.to_dict()["curtailment"]["applicable"])
-# single + partial UDL → applicable=False (Codex P2)
+                                      point_loads=[calc.PointLoad(kind="LL", P=120, x=2.5)], load_combo=_LC))
+cu8p = o8p.to_dict()["curtailment"]
+check("single + จุดโหลด → envelope (applicable=True · ไม่ใช่ค่าประมาณ)", cu8p["applicable"] is True, cu8p["applicable"])
+check("single + จุดโหลด → method อ้าง envelope", "envelope" in cu8p["method"].lower(), cu8p["method"])
+check("single + จุดโหลด → ไม่มี warning ค่าประมาณ", len(cu8p["warnings"]) == 0, cu8p["warnings"])
+_b8p = cu8p["bottom"][0]
+if _b8p["n_extra_cut"] > 0:
+    check("single + จุดโหลด → มี cut_left_m/cut_right_m (envelope position)",
+          _b8p.get("cut_left_m") is not None and _b8p.get("cut_right_m") is not None, _b8p)
+    # จุดโหลดกลางช่วง (x=2.5=L/2) → M สมมาตร → cut ซ้าย≈ขวา (closed-form property · validate algorithm)
+    check("จุดโหลดกลาง → cut ซ้าย≈ขวา (สมมาตร ±5ซม.)",
+          abs(_b8p["cut_left_m"] - _b8p["cut_right_m"]) < 0.05, (_b8p["cut_left_m"], _b8p["cut_right_m"]))
+    check("cut อยู่ในช่วง [0, L/2) สมเหตุผล",
+          0 <= _b8p["cut_left_m"] < 2.5 and 0 <= _b8p["cut_right_m"] < 2.5, (_b8p["cut_left_m"], _b8p["cut_right_m"]))
+# single + partial UDL → envelope จริง (applicable=True)
 o8q = calc.design_beam(calc.BeamInput(b=30, h=55, L=5, fc=240, fy=4000, cover=4,
                                       db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,
                                       partial_udls=[calc.PartialUDL(kind="LL", w=20, x1=1.5, x2=3.5)], load_combo=_LC))
-check("single + partial UDL → applicable=False", o8q.to_dict()["curtailment"]["applicable"] is False, o8q.to_dict()["curtailment"]["applicable"])
+cu8q = o8q.to_dict()["curtailment"]
+check("single + partial UDL → envelope (applicable=True)", cu8q["applicable"] is True, cu8q["applicable"])
 # cantilever support → curtailment None (เหล็กหลัก=บน · ไม่ใช่ bottom-cut · Codex P2)
 o8c = calc.design_beam(calc.BeamInput(b=30, h=55, L=2.5, fc=240, fy=4000, cover=4,
                                       db_assume=1.6, d_stirrup=0.9, DL=14, LL=9,

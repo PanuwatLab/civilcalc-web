@@ -1407,6 +1407,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     out.point_loads_factored = [
         {"Pu": Pu, "x": x, "kind": kind} for Pu, x, kind in factored_points
     ]
+    env = None   # moment envelope (เก็บไว้ให้ curtailment envelope ใช้ · Path A)
     if (factored_points or factored_partials) and inp.support == SupportType.SIMPLY_SUPPORTED:
         env = compute_envelope_ss(out.Wu, inp.L, factored_points, partials=factored_partials)
         out.Mu = env["M_max"]
@@ -1549,10 +1550,18 @@ def design_beam(inp: BeamInput) -> BeamOutput:
 
     # detailing · ระยะหยุดเหล็กล่าง คานช่วงเดียว (bottom-only · อ่าน rebar ที่เลือกแล้ว · ไม่แตะ flexure core)
     #   เฉพาะ simply-supported · คานยื่น (CANTILEVER) เหล็กหลัก = บน (fixed-end) ไม่ใช่ bottom-cut (Codex P2)
-    out.curtailment = (
-        compute_curtailment_single(out.rebar, inp.L, out.d_actual or out.d_assumed,
-                                   inp.db_assume, inp.point_loads, inp.partial_udls)
-        if inp.support == SupportType.SIMPLY_SUPPORTED else None)
+    #   route (Path A): มีจุดโหลด/partial + มี moment envelope → ตัดจริงจาก envelope · ไม่งั้น fig 8.23 (L/8 ค่าประมาณ)
+    if inp.support == SupportType.SIMPLY_SUPPORTED:
+        _d_cur = out.d_actual or out.d_assumed
+        if (factored_points or factored_partials) and env and env.get("M_grid"):
+            out.curtailment = compute_curtailment_single_envelope(
+                out.rebar, inp.L, _d_cur, inp.db_assume, inp.fy, inp.fc, inp.b,
+                PHI_FLEXURE, env["M_grid"], env["x_grid"])
+        else:
+            out.curtailment = compute_curtailment_single(
+                out.rebar, inp.L, _d_cur, inp.db_assume, inp.point_loads, inp.partial_udls)
+    else:
+        out.curtailment = None
 
     return out
 
@@ -2154,6 +2163,103 @@ def compute_curtailment_single(rebar, L_m: float, d_cm: float, db_default_cm: fl
         "citations": [
             "เหล็กหลัก 2 เส้นวิ่งเต็ม · เสริมตัดที่ L/8 · ≥1/4 +As เข้า support (มาตรฐาน · DRMK รูป 8.23)",
             "ยื่นเลยจุดตัด ≥ max(d, 12db) · ยกเว้นที่จุดรองรับช่วงเดียว (DRMK C8 หน้า 210)",
+        ],
+    }
+
+
+def _find_moment_crossing(x_grid: list, m_grid: list, target: float, x_peak: float, direction: int):
+    """หา x (ม.) ที่ M(x) = target โดยเดินจากจุด peak ไปทาง direction (-1 ซ้าย / +1 ขวา).
+    Linear-interp ระหว่าง sample (ตำแหน่งจริง ไม่ใช่จุดใกล้สุด · Fix-2).
+    คืน None ถ้า M ≥ target ตลอดทาง (เหล็กที่เหลือไม่พอ → cut bar ต้องวิ่งถึง support)."""
+    n = len(x_grid)
+    if n < 2:
+        return None
+    pk = min(range(n), key=lambda i: abs(x_grid[i] - x_peak))
+    seq = list(range(pk, -1, -1)) if direction < 0 else list(range(pk, n))
+    for a, b in zip(seq, seq[1:]):
+        m0, m1 = m_grid[a], m_grid[b]
+        if (m0 - target) * (m1 - target) <= 0.0 and abs(m0 - m1) > 1e-9:   # M ลดผ่าน target
+            t = (m0 - target) / (m0 - m1)
+            return x_grid[a] + t * (x_grid[b] - x_grid[a])
+    return None
+
+
+def compute_curtailment_single_envelope(rebar, L_m: float, d_cm: float, db_default_cm: float,
+                                        fy_ksc: float, fc_ksc: float, b_cm: float, phi: float,
+                                        m_grid: list, x_grid: list) -> dict:
+    """ระยะหยุดเหล็กล่างคานช่วงเดียว จาก moment envelope จริง (เคสจุดโหลด/partial UDL · applicable=false ของ fig 8.23).
+
+    Theoretical cutoff (ACI 12.10.3 · DRMK C8 §1): x ที่ Mu(x) = φMn ของเหล็กที่เหลือ → ยื่นเลย ≥ max(d,12db).
+    เลือกเหล็กตัดแบบเดียวกับ fig 8.23 (เล็กก่อน · เก็บ≥2มุม · ≤ครึ่ง · As เหลือ≥43.75%) แต่ **ตำแหน่งจาก envelope จริง**
+    (ไม่ใช่ L/8 ค่าประมาณ) → คืน cut_left_m/cut_right_m (asymmetric) + cut_eighth_m เฉลี่ย (fallback display เดิม) · applicable=True.
+    New module · ไม่แตะ flexure/compute_curtailment_single เดิม. ที่มา: [[Formula - Bar Curtailment & Cutoff Positions (RC-SDM)]] §1-2.
+    """
+    if not rebar or not getattr(rebar, "main_bars", None) or not m_grid or not x_grid:
+        return None
+
+    def _bar_area(nm):
+        digits = "".join(ch for ch in str(nm) if ch.isdigit())
+        dbq = (int(digits) / 10.0) if digits else db_default_cm
+        return math.pi / 4.0 * dbq * dbq
+
+    dias = []
+    for name, _c in rebar.main_bars:
+        digits = "".join(ch for ch in str(name) if ch.isdigit())
+        if digits:
+            dias.append(int(digits) / 10.0)
+    db_cm = max(dias) if dias else db_default_cm
+    ext = max(d_cm / 100.0, 12.0 * db_cm / 100.0)   # ม. · ยื่นเลย theoretical cutoff
+
+    bars = [(_bar_area(nm), nm) for nm, cnt in rebar.main_bars for _ in range(cnt)]
+    n_total = len(bars)
+    total_As = sum(a for a, _ in bars) or 1.0
+    MIN_FRAC = 7.0 / 16.0
+    cut_idx, rem_As, rem_cnt = [], total_As, n_total
+    for i in sorted(range(n_total), key=lambda j: bars[j][0]):   # เล็กสุดก่อน
+        if rem_cnt - 1 < 2:                                      # เก็บ ≥2 มุม
+            break
+        if len(cut_idx) + 1 > n_total // 2:                      # ตัด ≤ ครึ่ง
+            break
+        if rem_As - bars[i][0] < MIN_FRAC * total_As - 1e-9:     # As เหลือ ≥ 43.75%
+            break
+        cut_idx.append(i); rem_As -= bars[i][0]; rem_cnt -= 1
+    n_extra, n_cont = len(cut_idx), n_total - len(cut_idx)
+    _cs = {}
+    for i in cut_idx:
+        _cs[bars[i][1]] = _cs.get(bars[i][1], 0) + 1
+    cut_str = " + ".join(f"{c}-{nm}" for nm, c in _cs.items())
+
+    if n_extra == 0:
+        bot = {"span": "กลางช่วง", "L_m": round(L_m, 3), "n_continuous_past_L8": n_total, "n_extra_cut": 0,
+               "cut_bars": "", "cut_eighth_m": None, "cut_left_m": None, "cut_right_m": None,
+               "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+               "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (ตัดแล้ว As < 43.75%)"}
+    else:
+        # ตำแหน่งตัดจริง: x ที่ Mu(x) = φMn ของเหล็กที่เหลือ (parity · ใช้ compute_Mn เดียวกับ engine)
+        a_rem = compute_stress_block_depth(rem_As, fy_ksc, fc_ksc, b_cm)
+        phiMn_rem = phi * compute_Mn(rem_As, fy_ksc, d_cm, a_rem) / 10197.0   # kN·m (หน่วยเดียวกับ m_grid)
+        m_peak = max(m_grid)
+        x_peak = x_grid[m_grid.index(m_peak)]
+        xL = _find_moment_crossing(x_grid, m_grid, phiMn_rem, x_peak, -1)
+        xR = _find_moment_crossing(x_grid, m_grid, phiMn_rem, x_peak, +1)
+        aL = max(0.0, xL - ext) if xL is not None else 0.0            # ปลายซ้าย (ยื่นเลย cutoff ไปทาง support)
+        bR = min(L_m, xR + ext) if xR is not None else L_m            # ปลายขวา
+        cut_left_m = round(aL, 3)
+        cut_right_m = round(max(0.0, L_m - bR), 3)
+        bot = {"span": "กลางช่วง", "L_m": round(L_m, 3), "n_continuous_past_L8": n_cont, "n_extra_cut": n_extra,
+               "cut_bars": cut_str, "cut_left_m": cut_left_m, "cut_right_m": cut_right_m,
+               "cut_eighth_m": round((cut_left_m + cut_right_m) / 2.0, 3),   # เฉลี่ย · fallback display เดิมที่อ่าน symmetric
+               "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+               "note": (f"ต่อเนื่อง {n_cont} เส้น · ตัด {cut_str} จาก moment envelope จริง: "
+                        f"ปลายซ้ายห่าง support {cut_left_m:.2f} ม. · ปลายขวา {cut_right_m:.2f} ม. (เลย theoretical cutoff ≥{ext:.2f})")}
+    return {
+        "method": "ระยะหยุดเหล็กล่าง จาก moment envelope จริง (theoretical cutoff · ACI 12.10.3)",
+        "datum": "ระยะ ม. · วัดจากศูนย์เสาแต่ละข้าง · ปลายเหล็กตัดยื่นเลย theoretical cutoff ≥ max(d,12db)",
+        "applicable": True, "warnings": [],   # คำนวณจริงจาก envelope = exact (ไม่ใช่ค่าประมาณ · Fix-5)
+        "top": [], "bottom": [bot],
+        "citations": [
+            "จุดตัดทฤษฎี: M(x) = φMn ของเหล็กที่เหลือ · ยื่นเลย ≥ max(d,12db) (ACI 12.10.3 · มงคล C8)",
+            "เลือกเหล็กตัด: เล็กก่อน · เก็บ≥2มุม · ≤ครึ่ง · As เหลือ≥43.75% (DRMK รูป 8.23)",
         ],
     }
 
