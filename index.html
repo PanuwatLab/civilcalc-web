@@ -1370,7 +1370,8 @@
         Mu: o.Mu * K, Vu: o.Vu * K, RA: o.R_A * K, RB: o.R_B * K,
         As_req: o.As_required, As_prov: o.rebar ? o.rebar.As_provided : 0,
         rebarMain: o.rebar ? o.rebar.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '—',
-        b: P.b, h: P.h, d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
+        b: P.b, h: P.h, cover: P.cover, d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
+        nLayers: o.rebar ? (o.rebar.n_layers || 1) : 1,   // จำนวนชั้นเหล็กล่างจาก engine (display ใช้ตรง · ไม่ recompute)
         pass: !!o.passes, citations: o.citations || [],
         // Phase 2d · ค่ากลาง engine สำหรับ show-work data-driven (parity-safe · ไม่คำนวณซ้ำใน JS)
         beta1: o.beta1, rho_b: o.rho_b, rho_min: o.rho_min, rho_max: o.rho_max,
@@ -1425,7 +1426,7 @@
       } : {};
       const _L = sumLoads();
       state.res = Object.assign({
-        b: P.b, h: P.h, Mu: gov ? Math.round(govMpos * K) : Math.round(mp), MuNeg: Math.round(mn),
+        b: P.b, h: P.h, cover: P.cover, Mu: gov ? Math.round(govMpos * K) : Math.round(mp), MuNeg: Math.round(mn),
         Vu: govShVu > 0 ? Math.round(govShVu * 1000) : ac.Vmax, pass, dc, margin,   // Vu จากช่วง Vu สูงสุด (ตรงกับ Vc/Vs · Codex P2)
         beta1: mat.beta1, rho_b: mat.rho_b, rho_min: mat.rho_min, rho_max: mat.rho_max,
         DL: _L.DL, LL: _L.LL, Wu: 1.4 * _L.DL + 1.7 * _L.LL,
@@ -2362,7 +2363,7 @@
     if (loc === 'left' || loc === 'right') { nTop = state.mode === 'cont' ? 6 : 2; nBot = state.mode === 'cont' ? 3 : 2; }
     // จำนวนชั้นจากความกว้างจริง (port สูตร engine: s_clear=max(db,2.5,1.33·d_agg) · cap 6 เส้น/ชั้น) → กันวาดเบียดแถวเดียว
     const _layers = (n, db_cm) => {
-      const cov = (typeof P !== 'undefined' && P.cover) || m.cover || 4;   // cover จริงจาก UI (Codex P2 · เดิม hardcode 4 ไม่ตรง engine)
+      const cov = (m && m.cover) || (typeof P !== 'undefined' && P.cover) || 4;   // cover จาก engine result (snapshot · ตรงผลที่คำนวณ · Codex P2) → fallback live P.cover
       const avail = (m.b || 30) - 2 * cov - 2 * 0.9;        // stirrup 0.9 (ซม.)
       const s = Math.max(db_cm, 2.5, 1.33 * 2.0);           // MAX_AGGREGATE_CM = 2.0
       const per = Math.min(6, Math.max(1, Math.floor((avail + s) / (db_cm + s) + 1e-9)));
