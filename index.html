@@ -2032,7 +2032,8 @@
     (cur.top || []).forEach(t => { const i = (t.support || '').charCodeAt(0) - 65; if (i >= 0) top[i] = t; });
     const bot = [];   // index ตาม span (engine bottom_out เรียงตาม span)
     (cur.bottom || []).forEach((b, k) => { bot[k] = b; });
-    return { top, bot, applicable: cur.applicable !== false };
+    // bottomExact: A2a continuous — เหล็กล่างคำนวณจาก moment envelope จริง (exact) แม้ applicable=false (เหล็กบนยัง approx)
+    return { top, bot, applicable: cur.applicable !== false, bottomExact: cur.bottom_exact === true };
   }
 
   const D = () => {  // detailing config from inputs + mode geometry
@@ -2119,6 +2120,8 @@
     //   single area-aware: ตัดเฉพาะ n_extra_cut · ที่เหลือ (n_continuous_past_L8 − 2 มุม) วิ่งเต็ม = กัน over-curtail (Codex P2)
     //   continuous: ตัด gM ทั้งกลุ่ม (engine "half" textual · ไม่มี n_extra_cut)
     const curt = c.curt, curtAppx = !!(curt && curt.applicable === false);
+    // A2a: เหล็กล่าง envelope = exact → solid แม้ทั้งรูป approx (เหล็กบนยัง fig-8.32) · honest per-layer
+    const botDash = curtAppx && !(curt && curt.bottomExact);
     const yBot = beamBot - inset, yBotX = yBot - 7;
     rebar(svg, X(x0), X(xN), yBot, 'up');
     if (!compact) labelBar(svg, X(x0) + 6, yBot + 13, `${mainN}-${botSize} หลักล่าง`, '#1D4ED8', 'start');
@@ -2133,8 +2136,8 @@
       if (cut8) {
         const cutL = isEnv ? cb.cut_left_m : cb.cut_eighth_m, cutR = isEnv ? cb.cut_right_m : cb.cut_eighth_m;
         const aB = xA + cutL, bB = xB - cutR;
-        if (nContExtra > 0) rebar(svg, X(x0), X(xN), yBotX, 'none', true, curtAppx);          // เสริมส่วนวิ่งเต็ม (single)
-        rebar(svg, X(aB), X(bB), nContExtra > 0 ? yBotX - 6 : yBotX, 'none', true, curtAppx);  // เสริมส่วนตัด
+        if (nContExtra > 0) rebar(svg, X(x0), X(xN), yBotX, 'none', true, botDash);          // เสริมส่วนวิ่งเต็ม (single)
+        rebar(svg, X(aB), X(bB), nContExtra > 0 ? yBotX - 6 : yBotX, 'none', true, botDash);  // เสริมส่วนตัด
         if (!compact) {
           const where = isEnv ? 'จาก moment envelope จริง' : 'ที่ L/8';
           const lbl = cb.cut_bars ? `ตัด ${cb.cut_bars} ${where}${nContExtra > 0 ? ` · +${nContExtra} วิ่งเต็ม` : ''}` : `+${fmtBars(gM)} เสริมกลาง`;
@@ -2143,10 +2146,10 @@
           labelBar(svg, X(aB), yBotX + 13, dimLbl, '#2563EB', 'middle', 8);
         }
       } else if (cb) {   // single ไม่ตัด → เสริมวิ่งเต็มหมด
-        rebar(svg, X(x0), X(xN), yBotX, 'none', true, curtAppx);
+        rebar(svg, X(x0), X(xN), yBotX, 'none', true, botDash);
         if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} วิ่งเต็ม (ไม่ตัด)`, '#2563EB', 'middle', 9);
       } else {           // ไม่มี curt data → fallback schematic L/6
-        rebar(svg, X(xA + sp / 6), X(xB - sp / 6), yBotX, 'none', true, curtAppx);
+        rebar(svg, X(xA + sp / 6), X(xB - sp / 6), yBotX, 'none', true, botDash);
         if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2563EB', 'middle', 9);
       }
     });
@@ -2192,7 +2195,8 @@
       }
     });
     // ป้ายเตือนค่าประมาณในรูป (มีจุดโหลด/ช่วงไม่เท่า · ตรงกับ warning banner ในตาราง · End User Fix-2)
-    if (!compact && curtAppx) labelBar(svg, vbW - marginX, topPad - 18, '≈ ระยะตัดเป็นค่าประมาณ · ตรวจ moment envelope', '#B45309', 'end', 9);
+    if (!compact && curtAppx) labelBar(svg, vbW - marginX, topPad - 18,
+      (curt && curt.bottomExact) ? '≈ เหล็กบนเป็นค่าประมาณ (รูป 8.32) · ล่างคำนวณจาก envelope แล้ว' : '≈ ระยะตัดเป็นค่าประมาณ · ตรวจ moment envelope', '#B45309', 'end', 9);
 
     // ระยะปลอก (#4) — ป้ายราย span กลางความสูงคาน (เหนือเส้นปลอกเทาๆ · ไม่ทับ bar บน/ล่าง)
     if (!compact) {
@@ -2420,12 +2424,21 @@
           const pos = isEnd ? `บน·เสริมปลาย* ${su.label}` : `บน·เสริมหัวเสา ${su.label}`;
           groups.forEach((g, k) => rows.push([mark + (groups.length > 1 ? String.fromCharCode(97 + k) : ''), g[0], g[1], len, pos]));
         });
-        // เสริมกลาง (+M · ยาว 2L/3) + ปลอก — รายช่วง
+        // เสริมกลาง (+M) + ปลอก — รายช่วง · envelope (A2a) = ตัด cut_bars (L−ซ้าย−ขวา) + ที่เหลือวิ่งเต็ม · fig-8.32 = L−2·L/8
         o.spans.forEach((sp, i) => {
           const gM = extraBarGroups(bars.spanBot[i].list);
-          const _c8 = ((o.curtailment && o.curtailment.bottom && o.curtailment.bottom[i]) || {}).cut_eighth_m;   // ฐาน L/8 ให้ตรงรูป/ตาราง (Codex P2 · เดิม L×2/3)
-          const lenM = +(_c8 != null ? (sp.L - 2 * _c8) : (sp.L || 0) * 3 / 4).toFixed(2);
-          gM.forEach((g, k) => rows.push([`M${i + 1}${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, `ล่าง·เสริมกลาง ${sp.label}`]));
+          const _cb = (o.curtailment && o.curtailment.bottom && o.curtailment.bottom[i]) || {};
+          const _env = _cb.cut_left_m != null && _cb.cut_bars;   // envelope continuous = asymmetric ซ้าย/ขวา (Path A2a)
+          if (_env) {
+            const lenCut = +(sp.L - _cb.cut_left_m - _cb.cut_right_m).toFixed(2);
+            const cutG = _cb.cut_bars.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean).map(mm => [mm[2], +mm[1]]);
+            const rem = {}; gM.forEach(([s, c]) => rem[s] = (rem[s] || 0) + c); cutG.forEach(([s, c]) => rem[s] = (rem[s] || 0) - c);
+            cutG.forEach((g, k) => rows.push([`M${i + 1}c${k + 1}`, g[0], g[1], lenCut, `ล่าง·เสริมกลาง·ตัด envelope ${sp.label}`]));
+            Object.keys(rem).filter(s => rem[s] > 0).forEach((s, k) => rows.push([`M${i + 1}f${k + 1}`, s, rem[s], +(sp.L || 0).toFixed(2), `ล่าง·เสริมกลาง·วิ่งเต็ม ${sp.label}`]));
+          } else {
+            const lenM = +(_cb.cut_eighth_m != null ? (sp.L - 2 * _cb.cut_eighth_m) : (sp.L || 0) * 3 / 4).toFixed(2);   // ฐาน L/8 (Codex P2 · เดิม L×2/3)
+            gM.forEach((g, k) => rows.push([`M${i + 1}${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, `ล่าง·เสริมกลาง ${sp.label}`]));
+          }
           const sh = sp.shear || {}, nStir = stirrupCount(sh) * (sh.n_legs === 4 ? 2 : 1);   // 2ป = 2 ชิ้น/station (Codex P2)
           if (nStir) rows.push([`S${i + 1}`, sh.bar || 'RB9', nStir, perim, `ปลอก·ช่วง ${sp.label}`]);
         });
@@ -4832,6 +4845,114 @@ def compute_curtailment_single_envelope(rebar, L_m: float, d_cm: float, db_defau
     }
 
 
+def compute_curtailment_continuous_envelope(spans_out: list, vm: list,
+                                            h_cm: float, cover_cm: float, d_stirrup_cm: float,
+                                            db_default_cm: float, fy_ksc: float, fc_ksc: float,
+                                            b_cm: float, phi: float) -> dict:
+    """ระยะหยุดเหล็กล่าง (+M) คานต่อเนื่อง จาก moment envelope จริง ต่อช่วง (A2a · พี่น้อง continuous ของ
+    compute_curtailment_single_envelope). เคสมีจุดโหลด/ช่วงไม่เท่า ที่ fig 8.32 (L/8) เป็นค่าประมาณ.
+
+    ต่อช่วง i: ใช้ vm[i] (M(x)/X จาก analyze_continuous_beam · kN·m sagging+) หาจุดตัดทฤษฎีที่
+    Mu(x)=φMn ของเหล็กที่เหลือ (linear-interp · ยื่นเลย ≥max(d,12db)) → คืน cut_left_m/cut_right_m (asymmetric).
+    เลือกเหล็กตัดแบบเดียวกับ fig 8.23 (เล็กก่อน · เก็บ≥2มุม · ≤ครึ่ง · As≥43.75%).
+    คืนเฉพาะ bottom[] (เหล็กบน −M ยังคง fig 8.32 ใน compute_curtailment · A2b จะทำต่อ).
+    New module · ไม่แตะ flexure/compute_curtailment* เดิม (zero-regression by construction · parity: compute_Mn เดียวกับ engine).
+    ที่มา: [[Formula - Bar Curtailment & Cutoff Positions (RC-SDM)]] §1-2 · ACI 12.10.3.
+    """
+    if not spans_out or not vm:
+        return None
+
+    def _bar_area(nm):
+        digits = "".join(ch for ch in str(nm) if ch.isdigit())
+        dbq = (int(digits) / 10.0) if digits else db_default_cm
+        return math.pi / 4.0 * dbq * dbq
+
+    bot_out = []
+    for i, sp in enumerate(spans_out):
+        if i >= len(vm):
+            break
+        bottom = sp.get("bottom") if sp else None
+        rebar = bottom.get("rebar") if bottom else None
+        if not rebar or not getattr(rebar, "main_bars", None):
+            continue
+        L = sp["L"]
+        m_grid, x_grid = vm[i].get("M") or [], vm[i].get("X") or []
+        d_cm = bottom.get("d_actual") or compute_effective_depth(h_cm, cover_cm, d_stirrup_cm, db_default_cm)
+        dias = []
+        for name, _c in rebar.main_bars:
+            digits = "".join(ch for ch in str(name) if ch.isdigit())
+            if digits:
+                dias.append(int(digits) / 10.0)
+        db_cm = max(dias) if dias else db_default_cm
+        ext = max(d_cm / 100.0, 12.0 * db_cm / 100.0)   # ม. · ยื่นเลย theoretical cutoff
+
+        bars = [(_bar_area(nm), nm) for nm, cnt in rebar.main_bars for _ in range(cnt)]
+        n_total = len(bars)
+        total_As = sum(a for a, _ in bars) or 1.0
+        MIN_FRAC = 7.0 / 16.0
+        cut_idx, rem_As, rem_cnt = [], total_As, n_total
+        for j in sorted(range(n_total), key=lambda k: bars[k][0]):   # เล็กสุดก่อน
+            if rem_cnt - 1 < 2:                                      # เก็บ ≥2 มุม
+                break
+            if len(cut_idx) + 1 > n_total // 2:                     # ตัด ≤ ครึ่ง
+                break
+            if rem_As - bars[j][0] < MIN_FRAC * total_As - 1e-9:    # As เหลือ ≥ 43.75%
+                break
+            cut_idx.append(j); rem_As -= bars[j][0]; rem_cnt -= 1
+        n_extra, n_cont = len(cut_idx), n_total - len(cut_idx)
+        _cs = {}
+        for j in cut_idx:
+            _cs[bars[j][1]] = _cs.get(bars[j][1], 0) + 1
+        cut_str = " + ".join(f"{c}-{nm}" for nm, c in _cs.items())
+
+        if n_extra == 0 or not m_grid or not x_grid:
+            bot_out.append({
+                "span": sp["label"], "L_m": round(L, 3),
+                "n_continuous_past_L8": n_total, "n_extra_cut": 0, "cut_bars": "",
+                "cut_eighth_m": None, "cut_left_m": None, "cut_right_m": None,
+                "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+                "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (ตัดแล้ว As < 43.75%)"})
+            continue
+        # ตำแหน่งตัดจริง: x ที่ Mu(x) = φMn ของเหล็กที่เหลือ (parity · compute_Mn เดียวกับ engine · kN·m)
+        a_rem = compute_stress_block_depth(rem_As, fy_ksc, fc_ksc, b_cm)
+        phiMn_rem = phi * compute_Mn(rem_As, fy_ksc, d_cm, a_rem) / 10197.0   # kN·m (หน่วยเดียวกับ vm.M)
+        m_peak = max(m_grid)
+        x_peak = x_grid[m_grid.index(m_peak)]
+        xL = _find_moment_crossing(x_grid, m_grid, phiMn_rem, x_peak, -1)
+        xR = _find_moment_crossing(x_grid, m_grid, phiMn_rem, x_peak, +1)
+        if xL is None and xR is None:                                 # เหล็กที่เหลือไม่พอตลอดช่วง → ตัดไม่ได้ · วิ่งเต็ม (conservative)
+            bot_out.append({
+                "span": sp["label"], "L_m": round(L, 3),
+                "n_continuous_past_L8": n_total, "n_extra_cut": 0, "cut_bars": "",
+                "cut_eighth_m": None, "cut_left_m": None, "cut_right_m": None,
+                "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+                "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (เหล็กที่เหลือไม่พอตลอดช่วงจาก envelope)"})
+            continue
+        aL = max(0.0, xL - ext) if xL is not None else 0.0            # ปลายซ้าย (ยื่นเลย cutoff ไปทาง support)
+        bR = min(L, xR + ext) if xR is not None else L                # ปลายขวา
+        cut_left_m = round(aL, 3)
+        cut_right_m = round(max(0.0, L - bR), 3)
+        bot_out.append({
+            "span": sp["label"], "L_m": round(L, 3),
+            "n_continuous_past_L8": n_cont, "n_extra_cut": n_extra, "cut_bars": cut_str,
+            "cut_left_m": cut_left_m, "cut_right_m": cut_right_m,
+            "cut_eighth_m": round((cut_left_m + cut_right_m) / 2.0, 3),   # เฉลี่ย · fallback display เดิมที่อ่าน symmetric
+            "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+            "note": (f"ต่อเนื่อง {n_cont} เส้น · ตัด {cut_str} จาก moment envelope จริง: "
+                     f"ปลายซ้ายห่าง support {cut_left_m:.2f} ม. · ปลายขวา {cut_right_m:.2f} ม. (เลย theoretical cutoff ≥{ext:.2f})")})
+
+    if not bot_out:
+        return None
+    return {
+        "method": "ระยะหยุดเหล็กล่าง คานต่อเนื่อง จาก moment envelope จริง (theoretical cutoff · ACI 12.10.3)",
+        "bottom": bot_out,
+        "citations": [
+            "จุดตัดทฤษฎี: M(x) = φMn ของเหล็กที่เหลือ ต่อช่วง · ยื่นเลย ≥ max(d,12db) (ACI 12.10.3 · มงคล C8)",
+            "เลือกเหล็กตัด: เล็กก่อน · เก็บ≥2มุม · ≤ครึ่ง · As เหลือ≥43.75% (DRMK รูป 8.23)",
+        ],
+    }
+
+
 def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
     """EXACT continuous-beam design (Three-Moment + point loads + cantilevers). Returns design + diagram data."""
     az = analyze_continuous_beam(inp)
@@ -4955,16 +5076,37 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
                   if cant_R else None),
     }
 
+    # ระยะหยุดเหล็ก: baseline มาตรฐาน รูปที่ 8.32 (fig-8.32 fixed L/8·L/4·L/3) เสมอ
+    cur = compute_curtailment(
+        spans_out, supports_out, Ls, inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
+        # รวมจุดโหลดคานยื่นด้วย: คานยื่นมีจุดโหลด → exterior support moment ≠ UDL → flag (Codex P2)
+        point_loads_per_span=(list(pts) + [c["pts"] for c in (cant_L, cant_R) if c and c.get("pts")]))
+    # A2a: เมื่อมี "จุดโหลด" (ในช่วง/คานยื่น) → fig-8.32 (L/8) เป็นค่าประมาณ → override เหล็กล่างด้วย moment envelope จริง (exact)
+    #   route เฉพาะกรณีจุดโหลด (เหมือน single #21 บน factored_points) · ช่วงไม่เท่า-UDL ล้วนคง fig-8.32 (textbook standard เดิม)
+    #   เหล็กบน (−M) ยังคง fig-8.32 (A2b จะคำนวณ envelope ต่อ) · applicable คง False เพราะบนยัง approx (honest flag)
+    has_point_loads = any(len(p) > 0 for p in pts) or any(
+        c and c.get("pts") for c in (cant_L, cant_R))
+    if cur and not cur.get("applicable") and has_point_loads:
+        env = compute_curtailment_continuous_envelope(
+            spans_out, vm, inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
+            inp.fy, inp.fc, inp.b, PHI_FLEXURE)
+        if env and env.get("bottom"):
+            cur["bottom"] = env["bottom"]
+            cur["bottom_exact"] = True
+            cur["method"] = cur["method"] + " · เหล็กล่างคำนวณจาก moment envelope จริง (exact)"
+            cur["warnings"] = [
+                "✅ เหล็กล่าง (+M) คำนวณจาก moment envelope จริง — ระยะตัดแม่นยำ (อาจไม่สมมาตร ซ้าย≠ขวา)",
+                "⚠️ เหล็กบน (−M) ยังใช้มาตรฐาน รูปที่ 8.32 (ค่าประมาณเมื่อมีจุดโหลด/ช่วงไม่เท่า) · ควรตรวจ moment envelope",
+            ]
+            cur["citations"] = cur["citations"] + env["citations"]
+
     return {
         "method": "Three-Moment Equation (วิเคราะห์แม่นยำ)",
         "n_spans": n, "b": inp.b, "h": inp.h, "fc": inp.fc, "fy": inp.fy,
         "end_left": inp.end_left, "end_right": inp.end_right,
         "spans": spans_out, "supports": supports_out, "reactions": reactions,
         "uplift_supports": uplift, "recommended_top": rec_top, "passes": all_pass,
-        "curtailment": compute_curtailment(
-            spans_out, supports_out, Ls, inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
-            # รวมจุดโหลดคานยื่นด้วย: คานยื่นมีจุดโหลด → exterior support moment ≠ UDL → flag (Codex P2)
-            point_loads_per_span=(list(pts) + [c["pts"] for c in (cant_L, cant_R) if c and c.get("pts")])),
+        "curtailment": cur,
         "support_moments_tonm": [round(m * KNM_TO_TONM, 3) for m in Ms],
         "total_L": round(total_L, 4), "node_x": node_x, "span_loads": span_loads,
         "diagram": {"x": diag_x, "V_ton": diag_V, "M_tonm": diag_M},
@@ -5576,7 +5718,28 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('curtailment: จุดโหลด → รูปด้านคาน data-curt=approx (เส้นประ)',
         !!elApx && elApx.getAttribute('data-curt') === 'approx',
         elApx ? elApx.getAttribute('data-curt') : 'n/a');
+      // A2a: cont+จุดโหลด → เหล็กล่างคำนวณ envelope จริง (ตารางอ้าง envelope + ปลายซ้าย/ขวา asymmetric · ไม่ใช่ L/8)
+      const curtTxtA2 = (document.querySelector('#ccCurtailRows') || {}).textContent || '';
+      A('curtailment A2a: cont+จุดโหลด → ตารางเหล็กล่างอ้าง moment envelope (asymmetric · ไม่ใช่ L/8)',
+        /envelope/i.test(curtTxtA2) && /ปลายซ้าย/.test(curtTxtA2),
+        curtTxtA2.replace(/\s+/g, ' ').slice(0, 80));
+      A('curtailment A2a: cont+จุดโหลด → banner สื่อล่าง exact + บน fig-8.32 (honest 2 บรรทัด)',
+        /envelope/i.test(warnEl?.textContent || '') && /(บน|8\.32)/.test(warnEl?.textContent || ''),
+        (warnEl?.textContent || '').replace(/\s+/g, ' ').slice(0, 80));
       TT().setPoints([]);
+
+      // ── C2 · single-span envelope (#21 drift guard · เพิ่มใน A2a — เดิมขาด in-browser guard) ──
+      TT().setMode('single'); TT().setSection(50, 55, 240, 'SD40');
+      TT().setPoints([{ x: 2.5, P: 12000, kind: 'LL' }]);   // จุดโหลด → single envelope (exact)
+      TT().recompute(); TT().setCtab('detail'); TT().drawDetailing();
+      const sCurtTxt = (document.querySelector('#ccCurtailRows') || {}).textContent || '';
+      A('curtailment(#21): single+จุดโหลด → ตารางอ้าง moment envelope (asymmetric · exact)',
+        /envelope/i.test(sCurtTxt), sCurtTxt.replace(/\s+/g, ' ').slice(0, 80));
+      const sSvg = document.querySelector('#ccDrawHost svg[data-curt]');
+      A('curtailment(#21): single+จุดโหลด → รูป data-curt=engine (envelope exact · ไม่ใช่ approx)',
+        !!sSvg && sSvg.getAttribute('data-curt') === 'engine',
+        sSvg ? sSvg.getAttribute('data-curt') : 'n/a');
+      TT().setPoints([]); TT().setMode('cont');
 
       // ── D · mode-switch integrity (applyMode toggle) ──
       TT().setMode('cont'); TT().render();

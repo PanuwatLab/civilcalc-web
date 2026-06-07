@@ -2264,6 +2264,114 @@ def compute_curtailment_single_envelope(rebar, L_m: float, d_cm: float, db_defau
     }
 
 
+def compute_curtailment_continuous_envelope(spans_out: list, vm: list,
+                                            h_cm: float, cover_cm: float, d_stirrup_cm: float,
+                                            db_default_cm: float, fy_ksc: float, fc_ksc: float,
+                                            b_cm: float, phi: float) -> dict:
+    """ระยะหยุดเหล็กล่าง (+M) คานต่อเนื่อง จาก moment envelope จริง ต่อช่วง (A2a · พี่น้อง continuous ของ
+    compute_curtailment_single_envelope). เคสมีจุดโหลด/ช่วงไม่เท่า ที่ fig 8.32 (L/8) เป็นค่าประมาณ.
+
+    ต่อช่วง i: ใช้ vm[i] (M(x)/X จาก analyze_continuous_beam · kN·m sagging+) หาจุดตัดทฤษฎีที่
+    Mu(x)=φMn ของเหล็กที่เหลือ (linear-interp · ยื่นเลย ≥max(d,12db)) → คืน cut_left_m/cut_right_m (asymmetric).
+    เลือกเหล็กตัดแบบเดียวกับ fig 8.23 (เล็กก่อน · เก็บ≥2มุม · ≤ครึ่ง · As≥43.75%).
+    คืนเฉพาะ bottom[] (เหล็กบน −M ยังคง fig 8.32 ใน compute_curtailment · A2b จะทำต่อ).
+    New module · ไม่แตะ flexure/compute_curtailment* เดิม (zero-regression by construction · parity: compute_Mn เดียวกับ engine).
+    ที่มา: [[Formula - Bar Curtailment & Cutoff Positions (RC-SDM)]] §1-2 · ACI 12.10.3.
+    """
+    if not spans_out or not vm:
+        return None
+
+    def _bar_area(nm):
+        digits = "".join(ch for ch in str(nm) if ch.isdigit())
+        dbq = (int(digits) / 10.0) if digits else db_default_cm
+        return math.pi / 4.0 * dbq * dbq
+
+    bot_out = []
+    for i, sp in enumerate(spans_out):
+        if i >= len(vm):
+            break
+        bottom = sp.get("bottom") if sp else None
+        rebar = bottom.get("rebar") if bottom else None
+        if not rebar or not getattr(rebar, "main_bars", None):
+            continue
+        L = sp["L"]
+        m_grid, x_grid = vm[i].get("M") or [], vm[i].get("X") or []
+        d_cm = bottom.get("d_actual") or compute_effective_depth(h_cm, cover_cm, d_stirrup_cm, db_default_cm)
+        dias = []
+        for name, _c in rebar.main_bars:
+            digits = "".join(ch for ch in str(name) if ch.isdigit())
+            if digits:
+                dias.append(int(digits) / 10.0)
+        db_cm = max(dias) if dias else db_default_cm
+        ext = max(d_cm / 100.0, 12.0 * db_cm / 100.0)   # ม. · ยื่นเลย theoretical cutoff
+
+        bars = [(_bar_area(nm), nm) for nm, cnt in rebar.main_bars for _ in range(cnt)]
+        n_total = len(bars)
+        total_As = sum(a for a, _ in bars) or 1.0
+        MIN_FRAC = 7.0 / 16.0
+        cut_idx, rem_As, rem_cnt = [], total_As, n_total
+        for j in sorted(range(n_total), key=lambda k: bars[k][0]):   # เล็กสุดก่อน
+            if rem_cnt - 1 < 2:                                      # เก็บ ≥2 มุม
+                break
+            if len(cut_idx) + 1 > n_total // 2:                     # ตัด ≤ ครึ่ง
+                break
+            if rem_As - bars[j][0] < MIN_FRAC * total_As - 1e-9:    # As เหลือ ≥ 43.75%
+                break
+            cut_idx.append(j); rem_As -= bars[j][0]; rem_cnt -= 1
+        n_extra, n_cont = len(cut_idx), n_total - len(cut_idx)
+        _cs = {}
+        for j in cut_idx:
+            _cs[bars[j][1]] = _cs.get(bars[j][1], 0) + 1
+        cut_str = " + ".join(f"{c}-{nm}" for nm, c in _cs.items())
+
+        if n_extra == 0 or not m_grid or not x_grid:
+            bot_out.append({
+                "span": sp["label"], "L_m": round(L, 3),
+                "n_continuous_past_L8": n_total, "n_extra_cut": 0, "cut_bars": "",
+                "cut_eighth_m": None, "cut_left_m": None, "cut_right_m": None,
+                "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+                "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (ตัดแล้ว As < 43.75%)"})
+            continue
+        # ตำแหน่งตัดจริง: x ที่ Mu(x) = φMn ของเหล็กที่เหลือ (parity · compute_Mn เดียวกับ engine · kN·m)
+        a_rem = compute_stress_block_depth(rem_As, fy_ksc, fc_ksc, b_cm)
+        phiMn_rem = phi * compute_Mn(rem_As, fy_ksc, d_cm, a_rem) / 10197.0   # kN·m (หน่วยเดียวกับ vm.M)
+        m_peak = max(m_grid)
+        x_peak = x_grid[m_grid.index(m_peak)]
+        xL = _find_moment_crossing(x_grid, m_grid, phiMn_rem, x_peak, -1)
+        xR = _find_moment_crossing(x_grid, m_grid, phiMn_rem, x_peak, +1)
+        if xL is None and xR is None:                                 # เหล็กที่เหลือไม่พอตลอดช่วง → ตัดไม่ได้ · วิ่งเต็ม (conservative)
+            bot_out.append({
+                "span": sp["label"], "L_m": round(L, 3),
+                "n_continuous_past_L8": n_total, "n_extra_cut": 0, "cut_bars": "",
+                "cut_eighth_m": None, "cut_left_m": None, "cut_right_m": None,
+                "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+                "note": f"เหล็ก {n_total} เส้นวิ่งเต็มช่วง · ไม่ตัด (เหล็กที่เหลือไม่พอตลอดช่วงจาก envelope)"})
+            continue
+        aL = max(0.0, xL - ext) if xL is not None else 0.0            # ปลายซ้าย (ยื่นเลย cutoff ไปทาง support)
+        bR = min(L, xR + ext) if xR is not None else L                # ปลายขวา
+        cut_left_m = round(aL, 3)
+        cut_right_m = round(max(0.0, L - bR), 3)
+        bot_out.append({
+            "span": sp["label"], "L_m": round(L, 3),
+            "n_continuous_past_L8": n_cont, "n_extra_cut": n_extra, "cut_bars": cut_str,
+            "cut_left_m": cut_left_m, "cut_right_m": cut_right_m,
+            "cut_eighth_m": round((cut_left_m + cut_right_m) / 2.0, 3),   # เฉลี่ย · fallback display เดิมที่อ่าน symmetric
+            "into_support_m": 0.15, "ext_min_m": round(ext, 3),
+            "note": (f"ต่อเนื่อง {n_cont} เส้น · ตัด {cut_str} จาก moment envelope จริง: "
+                     f"ปลายซ้ายห่าง support {cut_left_m:.2f} ม. · ปลายขวา {cut_right_m:.2f} ม. (เลย theoretical cutoff ≥{ext:.2f})")})
+
+    if not bot_out:
+        return None
+    return {
+        "method": "ระยะหยุดเหล็กล่าง คานต่อเนื่อง จาก moment envelope จริง (theoretical cutoff · ACI 12.10.3)",
+        "bottom": bot_out,
+        "citations": [
+            "จุดตัดทฤษฎี: M(x) = φMn ของเหล็กที่เหลือ ต่อช่วง · ยื่นเลย ≥ max(d,12db) (ACI 12.10.3 · มงคล C8)",
+            "เลือกเหล็กตัด: เล็กก่อน · เก็บ≥2มุม · ≤ครึ่ง · As เหลือ≥43.75% (DRMK รูป 8.23)",
+        ],
+    }
+
+
 def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
     """EXACT continuous-beam design (Three-Moment + point loads + cantilevers). Returns design + diagram data."""
     az = analyze_continuous_beam(inp)
@@ -2387,16 +2495,37 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
                   if cant_R else None),
     }
 
+    # ระยะหยุดเหล็ก: baseline มาตรฐาน รูปที่ 8.32 (fig-8.32 fixed L/8·L/4·L/3) เสมอ
+    cur = compute_curtailment(
+        spans_out, supports_out, Ls, inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
+        # รวมจุดโหลดคานยื่นด้วย: คานยื่นมีจุดโหลด → exterior support moment ≠ UDL → flag (Codex P2)
+        point_loads_per_span=(list(pts) + [c["pts"] for c in (cant_L, cant_R) if c and c.get("pts")]))
+    # A2a: เมื่อมี "จุดโหลด" (ในช่วง/คานยื่น) → fig-8.32 (L/8) เป็นค่าประมาณ → override เหล็กล่างด้วย moment envelope จริง (exact)
+    #   route เฉพาะกรณีจุดโหลด (เหมือน single #21 บน factored_points) · ช่วงไม่เท่า-UDL ล้วนคง fig-8.32 (textbook standard เดิม)
+    #   เหล็กบน (−M) ยังคง fig-8.32 (A2b จะคำนวณ envelope ต่อ) · applicable คง False เพราะบนยัง approx (honest flag)
+    has_point_loads = any(len(p) > 0 for p in pts) or any(
+        c and c.get("pts") for c in (cant_L, cant_R))
+    if cur and not cur.get("applicable") and has_point_loads:
+        env = compute_curtailment_continuous_envelope(
+            spans_out, vm, inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
+            inp.fy, inp.fc, inp.b, PHI_FLEXURE)
+        if env and env.get("bottom"):
+            cur["bottom"] = env["bottom"]
+            cur["bottom_exact"] = True
+            cur["method"] = cur["method"] + " · เหล็กล่างคำนวณจาก moment envelope จริง (exact)"
+            cur["warnings"] = [
+                "✅ เหล็กล่าง (+M) คำนวณจาก moment envelope จริง — ระยะตัดแม่นยำ (อาจไม่สมมาตร ซ้าย≠ขวา)",
+                "⚠️ เหล็กบน (−M) ยังใช้มาตรฐาน รูปที่ 8.32 (ค่าประมาณเมื่อมีจุดโหลด/ช่วงไม่เท่า) · ควรตรวจ moment envelope",
+            ]
+            cur["citations"] = cur["citations"] + env["citations"]
+
     return {
         "method": "Three-Moment Equation (วิเคราะห์แม่นยำ)",
         "n_spans": n, "b": inp.b, "h": inp.h, "fc": inp.fc, "fy": inp.fy,
         "end_left": inp.end_left, "end_right": inp.end_right,
         "spans": spans_out, "supports": supports_out, "reactions": reactions,
         "uplift_supports": uplift, "recommended_top": rec_top, "passes": all_pass,
-        "curtailment": compute_curtailment(
-            spans_out, supports_out, Ls, inp.h, inp.cover, inp.d_stirrup, inp.db_assume,
-            # รวมจุดโหลดคานยื่นด้วย: คานยื่นมีจุดโหลด → exterior support moment ≠ UDL → flag (Codex P2)
-            point_loads_per_span=(list(pts) + [c["pts"] for c in (cant_L, cant_R) if c and c.get("pts")])),
+        "curtailment": cur,
         "support_moments_tonm": [round(m * KNM_TO_TONM, 3) for m in Ms],
         "total_L": round(total_L, 4), "node_x": node_x, "span_loads": span_loads,
         "diagram": {"x": diag_x, "V_ton": diag_V, "M_tonm": diag_M},

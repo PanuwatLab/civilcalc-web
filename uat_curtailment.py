@@ -203,6 +203,41 @@ check("method อ้าง รูปที่ 8.32", "8.32" in c["method"], c["m
 check("มี ≥3 citations", len(c["citations"]) >= 3, len(c["citations"]))
 check("datum ระบุจุดอ้างอิง (หน้าเสา/ศูนย์เสา)", "เสา" in c["datum"], c["datum"])
 
+# ---- Case 5 · continuous + จุดโหลด → เหล็กล่างจาก moment envelope จริง (A2a) ----
+print("\nCase 5 · continuous envelope (A2a · เหล็กล่าง +M)")
+SI, PL = calc.SpanInput, calc.PointLoad
+# 2-span [6,6] · จุดโหลดเยื้องช่วงแรก (x=2.0 ≠ 3.0) → asymmetric
+ce = calc.design_continuous_beam_exact(calc.ContinuousBeamInput(b=30, h=60, fc=240, fy=4000,
+    cover=4.0, d_stirrup=0.9, db_assume=2.5,
+    spans=[SI(6.0, 15.0, 10.0, [PL("LL", 80.0, 2.0)]), SI(6.0, 15.0, 10.0, [])]))["curtailment"]
+check("cont+จุดโหลด → applicable=False (เหล็กบนยัง approx)", ce["applicable"] is False, ce["applicable"])
+check("cont+จุดโหลด → bottom_exact=True (เหล็กล่าง override)", ce.get("bottom_exact") is True, ce.get("bottom_exact"))
+check("cont+จุดโหลด → method อ้าง envelope (ล่าง)", "envelope" in ce["method"].lower(), ce["method"])
+check("cont+จุดโหลด → top ยังเป็น fig-8.32 (มี cut_half_m)",
+      bool(ce["top"]) and ce["top"][0].get("cut_half_m") is not None, ce["top"][0] if ce["top"] else None)
+check("cont+จุดโหลด → warnings 2 บรรทัด (ล่าง exact + บน approx)", len(ce["warnings"]) == 2, len(ce["warnings"]))
+_beAB = next(b for b in ce["bottom"] if b["span"] == "A-B")
+check("cont envelope A-B → มี cut_left_m/cut_right_m",
+      _beAB.get("cut_left_m") is not None and _beAB.get("cut_right_m") is not None, _beAB)
+check("cont envelope A-B → asymmetric (โหลดเยื้องซ้าย x=2.0 → ยื่นซ้ายมากกว่า · cutL<cutR)",
+      _beAB["cut_left_m"] < _beAB["cut_right_m"], (_beAB["cut_left_m"], _beAB["cut_right_m"]))
+check("cont envelope A-B → cut อยู่ในช่วง [0,L] สมเหตุผล",
+      0 <= _beAB["cut_left_m"] <= 6.0 and 0 <= _beAB["cut_right_m"] <= 6.0, (_beAB["cut_left_m"], _beAB["cut_right_m"]))
+# parity sanity: ไม่มีจุดโหลด → คง fig-8.32 (ไม่ override envelope)
+cn = calc.design_continuous_beam_exact(calc.ContinuousBeamInput(b=30, h=60, fc=240, fy=4000,
+    cover=4.0, d_stirrup=0.9, db_assume=2.5,
+    spans=[SI(6.0, 15.0, 10.0, []), SI(6.0, 15.0, 10.0, [])]))["curtailment"]
+check("cont UDL ล้วน → bottom_exact ไม่ set (fig-8.32 คงเดิม)", cn.get("bottom_exact") is None, cn.get("bottom_exact"))
+check("cont UDL ล้วน → bottom ยังเป็น L/8 (cut_eighth_m=0.75 · ไม่ override)",
+      near(cn["bottom"][0]["cut_eighth_m"], 0.75), cn["bottom"][0]["cut_eighth_m"])
+# symmetric property: จุดโหลดกลางช่วงแรก (x=3.0=L/2) — span A-B ยังเบี้ยวจาก end moment (B≠A) แต่ค่าต้องอยู่ในช่วงสมเหตุผล
+cs = calc.design_continuous_beam_exact(calc.ContinuousBeamInput(b=30, h=60, fc=240, fy=4000,
+    cover=4.0, d_stirrup=0.9, db_assume=2.5,
+    spans=[SI(6.0, 15.0, 10.0, [PL("LL", 80.0, 3.0)]), SI(6.0, 15.0, 10.0, [])]))["curtailment"]
+_csAB = next(b for b in cs["bottom"] if b["span"] == "A-B")
+check("cont จุดโหลดกลาง → cut_eighth_m = เฉลี่ย (cutL+cutR)/2",
+      near(_csAB["cut_eighth_m"], (_csAB["cut_left_m"] + _csAB["cut_right_m"]) / 2.0), _csAB["cut_eighth_m"])
+
 print("\n" + "=" * 60)
 print(f" RESULT: {PASS} PASS / {FAIL} FAIL" + ("  ALL GREEN" if FAIL == 0 else "  *** FAIL ***"))
 print("=" * 60)
