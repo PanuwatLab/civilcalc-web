@@ -96,6 +96,9 @@ chk("b=12×30 → passes=False (ρ_provided > ρmax ที่ d จริง · 
 if o10.rebar:
     chk("→ ρ_provided > ρmax จริง (ยืนยัน over-reinforced)",
         o10.rebar.As_provided / (12 * o10.d_actual) > o10.rho_max + 1e-9)
+# Codex P1 round-4 (#26 · 1753): continuous/cantilever path (_safe_flexure_design) ก็ต้อง guard ρ_provided
+_rc = calc._safe_flexure_design(30, 12, 30, 240, 4000, 4, 0.9, 1.6)
+chk("continuous _safe_flexure_design over-reinforced → passes=False (ρ_provided guard ครบ 2 path)", not _rc["passes"])
 
 print("\n" + "=" * 64)
 print(f" RESULT: {PASS} PASS / {FAIL} FAIL" + ("  ALL GREEN" if FAIL == 0 else "  *** FAIL ***"))
