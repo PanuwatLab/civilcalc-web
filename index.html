@@ -1991,10 +1991,12 @@
     (c.bottom || []).forEach(b => rows.push([
       `ช่วง ${b.span}`, 'ล่าง (+M)',
       // single-span มี field n_continuous_past_L8 (ตัด ≤ครึ่ง · area-aware) · continuous (#18) ไม่มี → fallback เดิม (Codex P2)
-      (b.n_continuous_past_L8 === undefined
-        ? `ตัด L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`
-        : (b.cut_eighth_m == null ? `${b.n_continuous_past_L8} เส้นวิ่งเต็ม · ไม่ตัด`
-           : `ต่อเนื่อง ${b.n_continuous_past_L8} · ตัด ${b.cut_bars || b.n_extra_cut} ที่ L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`)),
+      (b.cut_left_m != null   // envelope (จุดโหลด) = ตำแหน่งจริง asymmetric ซ้าย/ขวา · ไม่ใช่ L/8 (Path A · Codex P2)
+        ? `ต่อเนื่อง ${b.n_continuous_past_L8} · ตัด ${b.cut_bars} จาก moment envelope: ปลายซ้าย ${b.cut_left_m} · ปลายขวา ${b.cut_right_m} ม.`
+        : b.n_continuous_past_L8 === undefined
+          ? `ตัด L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`
+          : (b.cut_eighth_m == null ? `${b.n_continuous_past_L8} เส้นวิ่งเต็ม · ไม่ตัด`
+             : `ต่อเนื่อง ${b.n_continuous_past_L8} · ตัด ${b.cut_bars || b.n_extra_cut} ที่ L/8=${b.cut_eighth_m} · เข้าเสา ${b.into_support_m}`)),
       `${b.ext_min_m} ม`]));
     host.innerHTML = rows.length
       ? rows.map(r => `<tr><td class="py-2 pr-3">${r[0]}</td><td class="py-2 pr-3 text-ink-muted">${r[1]}</td><td class="py-2 pr-3 text-right">${r[2]}</td><td class="py-2 text-right">${r[3]}</td></tr>`).join('')
@@ -2437,11 +2439,13 @@
       const gM = extraBarGroups(sb.list);
       const _sc0 = (((state._lastInp && state._lastInp.out && state._lastInp.out.curtailment) || {}).bottom || [])[0];
       if (_sc0 && _sc0.cut_eighth_m != null && _sc0.cut_bars) {
-        // single area-aware: ตัด cut_bars (ยาว L−2·L/8) + ที่เหลือวิ่งเต็ม (ยาว L) — ตรงรูป/ตาราง (Codex P2 · เดิม L×2/3 รวมก้อน)
-        const lenCut = +(L - 2 * _sc0.cut_eighth_m).toFixed(2);
+        // single: ตัด cut_bars + ที่เหลือวิ่งเต็ม (ยาว L) — envelope=asymmetric (L−ซ้าย−ขวา) · fixed=L−2·L/8 (ตรงรูป/ตาราง · Codex P2)
+        const _env = _sc0.cut_left_m != null;
+        const lenCut = _env ? +(L - _sc0.cut_left_m - _sc0.cut_right_m).toFixed(2) : +(L - 2 * _sc0.cut_eighth_m).toFixed(2);
+        const _cutLbl = _env ? 'ล่าง·เสริมกลาง·ตัด envelope' : 'ล่าง·เสริมกลาง·ตัด L/8';
         const cutG = _sc0.cut_bars.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean).map(mm => [mm[2], +mm[1]]);
         const rem = {}; gM.forEach(([s, c]) => rem[s] = (rem[s] || 0) + c); cutG.forEach(([s, c]) => rem[s] = (rem[s] || 0) - c);
-        cutG.forEach((g, k) => rows.push([`M1c${k + 1}`, g[0], g[1], lenCut, 'ล่าง·เสริมกลาง·ตัด L/8']));
+        cutG.forEach((g, k) => rows.push([`M1c${k + 1}`, g[0], g[1], lenCut, _cutLbl]));
         Object.keys(rem).filter(s => rem[s] > 0).forEach((s, k) => rows.push([`M1f${k + 1}`, s, rem[s], +L.toFixed(2), 'ล่าง·เสริมกลาง·วิ่งเต็ม']));
       } else {
         const lenM = +L.toFixed(2);   // ไม่ตัด (cut_eighth=null) → เสริมวิ่งเต็ม (ยาว L · เดิม L×2/3)
