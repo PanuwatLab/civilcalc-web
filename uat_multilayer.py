@@ -86,6 +86,11 @@ if o8.rebar:
     maxdb8 = max(int("".join(c for c in nm if c.isdigit())) for nm, _ in o8.rebar.main_bars)
     chk("→ ไม่เลือก DB ใหญ่สุด (DB28) ที่ d ต่ำ → เลือก db ≤ 25 (d ใหญ่กว่า)", maxdb8 <= 25, f"maxdb={maxdb8}")
 
+print("\nCase 8 · Codex P1 #26 round-2 — over-reinforced ที่ d จริงหลายชั้น → FAIL (ไม่ accept ด้วย phi_Mn อย่างเดียว)")
+o9 = calc.design_beam(calc.BeamInput(b=14, h=35, L=4, fc=240, fy=4000, cover=4, d_stirrup=0.9, DL=15, LL=9))
+chk("b=14×35 → passes=False (ρ>ρmax ที่ d_actual หลายชั้น · ไม่ false-pass)", not o9.passes)
+chk("→ มี note เตือน singly-reinforced/ρ เกิน", any(("singly" in n or "ρ" in n) for n in o9.notes))
+
 print("\n" + "=" * 64)
 print(f" RESULT: {PASS} PASS / {FAIL} FAIL" + ("  ALL GREEN" if FAIL == 0 else "  *** FAIL ***"))
 print("=" * 64)
