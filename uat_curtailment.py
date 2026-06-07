@@ -105,15 +105,18 @@ inp_pl = calc.ContinuousBeamInput(
            calc.SpanInput(L=5, DL=20, LL=12, point_loads=[])],
     load_combo="1.4D+1.7L")
 cpl = calc.design_continuous_beam_exact(inp_pl)["curtailment"]
-check("มีจุดโหลด → applicable=False", cpl["applicable"] is False, cpl["applicable"])
-check("มีจุดโหลด → warning เรื่องจุดโหลด", any("จุดโหลด" in w for w in cpl["warnings"]), cpl["warnings"])
+# A2b: จุดโหลด → เหล็กบน-ล่างจาก moment envelope จริง (exact · ไม่ใช่ fig-8.32 approx อีกต่อไป)
+check("มีจุดโหลด → applicable=True (envelope exact · A2b)", cpl["applicable"] is True, cpl["applicable"])
+check("มีจุดโหลด → bottom_exact + top_exact (บน-ล่าง envelope จริง)",
+      bool(cpl.get("bottom_exact")) and bool(cpl.get("top_exact")), (cpl.get("bottom_exact"), cpl.get("top_exact")))
+check("มีจุดโหลด → ไม่มี warning ค่าประมาณ (exact แล้ว)", len(cpl["warnings"]) == 0, cpl["warnings"])
 # ช่วงไม่เท่ามาก [3,9] UDL → applicable=False
 cuneq = design([3.0, 9.0], h=60, dl=8, ll=5)["curtailment"]
 check("ช่วงไม่เท่า max/min=3 → applicable=False", cuneq["applicable"] is False, cuneq["applicable"])
 check("ช่วงไม่เท่า → warning เรื่องช่วง", any("ช่วง" in w for w in cuneq["warnings"]), cuneq["warnings"])
 
-# ---- Case 7 · คานยื่นมีจุดโหลด (ช่วงใน UDL) → applicable=False (Codex P2) ----
-print("\nCase 7 · คานยื่นมีจุดโหลด → applicable=False")
+# ---- Case 7 · คานยื่นมีจุดโหลด → A2b envelope exact (applicable=True) ----
+print("\nCase 7 · คานยื่นมีจุดโหลด → envelope exact")
 inp7 = calc.ContinuousBeamInput(
     b=30, h=55, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9,
     spans=[calc.SpanInput(L=5, DL=20, LL=12, point_loads=[]),
@@ -121,8 +124,11 @@ inp7 = calc.ContinuousBeamInput(
     load_combo="1.4D+1.7L",
     left_cantilever={"L": 2.0, "DL": 10, "LL": 5, "point_loads": [{"kind": "LL", "P": 40, "x": 1.8}]})
 c7 = calc.design_continuous_beam_exact(inp7)["curtailment"]
-check("คานยื่นมีจุดโหลด → applicable=False", c7["applicable"] is False, c7["applicable"])
-check("คานยื่นมีจุดโหลด → warning เรื่องจุดโหลด", any("จุดโหลด" in w for w in c7["warnings"]), c7["warnings"])
+# A2b: คานยื่นมีจุดโหลด → เหล็กล่าง+บนหัวเสาในเป็น envelope · แต่เหล็กบน "ฝั่งคานยื่น" = full+Ld (ไม่ใช่ envelope crossing)
+#   → applicable=False (honest · ฝั่งคานยื่นยังไม่ได้ envelope-check · Codex P2)
+check("คานยื่นมีจุดโหลด → applicable=False (ฝั่งคานยื่นยังไม่ envelope · honest)", c7["applicable"] is False, c7["applicable"])
+check("คานยื่นมีจุดโหลด → bottom_exact=True + warning คานยื่น",
+      bool(c7.get("bottom_exact")) and any("คานยื่น" in w for w in c7["warnings"]), (c7.get("bottom_exact"), c7["warnings"]))
 # คานยื่น UDL ล้วน (ไม่มีจุดโหลด) + ช่วงในเท่า → ยัง applicable=True
 inp7b = calc.ContinuousBeamInput(
     b=30, h=55, fc=240, fy=4000, cover=4, db_assume=2.5, d_stirrup=0.9,
@@ -203,19 +209,26 @@ check("method อ้าง รูปที่ 8.32", "8.32" in c["method"], c["m
 check("มี ≥3 citations", len(c["citations"]) >= 3, len(c["citations"]))
 check("datum ระบุจุดอ้างอิง (หน้าเสา/ศูนย์เสา)", "เสา" in c["datum"], c["datum"])
 
-# ---- Case 5 · continuous + จุดโหลด → เหล็กล่างจาก moment envelope จริง (A2a) ----
-print("\nCase 5 · continuous envelope (A2a · เหล็กล่าง +M)")
+# ---- Case 5 · continuous + จุดโหลด → เหล็กบน-ล่างจาก moment envelope จริง (A2a+A2b) ----
+print("\nCase 5 · continuous envelope (A2a ล่าง +M · A2b บน −M)")
 SI, PL = calc.SpanInput, calc.PointLoad
 # 2-span [6,6] · จุดโหลดเยื้องช่วงแรก (x=2.0 ≠ 3.0) → asymmetric
 ce = calc.design_continuous_beam_exact(calc.ContinuousBeamInput(b=30, h=60, fc=240, fy=4000,
     cover=4.0, d_stirrup=0.9, db_assume=2.5,
     spans=[SI(6.0, 15.0, 10.0, [PL("LL", 80.0, 2.0)]), SI(6.0, 15.0, 10.0, [])]))["curtailment"]
-check("cont+จุดโหลด → applicable=False (เหล็กบนยัง approx)", ce["applicable"] is False, ce["applicable"])
-check("cont+จุดโหลด → bottom_exact=True (เหล็กล่าง override)", ce.get("bottom_exact") is True, ce.get("bottom_exact"))
-check("cont+จุดโหลด → method อ้าง envelope (ล่าง)", "envelope" in ce["method"].lower(), ce["method"])
-check("cont+จุดโหลด → top ยังเป็น fig-8.32 (มี cut_half_m)",
-      bool(ce["top"]) and ce["top"][0].get("cut_half_m") is not None, ce["top"][0] if ce["top"] else None)
-check("cont+จุดโหลด → warnings 2 บรรทัด (ล่าง exact + บน approx)", len(ce["warnings"]) == 2, len(ce["warnings"]))
+check("cont+จุดโหลด → applicable=True (บน-ล่าง exact · A2b ลบ half-state)", ce["applicable"] is True, ce["applicable"])
+check("cont+จุดโหลด → bottom_exact=True", ce.get("bottom_exact") is True, ce.get("bottom_exact"))
+check("cont+จุดโหลด → top_exact=True (A2b)", ce.get("top_exact") is True, ce.get("top_exact"))
+check("cont+จุดโหลด → method อ้าง envelope", "envelope" in ce["method"].lower(), ce["method"])
+check("cont+จุดโหลด → ไม่มี warning (exact ครบ)", len(ce["warnings"]) == 0, len(ce["warnings"]))
+# A2b top: support B (interior) envelope · asymmetric ซ้าย≠ขวา (โหลดเยื้องช่วง A-B)
+_teB = next((t for t in ce["top"] if t["support"] == "B"), None)
+check("cont top B → envelope=True + cut_third_left/right (asymmetric)",
+      bool(_teB) and _teB.get("envelope") and _teB.get("cut_third_left_m") is not None and _teB.get("cut_third_right_m") is not None, _teB)
+check("cont top B → cut_half ≤ cut_third แต่ละข้าง (cut group หยุดก่อน inflection)",
+      bool(_teB) and (_teB.get("cut_half_left_m") is None or _teB["cut_half_left_m"] <= _teB["cut_third_left_m"] + 1e-6)
+      and (_teB.get("cut_half_right_m") is None or _teB["cut_half_right_m"] <= _teB["cut_third_right_m"] + 1e-6),
+      _teB and (_teB.get("cut_half_left_m"), _teB.get("cut_third_left_m"), _teB.get("cut_half_right_m"), _teB.get("cut_third_right_m")))
 _beAB = next(b for b in ce["bottom"] if b["span"] == "A-B")
 check("cont envelope A-B → มี cut_left_m/cut_right_m",
       _beAB.get("cut_left_m") is not None and _beAB.get("cut_right_m") is not None, _beAB)
