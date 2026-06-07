@@ -2370,9 +2370,10 @@
       return Math.max(1, Math.ceil(n / per));
     };
     // วาดเหล็ก n เส้นเป็น nLayers ชั้น · ชั้นนอกสุด (ผิวรับแรง) เต็มก่อน · ชั้นถัดเข้าด้านใน(ทาง NA)
-    const dotsRows = (n, yOuter, r, dir, db_cm) => {
+    //   forced = ใช้ n_layers จาก engine result ตรงๆ (ถ้ามี · ตรงผลคำนวณเป๊ะ · Codex P2) · ไม่งั้น recompute
+    const dotsRows = (n, yOuter, r, dir, db_cm, forced) => {
       const x0 = pad + si + 6, x1 = W - pad - si - 6;
-      const nL = _layers(n, db_cm), rowGap = 2 * r + 2.5;
+      const nL = (forced && forced >= 1) ? Math.min(forced, Math.max(1, n)) : _layers(n, db_cm), rowGap = 2 * r + 2.5;
       let placed = 0;
       for (let L = 0; L < nL; L++) {
         const cnt = Math.min(Math.ceil(n / nL), n - placed);  // ชั้นนอกเต็มก่อน (เฉลี่ยปัดขึ้น)
@@ -2386,8 +2387,8 @@
       }
       return nL;
     };
-    const nlTop = dotsRows(nTop, pad + si + 8, 3.4, +1, 2.0);   // เหล็กบน · ชั้นถัดลงด้านใน
-    const nlBot = dotsRows(nBot, Hh - pad - si - 8, 3.6, -1, 2.0);  // เหล็กล่าง · ชั้นถัดขึ้นด้านใน
+    const nlTop = dotsRows(nTop, pad + si + 8, 3.4, +1, 2.0);   // เหล็กบน · ชั้นถัดลงด้านใน (−M · recompute · engine top n_layers ยังไม่ expose)
+    const nlBot = dotsRows(nBot, Hh - pad - si - 8, 3.6, -1, 2.0, (m && m.nLayers) || 0);  // เหล็กล่าง +M · ใช้ n_layers จาก engine result (Codex P2)
     // labels
     const tl = svgEl('text', { x: W / 2, y: 13, 'font-size': 9, fill: '#64748B', 'text-anchor': 'middle' }); tl.textContent = `${m.b}×${m.h}`; svg.appendChild(tl);
     return { svg, nTop, nBot };
