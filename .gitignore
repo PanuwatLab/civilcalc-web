@@ -43,3 +43,6 @@ Thumbs.db
 dist/
 build/
 release/
+
+# Integration mockup rounds (local + vault only)
+_mockup_r*/

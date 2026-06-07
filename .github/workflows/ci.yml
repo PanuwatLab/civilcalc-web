@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Syntax check (all Python files)
+        run: python -m py_compile calc.py embed_calc.py uat_recheck.py uat_continuous.py uat_curtailment.py tools/web_arch_audit.py
+
+      - name: Web arch guard (sensor · warn-only · non-blocking)
+        continue-on-error: true
+        run: python tools/web_arch_audit.py index.html
+
+      - name: Engine tests — single-span flexure/shear
+        run: python uat_recheck.py
+
+      - name: Engine tests — continuous + cantilever
+        run: python uat_continuous.py
+
+      - name: Engine tests — curtailment / detailing (fig-8.32 + moment envelope)
+        run: python uat_curtailment.py

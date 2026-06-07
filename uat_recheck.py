@@ -11,10 +11,12 @@ Layers:
   E · Unit-conversion consistency (kN <-> kg <-> ton)
 """
 import sys, io, math, importlib.util, traceback
+from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
-spec = importlib.util.spec_from_file_location("calc", r"C:\Users\Jone\Desktop\civilcalc-web\calc.py")
+_CALC_PATH = Path(__file__).resolve().parent / "calc.py"
+spec = importlib.util.spec_from_file_location("calc", str(_CALC_PATH))
 calc = importlib.util.module_from_spec(spec)
 sys.modules["calc"] = calc          # needed for dataclass forward-ref resolution
 spec.loader.exec_module(calc)
@@ -238,6 +240,119 @@ if sd4 and "Vc_kN" in sd4:
 print()
 
 # =====================================================================
+# LAYER F — Double stirrups (n_legs · 2ป) · engine PR 2026-06-03
+# =====================================================================
+print("="*68)
+print("LAYER F · Double stirrups (n_legs = 4 / 2ป)")
+print("="*68)
+# DESIGN_STIRRUP case (Vu > phiVc, below crush cap): Wu=80 L=5 b=30 d=45 fc=240
+_sh = dict(Wu_kN_m=80.0, L_m=5.0, R_A_kN=200.0, R_B_kN=200.0,
+           factored_points=None, b_cm=30, d_cm=45, fc_ksc=240)
+sd2 = calc.design_shear(**_sh, n_legs=2)
+sd4 = calc.design_shear(**_sh, n_legs=4)
+chk_true("F0 both DESIGN_STIRRUP branch",
+         sd2["branch"] == "DESIGN_STIRRUP" and sd4["branch"] == "DESIGN_STIRRUP",
+         f"(2leg={sd2['branch']} 4leg={sd4['branch']})")
+chk("F1 A_v(4 legs) == 2x A_v(2 legs)", sd4["A_v_cm2"], 2.0 * sd2["A_v_cm2"], abs_tol=1e-6)
+chk_true("F2 double-stirrup spacing S1 >= single (more area → wider)",
+         sd4["S1_cm"] >= sd2["S1_cm"] - 1e-9,
+         f"(S1 2leg={sd2['S1_cm']} 4leg={sd4['S1_cm']})")
+chk_true("F3 notation tags 2ป for double", "2ป" in sd4["shop_drawing_notation"],
+         f"('{sd4['shop_drawing_notation']}')")
+chk_true("F3b single-stirrup notation has NO ป-prefix (regression)",
+         "ป-" not in sd2["shop_drawing_notation"],
+         f"('{sd2['shop_drawing_notation']}')")
+chk_eq("F4 n_legs/n_stirrups echoed", (sd4["n_legs"], sd4["n_stirrups"]), (4, 2))
+chk_true("F5 double still passes shear", sd4["passes"] is True)
+expect_raise("F6 invalid n_legs=3 raises InvalidInputError",
+             lambda: calc.design_shear(**_sh, n_legs=3),
+             calc.InvalidInputError)
+# F7 · end-to-end via BeamInput.stirrup_legs
+o_sl = calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=30,LL=25,stirrup_legs=4))
+chk_eq("F7 design_beam threads stirrup_legs=4", o_sl.stirrup_design.get("n_legs"), 4)
+
+# LAYER G — Partial UDL (engine PR 2026-06-03) · closed-form verification
+# segment tuple = (w_kN_m, x1, x2, kind)
+# =====================================================================
+print("="*68)
+print("LAYER G · Partial UDL (simply-supported · closed-form)")
+print("="*68)
+L = 6.0
+# G1 · partial over full span [0,L] ≡ full UDL w
+env_full = calc.compute_envelope_ss(10.0, L, [], partials=None)
+env_part = calc.compute_envelope_ss(0.0, L, [], partials=[(10.0, 0.0, L, "DL")])
+chk("G1 partial[0,L] M_max == w·L²/8", env_part["M_max"], 10.0*L*L/8.0, abs_tol=0.05)
+chk("G1b partial[0,L] == full-UDL envelope", env_part["M_max"], env_full["M_max"], abs_tol=0.05)
+chk("G1c partial[0,L] V_max == w·L/2", env_part["V_max"], 10.0*L/2.0, abs_tol=0.02)
+# G2 · symmetric central patch [2,4] w=10 → R_A=10, M_mid=25, V_max=10
+envc = calc.compute_envelope_ss(0.0, 6.0, [], partials=[(10.0, 2.0, 4.0, "DL")])
+chk("G2 central patch R_A", envc["R_A"], 10.0, abs_tol=0.02)
+chk("G2b central patch M_mid", envc["M_max"], 25.0, abs_tol=0.10)
+chk("G2c central patch V_max", envc["V_max"], 10.0, abs_tol=0.05)
+# G3 · asymmetric patch [0,2] w=12 → R_A=20, R_B=4, statics W=24
+enva = calc.compute_envelope_ss(0.0, 6.0, [], partials=[(12.0, 0.0, 2.0, "DL")])
+chk("G3 asym patch R_A", enva["R_A"], 20.0, abs_tol=0.05)
+chk("G3b asym patch R_B", enva["R_B"], 4.0, abs_tol=0.05)
+chk_true("G3c asym statics R_A+R_B == W=24",
+         abs(enva["R_A"] + enva["R_B"] - 24.0) < 0.05,
+         f"(sum={enva['R_A']+enva['R_B']:.3f})")
+# G4 · superposition: full UDL 6 + central patch [2,4]×10 → M_mid = 27 + 25 = 52
+envs = calc.compute_envelope_ss(6.0, 6.0, [], partials=[(10.0, 2.0, 4.0, "DL")])
+chk("G4 superposition M_mid (27+25)", envs["M_max"], 52.0, abs_tol=0.20)
+# G5 · end-to-end design_beam equivalence: DL=10 full vs partial[0,L] DL=10
+oe1 = calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=10,LL=0))
+oe2 = calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=0,LL=0,
+        partial_udls=[calc.PartialUDL("DL",10.0,0.0,5.0)]))
+chk("G5 design_beam Mu: full vs partial[0,L]", oe2.Mu, oe1.Mu, abs_tol=0.05)
+chk("G5b design_beam Vu: full vs partial[0,L]", oe2.Vu, oe1.Vu, abs_tol=0.05)
+chk_true("G5c partial[0,L] same verdict", oe2.passes == oe1.passes,
+         f"(full={oe1.passes} partial={oe2.passes})")
+# G6 · load factor applied (LL ×1.6 modern) · patch w=10 LL → factored 16
+oe3 = calc.design_beam(calc.BeamInput(b=30,h=60,L=6,fc=240,fy=4000,DL=0,LL=0,
+        partial_udls=[calc.PartialUDL("LL",10.0,0.0,6.0)]))
+chk("G6 LL factor 1.6 (Mu = 16·6²/8 = 72)", oe3.Mu, 16.0*36/8.0, abs_tol=0.3)
+# G7 · validation
+expect_raise("G7 x2<=x1 raises",
+             lambda: calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=1,LL=1,
+                 partial_udls=[calc.PartialUDL("DL",10,3,2)])),
+             calc.InvalidInputError)
+expect_raise("G7b x2>L raises",
+             lambda: calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=1,LL=1,
+                 partial_udls=[calc.PartialUDL("DL",10,1,9)])),
+             calc.InvalidInputError)
+# G8 · regression: empty partial_udls == plain UDL beam (no envelope path)
+ob = calc.design_beam(calc.BeamInput(b=25,h=50,L=4.5,fc=240,fy=4000,DL=2.94,LL=3.0))
+chk("G8 empty partials Mu unchanged (Wu·L²/8)", ob.Mu, (1.2*2.94+1.6*3.0)*4.5**2/8.0, abs_tol=0.05)
+# G9 · Codex hardening: invalid kind / non-positive w / unsupported support type
+expect_raise("G9 invalid kind raises",
+             lambda: calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=1,LL=1,
+                 partial_udls=[{"kind":"XX","w":10,"x1":0,"x2":3}])),
+             calc.InvalidInputError)
+expect_raise("G9b negative w raises (unsafe under-design)",
+             lambda: calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=1,LL=1,
+                 partial_udls=[{"kind":"DL","w":-10,"x1":0,"x2":3}])),
+             calc.InvalidInputError)
+expect_raise("G9c partial UDL on cantilever rejected (not silently ignored)",
+             lambda: calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=1,LL=1,
+                 support=calc.SupportType.CANTILEVER,
+                 partial_udls=[calc.PartialUDL("DL",10,0,3)])),
+             calc.InvalidInputError)
+# G10 · Codex re-review: NaN x1/x2 rejected (NaN comparisons are False → would slip through)
+expect_raise("G10 NaN x1 raises (no silent Mu=0)",
+             lambda: calc.design_beam(calc.BeamInput(b=30,h=55,L=5,fc=240,fy=4000,DL=1,LL=1,
+                 partial_udls=[{"kind":"DL","w":10,"x1":float('nan'),"x2":3}])),
+             calc.InvalidInputError)
+# G11 · Codex re-review: zero-shear root caught even when off the sample grid
+#   asymmetric patch [0,2]×12 on L=6 → V=0 at x=R_A/w=20/12=1.667 (interior)
+#   true M_max = R_A²/(2w) = 20²/24 = 16.667 · coarse grid (n=3) would miss → 16.0
+env_coarse = calc.compute_envelope_ss(0.0, 6.0, [], n_samples=3, partials=[(12.0,0.0,2.0,"DL")])
+chk("G11 zero-shear M_max off coarse grid", env_coarse["M_max"], 400.0/24.0, abs_tol=0.02)
+chk_true("G11b M_max at interior V=0 root (~1.667)",
+         abs(env_coarse["x_at_M_max"] - 20.0/12.0) < 0.05,
+         f"(x_at_M_max={env_coarse['x_at_M_max']:.4f})")
+print()
+
+# =====================================================================
 print("="*68)
 print(f"RESULT: {len(PASS)} PASS / {len(FAIL)} FAIL  (total {len(PASS)+len(FAIL)})")
 if FAIL:
@@ -247,3 +362,5 @@ if FAIL:
 else:
     print("ALL GREEN")
 print("="*68)
+
+sys.exit(1 if FAIL else 0)
