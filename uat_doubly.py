@@ -46,9 +46,10 @@ chk("Ex3.10 fs' = fy (yielded)", dr["fs_prime"], 4000, tol=0.001)
 print("\n" + "=" * 60)
 print(" B · analyze_doubly_capacity round-trip (DRMK Ex 3.8 method)")
 print("=" * 60)
-Mn, a, fsp = calc.analyze_doubly_capacity(56.61, 7.15, 40, 54, 6, 280, 4000, beta1_280)
-# provided steel ≈ design → Mn ≈ Mu/φ = 90/0.9 = 100 t.m = 1e7 kg.cm
+Mn, a, fsp, fst, tyield = calc.analyze_doubly_capacity(56.61, 7.15, 40, 54, 6, 280, 4000, beta1_280)
+# provided steel ≈ design → Mn ≈ Mu/φ = 90/0.9 = 100 t.m = 1e7 kg.cm · เหล็กดึงคราก (ductile)
 chk("analyze Mn ≈ Mu/φ", Mn, 1.0e7, tol=0.01)
+chk_true("analyze tension yields (ductile)", tyield, f"fs_t={fst:.0f} fy=4000")
 
 print("\n" + "=" * 60)
 print(" C · end-to-end design_beam — doubly triggers + passes")
@@ -76,7 +77,7 @@ b, d = inp.b, out.d_actual
 rho = out.As_required / (b * d)
 rho_p = out.As_prime_required / (b * d)
 net = rho - rho_p * (out.fs_prime_ksc / inp.fy)
-chk("D net tension ratio ≈ ρmax", net, out.rho_max, tol=0.001)
+chk("D net tension ratio ≈ ρmax (provided steel · ±rebar rounding)", net, out.rho_max, abs_tol=0.0006)
 
 print("\n" + "=" * 60)
 print(" E · boundary — singly stays singly (zero-reg sanity)")
@@ -120,6 +121,29 @@ try:
 except (calc.OverReinforcedError, calc.SectionTooSmallError) as e:
     chk_true("G cantilever over-reinforced NOT routed to doubly", True,
              f"raised {type(e).__name__} (เดิม · ถูกต้อง)")
+
+print("\n" + "=" * 60)
+print(" I · ductility on provided bars — over-provided compression → tension not yield → fail (Codex P1 #27 r4)")
+print("=" * 60)
+# Codex case: compression over-provided มาก → เหล็กดึงไม่คราก (strain compat) → φ=0.9 ใช้ไม่ได้ → ต้อง fail
+inpI = calc.BeamInput(b=12, h=30, L=5.0, fc=280, fy=5000, cover=3.0,
+                      db_assume=1.6, d_stirrup=0.9, DL=12.0, LL=0.0,
+                      load_combo=calc.LoadCombo.ACI_LEGACY)
+try:
+    outI = calc.design_beam(inpI)
+    # ถ้า passes=True ต้องมาจากเหล็กดึงครากจริง (independent strain-compat check)
+    if outI.is_doubly and outI.rebar_compression:
+        _Mn, _a, _fsc, _fst, _ty = calc.analyze_doubly_capacity(
+            outI.rebar.As_provided, outI.rebar_compression.As_provided, 12,
+            outI.d_actual, outI.input.cover + outI.input.d_stirrup,  # d' approx (lower bound)
+            280, 5000, outI.beta1)
+        chk_true("I passes only if tension yields (ductile)", (not outI.passes) or _ty,
+                 f"passes={outI.passes} tension_yields={_ty} fs_t={_fst:.0f}")
+    else:
+        chk_true("I passes only if tension yields (ductile)", not outI.passes,
+                 f"passes={outI.passes} is_doubly={outI.is_doubly}")
+except (calc.OverReinforcedError, calc.SectionTooSmallError):
+    chk_true("I passes only if tension yields (ductile)", True, "raised (acceptable)")
 
 print("\n" + "=" * 60)
 print(" H · compression bars can't fit → fail (no false-pass · Codex P1 #27 r3)")

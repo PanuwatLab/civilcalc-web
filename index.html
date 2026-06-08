@@ -1373,7 +1373,7 @@
         b: P.b, h: P.h, cover: P.cover, d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
         nLayers: o.rebar ? (o.rebar.n_layers || 1) : 1,   // จำนวนชั้นเหล็กล่างจาก engine (display ใช้ตรง · ไม่ recompute)
         // doubly-reinforced (เหล็กรับแรงอัด · เมื่อ singly เกิน ρmax · DRMK book p70)
-        isDoubly: !!o.is_doubly,
+        isDoubly: !!o.is_doubly, As1: o.As1 || 0, As2: o.As2 || 0,
         rebarComp: (o.is_doubly && o.rebar_compression) ? o.rebar_compression.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '',
         compLayers: (o.is_doubly && o.rebar_compression) ? (o.rebar_compression.n_layers || 1) : 1,
         AsPrime: o.As_prime_required || 0, AsPrimeProv: (o.is_doubly && o.rebar_compression) ? o.rebar_compression.As_provided : 0,
@@ -1874,10 +1874,17 @@
         { t: 'res', v: `Rn = ${f(m.Rn, 2)} ksc` },
         { t: 'f', v: "ρ = (0.85f'c/fy)[1−√(1−2Rn/0.85f'c)]" },
         { t: 'res', v: `ρ_design = ${f(m.rho_design, 5)}` }], null),
-      wstep(7, 'ตรวจขอบเขต → ρ_final', 'วสท. 1008', [
-        { t: 'f', v: 'ρmin ≤ ρ_design ≤ ρmax' },
-        { t: 'sub', v: `${f(m.rho_min, 4)} ≤ ${f(m.rho_design, 5)} ≤ ${f(m.rho_max, 4)} ${inRange ? '✓' : '⚠ ปรับเข้าขอบเขต'}` },
-        { t: 'res', v: `ρ_final = ${f(m.rho_final, 5)}` }], inRange ? 'อยู่ในช่วงเหนียว (ductile) — ผ่าน' : 'ρ ถูกปรับให้อยู่ในขอบเขต ว.ส.ท.'),
+      // Step 7 — singly: ตรวจ ρ ในขอบเขต · doubly: เกิน ρmax → เสริมเหล็กคู่ (ไม่ขัดกับ verdict · Codex P2 #27)
+      m.isDoubly
+        ? wstep(7, 'เกิน ρmax → เสริมเหล็กคู่ (doubly)', 'DRMK p70', [
+            { t: 'f', v: `ρ ที่ต้องการ > ρmax = ${f(m.rho_max, 4)} → singly ไม่พอ` },
+            { t: 'sub', v: 'หน้าตัดถูกจำกัด → เพิ่มเหล็กรับแรงอัด (As′ บน) รับโมเมนต์ส่วนเกิน' },
+            { t: 'res', v: `As1 = ρmax·b·d = ${f(m.As1, 2)} cm² (คู่คอนกรีต) · As2 = ${f(m.As2, 2)} cm² (คู่เหล็กอัด)` }],
+            'เหล็กดึงรวม As = As1 + As2 · ออกแบบให้เหล็กดึงครากเสมอ (ductile)')
+        : wstep(7, 'ตรวจขอบเขต → ρ_final', 'วสท. 1008', [
+            { t: 'f', v: 'ρmin ≤ ρ_design ≤ ρmax' },
+            { t: 'sub', v: `${f(m.rho_min, 4)} ≤ ${f(m.rho_design, 5)} ≤ ${f(m.rho_max, 4)} ${inRange ? '✓' : '⚠ ปรับเข้าขอบเขต'}` },
+            { t: 'res', v: `ρ_final = ${f(m.rho_final, 5)}` }], inRange ? 'อยู่ในช่วงเหนียว (ductile) — ผ่าน' : 'ρ ถูกปรับให้อยู่ในขอบเขต ว.ส.ท.'),
       wstep(8, 'พื้นที่เหล็กต้องการ As', null, [
         { t: 'f', v: `As = ρ·b·d = ${f(m.rho_final, 5)}·${m.b}·${f(dDesign, 1)}` },
         { t: 'res', v: `As,req = ${f(m.As_req, 2)} cm²` }], null),
@@ -1885,11 +1892,21 @@
         { t: 'f', v: `ใช้ ${m.rebarMain}  (As = ${f(m.As_prov, 2)} cm²)` },
         { t: 'res', v: `As,prov = ${f(m.As_prov, 2)} cm² ${okAs ? '≥' : '<'} ${f(m.As_req, 2)} ${okAs ? '✓' : '✗ ต้องเพิ่มเหล็ก'}` },
         { t: 'sub', v: `ระยะห่างเหล็ก clear ≈ ${f(m.spacingClear, 1)} ซม` }], okAs ? 'จัดได้ 1 ชั้น' : null),
-      wstep('10–11', 'a → Mn → φMn เทียบ Mu', 'SDM', [
-        { t: 'f', v: "a = As·fy/(0.85·f'c·b)" },
-        { t: 'res', v: `a = ${f(m.a, 2)} ซม` },
-        { t: 'f', v: 'φMn = 0.9·As·fy·(d − a/2)' },
-        { t: 'res', v: `φMn = ${ccUnits.M(m.phiMn)}  ${okMn ? '≥' : '<'}  Mu ${ccUnits.M(m.Mu)} ${okMn ? '✓' : '✗'}` }], `safety margin = (φMn−Mu)/Mu = ${m.margin >= 0 ? '+' : ''}${m.margin}%`),
+      // Step 10–11 — singly: a→Mn→φMn · doubly: เหล็กอัด As′ + Mn เหล็กคู่ (couple-1+couple-2 · Codex P2 #27)
+      m.isDoubly
+        ? wstep('10–11', 'เหล็กรับแรงอัด As′ → Mn (เหล็กคู่)', 'DRMK Ex 3.8', [
+            { t: 'f', v: "f's = 6120·(1 − d'/c)" },
+            { t: 'res', v: `f's = ${f(m.fsPrime, 0)} ksc ${m.compYields ? '≥ fy → คราก' : '< fy → ไม่คราก'}` },
+            { t: 'f', v: "As′ = As2·fy/f's" },
+            { t: 'res', v: `As′ = ${f(m.AsPrime, 2)} cm² → ใช้ ${m.rebarComp || '—'} (As′ prov = ${f(m.AsPrimeProv, 2)} cm²)` },
+            { t: 'f', v: "φMn = 0.9·[0.85f'c·b·a·(d−a/2) + As′·f's·(d−d')]" },
+            { t: 'res', v: `φMn = ${ccUnits.M(m.phiMn)}  ${okMn ? '≥' : '<'}  Mu ${ccUnits.M(m.Mu)} ${okMn ? '✓' : '✗'}` }],
+            `safety margin = (φMn−Mu)/Mu = ${m.margin >= 0 ? '+' : ''}${m.margin}% · เหล็กอัดต้องมีปลอกยึด`)
+        : wstep('10–11', 'a → Mn → φMn เทียบ Mu', 'SDM', [
+            { t: 'f', v: "a = As·fy/(0.85·f'c·b)" },
+            { t: 'res', v: `a = ${f(m.a, 2)} ซม` },
+            { t: 'f', v: 'φMn = 0.9·As·fy·(d − a/2)' },
+            { t: 'res', v: `φMn = ${ccUnits.M(m.phiMn)}  ${okMn ? '≥' : '<'}  Mu ${ccUnits.M(m.Mu)} ${okMn ? '✓' : '✗'}` }], `safety margin = (φMn−Mu)/Mu = ${m.margin >= 0 ? '+' : ''}${m.margin}%`),
     ];
     $('#workSteps').innerHTML = steps.join('');
 
@@ -4056,26 +4073,33 @@ def analyze_doubly_capacity(
     As_t: float, As_c: float, b: float, d: float, d_prime: float,
     fc: float, fy: float, beta1: float,
 ) -> tuple:
-    """วิเคราะห์กำลังโมเมนต์หน้าตัดเสริมเหล็กคู่จาก "เหล็กที่จัดจริง" (As_t ดึง · As_c อัด).
-    DRMK ตัวอย่าง 3.8 method. ใช้ verify φMn ≥ Mu หลังเลือกเหล็ก. คืน (Mn_kg_cm, a_cm, fs_prime_ksc).
+    """วิเคราะห์กำลังโมเมนต์หน้าตัดเสริมเหล็กคู่จาก "เหล็กที่จัดจริง" (As_t ดึง · As_c อัด)
+    ด้วย strain compatibility เต็ม (เหล็กดึง+อัด อาจคราก/ไม่คราก). DRMK Ex 3.8.
+    คืน (Mn_kg_cm, a_cm, fs_prime_ksc, fs_tension_ksc, tension_yields).
 
-    สมดุลแรง: 0.85·fc·b·a + As_c·fs′ = As_t·fy · เช็คเหล็กอัดคราก (fs′ = min(fy, 6120(1−d′/c)))
-    · iterate หา a · Mn = 0.85fc·b·a·(d − a/2) + As_c·fs′·(d − d′).
+    สมดุล: 0.85·fc·b·(β1·c) + As_c·fs_c(c) = As_t·fs_t(c)
+      fs_t(c) = min(fy, 6120·(d−c)/c) · fs_c(c) = min(fy, 6120·(c−d′)/c) [0 ถ้า c≤d′]
+    net(c) = Cc+Cs−T เพิ่มตาม c → bisection หา c สมดุล · เช็ค ductility (เหล็กดึงครากไหม · Codex P1 #27 r4).
     """
-    fs_prime = fy
-    a = (As_t * fy - As_c * fs_prime) / (0.85 * fc * b)
-    for _ in range(8):
-        a = max(a, 1e-6)
-        c = a / beta1
-        fs_new = min(fy, _EPS_CU_ES_KSC * (1.0 - d_prime / c)) if c > d_prime else 0.0
-        a_new = (As_t * fy - As_c * fs_new) / (0.85 * fc * b)
-        if abs(a_new - a) < 1e-4 and abs(fs_new - fs_prime) < 1e-2:
-            a, fs_prime = a_new, fs_new
-            break
-        a, fs_prime = a_new, fs_new
-    a = max(a, 1e-6)
+    def _fst(c):
+        return min(fy, _EPS_CU_ES_KSC * (d - c) / c) if c > 0 else fy
+    def _fsc(c):
+        return min(fy, _EPS_CU_ES_KSC * (c - d_prime) / c) if c > d_prime else 0.0
+    def _net(c):   # Cc + Cs − T · เพิ่มตาม c (Cc,Cs↑ · T↓)
+        return 0.85 * fc * b * (beta1 * c) + As_c * _fsc(c) - As_t * _fst(c)
+    lo, hi = 1e-4, d
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if _net(mid) < 0.0:
+            lo = mid
+        else:
+            hi = mid
+    c = 0.5 * (lo + hi)
+    a = beta1 * c
+    fs_prime, fs_t = _fsc(c), _fst(c)
     Mn = 0.85 * fc * b * a * (d - a / 2.0) + As_c * fs_prime * (d - d_prime)
-    return Mn, a, fs_prime
+    tension_yields = fs_t >= fy - 1.0   # เหล็กดึงคราก → ductile → φ=0.90 ใช้ได้
+    return Mn, a, fs_prime, fs_t, tension_yields
 
 
 # ----------------------------------------------------------------------------
@@ -4390,13 +4414,18 @@ def design_beam(inp: BeamInput) -> BeamOutput:
             f"หน้าตัดเสริมเหล็กคู่ (doubly · Mu เกินกำลัง singly ที่ ρmax): เหล็กดึง As={dr['As']:.2f} ซม.² "
             f"(As1={dr['As1']:.2f}+As2={dr['As2']:.2f}) · เหล็กอัดบน As′={dr['As_prime']:.2f} ซม.² ({_yld}) "
             f"· d′={d_prime:.1f} ซม. · DRMK book p70 · ควรขยายหน้าตัดก่อนถ้าทำได้")
-        # Step 11 (doubly) · verify φMn จากเหล็กที่จัดจริง (As ดึง + As′ อัด · DRMK Ex 3.8 analysis)
+        # Step 11 (doubly) · verify φMn จากเหล็กที่จัดจริง (strain compatibility เต็ม · DRMK Ex 3.8)
         As_c_prov = out.rebar_compression.As_provided if out.rebar_compression else 0.0
-        out.Mn, out.a_stress_block, _fs_act = analyze_doubly_capacity(
+        out.Mn, out.a_stress_block, out.fs_prime_ksc, _fs_t, _t_yields = analyze_doubly_capacity(
             out.rebar.As_provided, As_c_prov, inp.b, out.d_actual, d_prime,
             inp.fc, inp.fy, out.beta1)
         out.phi_Mn = PHI_FLEXURE * out.Mn
-        out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
+        # ductility: เหล็กดึงต้องครากที่เหล็ก "จัดจริง" → φ=0.90 ถึงใช้ได้ (over-provision อาจทำเหล็กดึงไม่คราก · Codex P1 #27 r4)
+        out.passes_flexure = (out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL) and _t_yields
+        if not _t_yields:
+            out.notes.append(
+                f"🔴 เหล็กดึงไม่คราก (fs={_fs_t:.0f} < fy={inp.fy:.0f} ksc) ที่เหล็กจัดจริง — "
+                "หน้าตัด over-reinforced หลังเลือกเหล็ก · φ=0.90 ใช้ไม่ได้ (ไม่ ductile) · ต้องขยายหน้าตัด หรือ ลด/ปรับเหล็ก")
         if out.Mu_kg_cm > FLOAT_TOL:
             out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
 
@@ -6241,6 +6270,12 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('doubly: หน้าตัด เหล็กบน(midspan) = As′ engine count (เหล็กรับแรงอัด · ไม่ใช่ nominal)',
         !!(_deb && _deb.isDoubly) && _deb.comp.n > 0 && _dtop === _deb.comp.n,
         'engComp=' + (_deb && _deb.comp && _deb.comp.n) + ' drawnTop=' + _dtop);
+      // show-work ต้องเป็น doubly (As′/เสริมเหล็กคู่) ไม่ใช่ singly ρ_final ที่ขัดกับ verdict (Codex P2 #27 r4)
+      TT().renderWork();
+      const _dwork = (document.querySelector('#workSteps') || {}).textContent || '';
+      A('doubly: show-work แสดงสูตรเหล็กคู่ (As′/เสริมเหล็กคู่) ไม่ขัด verdict',
+        /เสริมเหล็กคู่|As′/.test(_dwork) && !/ρ_final/.test(_dwork),
+        'hasDoubly=' + /เสริมเหล็กคู่|As′/.test(_dwork) + ' hasSinglyRhoFinal=' + /ρ_final/.test(_dwork));
       _dclean(); TT().setPoints([]); TT().setMode('cont');
 
       // ── D · mode-switch integrity (applyMode toggle) ──

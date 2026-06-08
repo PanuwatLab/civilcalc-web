@@ -1393,26 +1393,33 @@ def analyze_doubly_capacity(
     As_t: float, As_c: float, b: float, d: float, d_prime: float,
     fc: float, fy: float, beta1: float,
 ) -> tuple:
-    """วิเคราะห์กำลังโมเมนต์หน้าตัดเสริมเหล็กคู่จาก "เหล็กที่จัดจริง" (As_t ดึง · As_c อัด).
-    DRMK ตัวอย่าง 3.8 method. ใช้ verify φMn ≥ Mu หลังเลือกเหล็ก. คืน (Mn_kg_cm, a_cm, fs_prime_ksc).
+    """วิเคราะห์กำลังโมเมนต์หน้าตัดเสริมเหล็กคู่จาก "เหล็กที่จัดจริง" (As_t ดึง · As_c อัด)
+    ด้วย strain compatibility เต็ม (เหล็กดึง+อัด อาจคราก/ไม่คราก). DRMK Ex 3.8.
+    คืน (Mn_kg_cm, a_cm, fs_prime_ksc, fs_tension_ksc, tension_yields).
 
-    สมดุลแรง: 0.85·fc·b·a + As_c·fs′ = As_t·fy · เช็คเหล็กอัดคราก (fs′ = min(fy, 6120(1−d′/c)))
-    · iterate หา a · Mn = 0.85fc·b·a·(d − a/2) + As_c·fs′·(d − d′).
+    สมดุล: 0.85·fc·b·(β1·c) + As_c·fs_c(c) = As_t·fs_t(c)
+      fs_t(c) = min(fy, 6120·(d−c)/c) · fs_c(c) = min(fy, 6120·(c−d′)/c) [0 ถ้า c≤d′]
+    net(c) = Cc+Cs−T เพิ่มตาม c → bisection หา c สมดุล · เช็ค ductility (เหล็กดึงครากไหม · Codex P1 #27 r4).
     """
-    fs_prime = fy
-    a = (As_t * fy - As_c * fs_prime) / (0.85 * fc * b)
-    for _ in range(8):
-        a = max(a, 1e-6)
-        c = a / beta1
-        fs_new = min(fy, _EPS_CU_ES_KSC * (1.0 - d_prime / c)) if c > d_prime else 0.0
-        a_new = (As_t * fy - As_c * fs_new) / (0.85 * fc * b)
-        if abs(a_new - a) < 1e-4 and abs(fs_new - fs_prime) < 1e-2:
-            a, fs_prime = a_new, fs_new
-            break
-        a, fs_prime = a_new, fs_new
-    a = max(a, 1e-6)
+    def _fst(c):
+        return min(fy, _EPS_CU_ES_KSC * (d - c) / c) if c > 0 else fy
+    def _fsc(c):
+        return min(fy, _EPS_CU_ES_KSC * (c - d_prime) / c) if c > d_prime else 0.0
+    def _net(c):   # Cc + Cs − T · เพิ่มตาม c (Cc,Cs↑ · T↓)
+        return 0.85 * fc * b * (beta1 * c) + As_c * _fsc(c) - As_t * _fst(c)
+    lo, hi = 1e-4, d
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if _net(mid) < 0.0:
+            lo = mid
+        else:
+            hi = mid
+    c = 0.5 * (lo + hi)
+    a = beta1 * c
+    fs_prime, fs_t = _fsc(c), _fst(c)
     Mn = 0.85 * fc * b * a * (d - a / 2.0) + As_c * fs_prime * (d - d_prime)
-    return Mn, a, fs_prime
+    tension_yields = fs_t >= fy - 1.0   # เหล็กดึงคราก → ductile → φ=0.90 ใช้ได้
+    return Mn, a, fs_prime, fs_t, tension_yields
 
 
 # ----------------------------------------------------------------------------
@@ -1727,13 +1734,18 @@ def design_beam(inp: BeamInput) -> BeamOutput:
             f"หน้าตัดเสริมเหล็กคู่ (doubly · Mu เกินกำลัง singly ที่ ρmax): เหล็กดึง As={dr['As']:.2f} ซม.² "
             f"(As1={dr['As1']:.2f}+As2={dr['As2']:.2f}) · เหล็กอัดบน As′={dr['As_prime']:.2f} ซม.² ({_yld}) "
             f"· d′={d_prime:.1f} ซม. · DRMK book p70 · ควรขยายหน้าตัดก่อนถ้าทำได้")
-        # Step 11 (doubly) · verify φMn จากเหล็กที่จัดจริง (As ดึง + As′ อัด · DRMK Ex 3.8 analysis)
+        # Step 11 (doubly) · verify φMn จากเหล็กที่จัดจริง (strain compatibility เต็ม · DRMK Ex 3.8)
         As_c_prov = out.rebar_compression.As_provided if out.rebar_compression else 0.0
-        out.Mn, out.a_stress_block, _fs_act = analyze_doubly_capacity(
+        out.Mn, out.a_stress_block, out.fs_prime_ksc, _fs_t, _t_yields = analyze_doubly_capacity(
             out.rebar.As_provided, As_c_prov, inp.b, out.d_actual, d_prime,
             inp.fc, inp.fy, out.beta1)
         out.phi_Mn = PHI_FLEXURE * out.Mn
-        out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
+        # ductility: เหล็กดึงต้องครากที่เหล็ก "จัดจริง" → φ=0.90 ถึงใช้ได้ (over-provision อาจทำเหล็กดึงไม่คราก · Codex P1 #27 r4)
+        out.passes_flexure = (out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL) and _t_yields
+        if not _t_yields:
+            out.notes.append(
+                f"🔴 เหล็กดึงไม่คราก (fs={_fs_t:.0f} < fy={inp.fy:.0f} ksc) ที่เหล็กจัดจริง — "
+                "หน้าตัด over-reinforced หลังเลือกเหล็ก · φ=0.90 ใช้ไม่ได้ (ไม่ ductile) · ต้องขยายหน้าตัด หรือ ลด/ปรับเหล็ก")
         if out.Mu_kg_cm > FLOAT_TOL:
             out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
 
