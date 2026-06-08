@@ -2361,21 +2361,28 @@
       svg.appendChild(svgEl('rect', { x: W / 2 - iw / 2, y: pad + si + 2, width: iw, height: bh - 2 * si - 4, fill: 'none', stroke: '#94A3B8', 'stroke-width': 1, rx: 3 }));
     }
     // bar counts + layers จาก engine จริง (detailBars · ปิด display cascade ถาวร · เลิก hardcode/recompute)
-    //   governing section: 'mid' = ช่ว ง +M เหล็กล่างมากสุด · 'left'/'right' = หัวเสา −M เหล็กบนมากสุด
-    //   (ตรง engine rec_top "เหล็กบนพาดผ่านทุกหัวเสาภายใน" + BBS/elevation ที่ใช้ maxSize · single-source)
+    //   ผูกกับ "ช่วงวิกฤต" (gIdx = เหล็กล่าง/+M มากสุด) แล้ว map ตำแหน่งจริง — ปิด Codex P2 asymmetric/cantilever:
+    //   'mid' = เหล็กล่างช่วงวิกฤต · 'left'/'right' = หัวเสาฝั่งซ้าย/ขวา "ของช่วงนั้น" (ตามตำแหน่งจริง · ซ้าย≠ขวา ·
+    //   node gIdx / gIdx+1) · 'sup' = หัวเสาวิกฤตรวม (−M มากสุดทุกเสา · สำหรับ overview 2 ช่อง)
+    //   เสาที่ engine ไม่มี −M (ปลายนอก/คานเดี่ยว) → nominal 2 (ไม่ overstate ฝั่ง non-governing)
     const bars = detailBars();
-    const gov = arr => (arr || []).reduce((best, x) => (x && x.n > (best ? best.n : -1)) ? x : best, null);  // เลือกหน้าตัดวิกฤต (max-n · กันกับดัก 0-เส้นเสาปลายนอก)
+    const argmaxN = arr => { let bi = -1, bn = -1; (arr || []).forEach((x, i) => { if (x && x.n > bn) { bn = x.n; bi = i; } }); return bi; };
+    const gIdx = bars ? Math.max(0, argmaxN(bars.spanBot)) : 0;   // ช่วง +M วิกฤต (เหล็กล่างมากสุด · ใช้ผูก mid + หัวเสาซ้าย/ขวา)
     let nTop = 2, nBot = 3, topLayers = 0, botLayers = (m && m.nLayers) || 0;   // fallback nominal เมื่อ engine ยังไม่ ready (bars=null)
     if (loc === 'mid') {
-      const b = bars && gov(bars.spanBot);
+      const b = bars && bars.spanBot[gIdx];
       nTop = 2;                                              // กลางช่วง: เหล็กบน = nominal hanger (engine ไม่คิด +M top)
       if (b && b.n) { nBot = b.n; botLayers = b.n_layers || 0; }
       else nBot = 3;
-    } else if (loc === 'left' || loc === 'right') {
-      const t = bars && gov(bars.supTop);
+    } else {   // 'left' / 'right' / 'sup' = หน้าตัดหัวเสา (−M)
       nBot = 2; botLayers = 0;                              // หัวเสา: เหล็กล่าง = เส้นหลักวิ่งผ่าน (nominal 2 มุม)
+      let t = null;
+      if (bars) {
+        if (loc === 'sup') t = (bars.supTop || []).reduce((best, x) => (x && x.n > (best ? best.n : -1)) ? x : best, null);   // governing support (overview)
+        else t = bars.supTop && bars.supTop[loc === 'left' ? gIdx : gIdx + 1];   // หัวเสาฝั่งจริงของช่วงวิกฤต (ตำแหน่ง · ซ้าย≠ขวา)
+      }
       if (t && t.n) { nTop = t.n; topLayers = t.n_layers || 0; }
-      else nTop = state.mode === 'cont' ? 2 : 2;            // ไม่มี −M (เสาปลายนอก/คานเดี่ยว) → nominal 2
+      else nTop = 2;                                        // เสาไม่มี −M → nominal 2 (ไม่ overstate)
     }
     // จำนวนชั้นจากความกว้างจริง (port สูตร engine: s_clear=max(db,2.5,1.33·d_agg) · cap 6 เส้น/ชั้น) → กันวาดเบียดแถวเดียว
     const _layers = (n, db_cm) => {
@@ -2414,7 +2421,7 @@
   function drawMainSections() {
     const host = $('#sectionMain'); if (!host) return; host.innerHTML = '';
     const items = state.mode === 'cont'
-      ? [['mid', 'กลางคาน (+M · เหล็กล่าง)', '0.25'], ['left', 'หัวเสา (−M · เหล็กบน)', '0.10']]
+      ? [['mid', 'กลางคาน (+M · เหล็กล่าง)', '0.25'], ['sup', 'หัวเสา (−M · เหล็กบน)', '0.10']]   // 'sup' = หัวเสาวิกฤตรวม (overview · Codex P2)
       : [['mid', 'กลางช่วง (+M · เหล็กล่าง)', '0.25'], ['left', 'ปลายคาน (เฉือน)', '0.10']];
     items.forEach(([loc, label, sp]) => {
       const wrap = document.createElement('div'); wrap.className = 'flex flex-col items-center';
@@ -5995,7 +6002,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
             gBot === 0 || secTxt.indexOf('ล่าง ' + gBot) !== -1,
             'engine ล่าง=' + gBot + ' · section="' + secTxt.replace(/\s+/g, ' ').slice(0, 40) + '"');
           if (mode === 'cont') {
-            const gTop = govN(eb.supTop);   // governing −M support top (โชว์ใน section 'left')
+            const gTop = govN(eb.supTop);   // governing −M support top (overview section 'sup')
             A(`${lbl}: หน้าตัด เหล็กบน count == engine (§A · governing)`,
               gTop === 0 || secTxt.indexOf('บน ' + gTop) !== -1,
               'engine บน=' + gTop + ' · section="' + secTxt.replace(/\s+/g, ' ').slice(0, 40) + '"');
@@ -6007,6 +6014,19 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       TT().setMode('cont'); TT().setSection(35, 65, 240, 'SD40');
       TT().setPoints([{ x: 2.5, P: 6000, kind: 'LL' }]);   // จุดโหลด → envelope จริง (บน-ล่าง exact)
       TT().recompute(); TT().setCtab('detail'); TT().drawDetailing();
+      // §A position guard: หน้าตัด 3 ช่อง หัวเสาซ้าย/ขวา = engine supTop ตำแหน่งจริงของช่วงวิกฤต (ไม่ใช่ governing รวม) — ปิด Codex P2 asymmetric/cantilever
+      const eb2 = TT().detailBars();
+      if (eb2 && eb2.supTop && eb2.spanBot) {
+        let gi = -1, gn = -1; eb2.spanBot.forEach((x, i) => { if (x && x.n > gn) { gn = x.n; gi = i; } }); gi = Math.max(0, gi);
+        const expTop = i => { const t = eb2.supTop[i]; return (t && t.n) ? t.n : 2; };   // เสาไม่มี −M → nominal 2
+        const capN = el => { const mm = ((el && el.textContent) || '').match(/บน\s*(\d+)/); return mm ? +mm[1] : null; };
+        const secs = [...document.querySelectorAll('#sectionsRow > div')];
+        const leftN = secs[0] ? capN(secs[0]) : null, rightN = secs[2] ? capN(secs[2]) : null;
+        A('§A หน้าตัด 3 ช่อง: หัวเสาซ้าย == engine supTop[gIdx] (position-accurate · Codex P2)',
+          leftN === null || leftN === expTop(gi), 'left บน=' + leftN + ' exp=' + expTop(gi));
+        A('§A หน้าตัด 3 ช่อง: หัวเสาขวา == engine supTop[gIdx+1] (position-accurate · Codex P2)',
+          rightN === null || rightN === expTop(gi + 1), 'right บน=' + rightN + ' exp=' + expTop(gi + 1));
+      }
       const warnEl = document.getElementById('ccCurtailWarn');
       A('curtailment A2b: cont+จุดโหลด → banner ซ่อน (applicable=true · บน-ล่าง exact · ไม่มี ⚠️)',
         !!(warnEl && (warnEl.classList.contains('step-hidden') || warnEl.textContent.trim().length === 0)),
