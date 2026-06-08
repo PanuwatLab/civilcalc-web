@@ -105,6 +105,23 @@ except Exception as e:
     chk_true("F returns result (no exception)", False, f"raised {type(e).__name__}")
 
 print("\n" + "=" * 60)
+print(" G · cantilever over-reinforced → NOT doubly (gated · Codex P1 #27)")
+print("=" * 60)
+# cantilever fixed-end −M: tension TOP / compression BOTTOM (สลับด้าน) → doubly ต้องไม่ทำงาน
+# Mu = Wu·L²/2 (cantilever) สูง → เกิน ρmax → ต้อง raise OverReinforcedError เหมือนเดิม (ไม่ใช่ is_doubly wrong-face)
+inpC = calc.BeamInput(b=20, h=35, L=4.0, fc=210, fy=4000, cover=3.0,
+                      db_assume=1.6, d_stirrup=0.9, DL=8.0, LL=8.0,
+                      support=calc.SupportType.CANTILEVER,
+                      load_combo=calc.LoadCombo.ACI_LEGACY)
+try:
+    outC = calc.design_beam(inpC)
+    chk_true("G cantilever over-reinforced NOT routed to doubly", not outC.is_doubly,
+             f"is_doubly={outC.is_doubly} passes={outC.passes}")
+except (calc.OverReinforcedError, calc.SectionTooSmallError) as e:
+    chk_true("G cantilever over-reinforced NOT routed to doubly", True,
+             f"raised {type(e).__name__} (เดิม · ถูกต้อง)")
+
+print("\n" + "=" * 60)
 n_pass, n_fail = len(PASS), len(FAIL)
 print(f" RESULT: {n_pass} PASS / {n_fail} FAIL  {'ALL GREEN' if not n_fail else 'SEE FAILURES'}")
 print("=" * 60)

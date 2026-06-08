@@ -1609,14 +1609,19 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                      if s["name"] == rb.main_bars[0][0]), inp.db_assume)
 
     # Step 5.5 · ตัดสิน singly vs doubly — กำลัง singly สูงสุดที่ ρmax (DRMK book p70)
-    #   Mu ≤ φMn1_max → singly (เดิม · zero-reg) · เกิน → doubly (เสริมเหล็กรับแรงอัด)
+    #   Mu ≤ φMn1_max → singly (เดิม · zero-reg) · เกิน + simply-supported → doubly (เสริมเหล็กรับแรงอัด)
+    #   ⚠️ doubly เฉพาะ SIMPLY_SUPPORTED — สมมติเหล็กดึงล่าง/เหล็กอัดบน · cantilever (fixed-end −M)
+    #   เหล็กดึงบน/อัดล่าง = สลับด้าน → ไม่รองรับใน scope นี้ → คงพฤติกรรมเดิม (raise OverReinforcedError) · Codex P1 #27
     _As1_max = out.rho_max * inp.b * out.d_assumed
     _phi_Mn1_max = PHI_FLEXURE * compute_Mn(
         _As1_max, inp.fy, out.d_assumed,
         compute_stress_block_depth(_As1_max, inp.fy, inp.fc, inp.b))
+    _use_doubly = (out.Mu_kg_cm > _phi_Mn1_max + FLOAT_TOL
+                   and inp.support == SupportType.SIMPLY_SUPPORTED)
 
-    if out.Mu_kg_cm <= _phi_Mn1_max + FLOAT_TOL:
+    if not _use_doubly:
         # ═══════════ SINGLY-REINFORCED (path เดิม · ไม่แตะ · zero-reg) ═══════════
+        #   non-simply-supported ที่เกิน ρmax → compute_rho_design/apply_rho_limits raise เหมือนเดิม
         # Step 6 · ρ_design (may raise SectionTooSmallError)
         out.rho_design = compute_rho_design(inp.fc, inp.fy, out.Rn)
 
