@@ -1691,51 +1691,43 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     else:
         # ═══════════ DOUBLY-REINFORCED (NEW · DRMK book p70 · เหล็กรับแรงอัด) ═══════════
         out.is_doubly = True
-        # ระยะถึง c.g. เหล็กอัด (บน) · เริ่มจาก db_assume แล้ว iterate จากเบอร์เหล็กอัดจริง (Codex P1 #27)
-        #   d′ = h − _rebar_d(...rebar_compression) = centroid จากผิวบน (multilayer-aware · mirror)
+        # fixed-point: req(d,d′) → เลือกเหล็ก → อัปเดต d,d′ เป็น geometry "เหล็กจริง" → วน จนชุดเหล็กนิ่ง (bar-set stable)
+        #   d′ = h − _rebar_d(rebar_compression) = centroid จากผิวบน (multilayer-aware · mirror · Codex P1 r1)
+        #   ที่จุดนิ่ง: dr คิดที่ d ของเหล็กจริง → As_prov/As′_prov ≥ req โดยสร้าง (req ตรง geometry · Codex P2 r6/r7)
         d_prime = inp.cover + inp.d_stirrup + inp.db_assume / 2.0
-        d_cur, dr = out.d_assumed, None
-        for _ in range(5):   # iterate d (เหล็กดึงหลายชั้น → d ลด) + d′ (เบอร์เหล็กอัดจริง · Codex P1)
+        d_cur, dr, rb, rbc, prev_key = out.d_assumed, None, None, None, None
+        for _ in range(12):
             dr = compute_doubly_reinforced(out.Mu_kg_cm, inp.b, d_cur, d_prime,
                                            inp.fc, inp.fy, out.beta1, out.rho_max)
             if dr is None:
                 break
-            # เหล็กดึง As — ข้าม over-reinforced filter (doubly เกิน singly ρmax โดยตั้งใจ) แต่คง multilayer (ส่ง h_cm)
-            rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h)
-            # เหล็กอัด As′ (บน) — ไม่ใส่ ρmax filter (เหล็กอัดไม่จำกัด ρ ดึง) · ใช้กำหนด d′ จริง
-            rbc = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h)
-            # เหล็กดึง "หรือ" เหล็กอัด fit ไม่ได้ → doubly ใช้ไม่ได้ · ต้อง fail (ไม่ใช่วิเคราะห์ As_c=0 = false-pass · Codex P1 #27 r3)
-            if rb is None or rbc is None:
-                out.rebar, out.rebar_compression, dr = None, None, None
+            rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h)         # multilayer · ข้าม ρmax filter (ตั้งใจ)
+            rbc = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h)   # เหล็กอัด · ไม่จำกัด ρ ดึง
+            if rb is None or rbc is None:                                               # fit ไม่ได้ → fail (Codex P1 r3)
+                dr = None
                 break
-            out.rebar, out.rebar_compression = rb, rbc
-            d_new = _rebar_d(inp.h, inp.cover, inp.d_stirrup, rb, _db_of(rb))
-            # d′ จากเบอร์เหล็กอัดจริง (Codex P1 #27 · เดิมแช่ db_assume → over-estimate φMn → false-pass)
-            d_prime_new = (inp.h - _rebar_d(inp.h, inp.cover, inp.d_stirrup, rbc, _db_of(rbc))) if rbc else d_prime
-            if abs(d_new - d_cur) < 0.05 and abs(d_prime_new - d_prime) < 0.05:
-                d_cur, d_prime = d_new, d_prime_new
+            key = (tuple(rb.main_bars), tuple(rbc.main_bars))
+            d_cur = _rebar_d(inp.h, inp.cover, inp.d_stirrup, rb, _db_of(rb))
+            d_prime = inp.h - _rebar_d(inp.h, inp.cover, inp.d_stirrup, rbc, _db_of(rbc))
+            if key == prev_key:               # ชุดเหล็กไม่เปลี่ยน → จุดนิ่ง
                 break
-            d_cur, d_prime = d_new, d_prime_new
-        if dr is None or out.rebar is None:
-            out.notes.append("🔴 หน้าตัดเล็กเกินแม้เสริมเหล็กคู่ (doubly) · ต้องขยายหน้าตัด (h/b) หรือ เพิ่ม f'c")
-            out.passes_flexure = False
-            out.passes = False
-            return out
-        # final pass: recompute + reselect ที่ geometry สุดท้าย (กัน dr/เหล็ก stale เมื่อ loop ออกโดยไม่ converge ·
-        #   bars ต้องอิง lever arm สุดท้าย ไม่ใช่ของรอบก่อน · Codex P2 #27 r6)
-        dr = compute_doubly_reinforced(out.Mu_kg_cm, inp.b, d_cur, d_prime,
-                                       inp.fc, inp.fy, out.beta1, out.rho_max)
-        rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h) if dr else None
-        rbc = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h) if dr else None
-        if dr is None or rb is None or rbc is None:
-            out.notes.append("🔴 หน้าตัดเล็กเกินแม้เสริมเหล็กคู่ (doubly) · ต้องขยายหน้าตัด (h/b) หรือ เพิ่ม f'c")
+            prev_key = key
+        # recompute requirement ที่ "geometry เหล็กจริง" (d_cur/d′ ของเหล็กชุดล่าสุด) · Codex P2 r6/r7
+        if dr is not None and rb is not None and rbc is not None:
+            dr = compute_doubly_reinforced(out.Mu_kg_cm, inp.b, d_cur, d_prime,
+                                           inp.fc, inp.fy, out.beta1, out.rho_max)
+        # consistency gate: เหล็กที่เลือก "พอ" กับ req ที่ geometry จริงไหม (As_prov ≥ As_req · As′_prov ≥ As′_req)
+        #   ผ่าน → reported req สอดคล้องเหล็กจริง (ไม่มี req>prov หลอกตา) · ไม่ผ่าน/ไม่ลู่เข้า → fail (conservative · Codex P2 r6/r7)
+        if (dr is None or rb is None or rbc is None
+                or rb.As_provided < dr["As"] - 0.05
+                or rbc.As_provided < dr["As_prime"] - 0.05):
+            out.notes.append("🔴 หน้าตัดเล็กเกิน/ไม่ลู่เข้าแม้เสริมเหล็กคู่ (doubly) · ต้องขยายหน้าตัด (h/b) หรือ เพิ่ม f'c")
             out.rebar, out.rebar_compression = None, None
             out.passes_flexure = False
             out.passes = False
             return out
         out.rebar, out.rebar_compression = rb, rbc
-        out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, rb, _db_of(rb))
-        d_prime = inp.h - _rebar_d(inp.h, inp.cover, inp.d_stirrup, rbc, _db_of(rbc))
+        out.d_actual = d_cur
         out.As1, out.As2 = dr["As1"], dr["As2"]
         out.As_required = dr["As"]
         out.As_prime_required = dr["As_prime"]

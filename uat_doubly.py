@@ -123,6 +123,29 @@ except (calc.OverReinforcedError, calc.SectionTooSmallError) as e:
              f"raised {type(e).__name__} (เดิม · ถูกต้อง)")
 
 print("\n" + "=" * 60)
+print(" L · invariant sweep — passing doubly ⟹ As_prov≥As_req AND As′_prov≥As′_req (Codex P2 #27 r7)")
+print("=" * 60)
+_bad = []
+for _b in (12, 14, 16, 20, 25, 30):
+    for _h in (30, 35, 40, 45, 55):
+        for _fc in (210, 240, 280):
+            for _fy in (2400, 4000, 5000):
+                for _DL in (8, 12, 20, 40):
+                    try:
+                        _o = calc.design_beam(calc.BeamInput(b=_b, h=_h, L=6.0, fc=_fc, fy=_fy,
+                            cover=3.0, db_assume=1.6, d_stirrup=0.9, DL=_DL, LL=0,
+                            load_combo=calc.LoadCombo.ACI_LEGACY))
+                        if _o.is_doubly and _o.passes:
+                            _asp = _o.rebar_compression.As_provided if _o.rebar_compression else 0
+                            _ast = _o.rebar.As_provided if _o.rebar else 0
+                            if _ast < _o.As_required - 0.05 or _asp < _o.As_prime_required - 0.05:
+                                _bad.append(f"b{_b}h{_h}fc{_fc}fy{_fy}DL{_DL}")
+                    except (calc.OverReinforcedError, calc.SectionTooSmallError):
+                        pass
+chk_true("L ทุก passing doubly ในสวีป มี prov ≥ req (consistent)", not _bad,
+         f"{len(_bad)} inconsistent: {_bad[:4]}")
+
+print("\n" + "=" * 60)
 print(" K · final-geometry recompute — non-converged iteration ไม่ false-fail (Codex P2 #27 r6)")
 print("=" * 60)
 # loop ออกโดยไม่ converge → ต้อง recompute ที่ geometry สุดท้าย (เดิม: bars stale → false-fail)
