@@ -248,6 +248,15 @@ class BeamOutput:
     As_required: float = 0.0        # cm²
     rebar: Optional[RebarSelection] = None
 
+    # doubly-reinforced (compression steel · เมื่อ singly เกิน ρmax · DRMK book p70)
+    is_doubly: bool = False                    # True → หน้าตัดเสริมเหล็กรับแรงอัด
+    As1: float = 0.0                           # tension steel จับคู่คอนกรีต (= ρmax·b·d · cm²)
+    As2: float = 0.0                           # tension steel เพิ่ม จับคู่เหล็กอัด (cm²)
+    As_prime_required: float = 0.0             # เหล็กรับแรงอัด (บน) ต้องการ (cm²)
+    fs_prime_ksc: float = 0.0                  # หน่วยแรงในเหล็กอัด (ksc · = fy ถ้าคราก)
+    comp_steel_yields: bool = False            # เหล็กอัดถึงจุดครากไหม
+    rebar_compression: Optional[RebarSelection] = None   # เหล็กรับแรงอัดที่เลือก
+
     # verification
     a_stress_block: float = 0.0     # cm
     Mn: float = 0.0                 # nominal moment (kg·cm)
@@ -268,6 +277,8 @@ class BeamOutput:
         d["input"] = self.input.to_dict()
         if self.rebar:
             d["rebar"] = asdict(self.rebar)
+        if self.rebar_compression:
+            d["rebar_compression"] = asdict(self.rebar_compression)
         return d
 
 
@@ -1334,6 +1345,76 @@ def compute_Mn(As: float, fy: float, d: float, a: float) -> float:
     return As * fy * (d - a / 2.0)
 
 
+# εcu·Es = 0.003 × 2,040,000 ≈ 6,120 ksc · หน่วยแรงสูงสุดในเหล็กตามความเครียด (DRMK p65-70)
+_EPS_CU_ES_KSC: float = 6120.0
+
+
+def compute_doubly_reinforced(
+    Mu_kg_cm: float, b: float, d: float, d_prime: float,
+    fc: float, fy: float, beta1: float, rho_max: float,
+    phi: float = PHI_FLEXURE,
+) -> Optional[dict]:
+    """ออกแบบหน้าตัดเสริมเหล็กคู่ (doubly-reinforced) เมื่อ singly เกิน ρmax.
+
+    DRMK SDM 3 Bending · book p70 · ตัวอย่าง 3.10 (verified · uat_doubly).
+    หน่วย: Mu_kg_cm = kg·cm · b/d/d_prime = cm · fc/fy = ksc · As = cm².
+    คืน dict {As1, As2, As, As_prime, fs_prime, yields, a, c, Mn1, Mn2, Mn} หรือ
+    None ถ้า doubly ช่วยไม่ได้ (c ≤ d′ → เหล็กอัดอยู่นอกโซนอัด · ต้องขยายหน้าตัด).
+    ductility: (ρ − ρ′·fs′/fy) = ρmax โดยอัตโนมัติ → เหล็กดึงครากเสมอ (DRMK Eq 3.36).
+    """
+    # couple-1: คอนกรีต ↔ เหล็กดึง As1 (ที่ ρmax)
+    As1 = rho_max * b * d
+    a = compute_stress_block_depth(As1, fy, fc, b)      # As1·fy/(0.85 fc b)
+    c = a / beta1
+    if c <= d_prime + FLOAT_TOL:
+        return None     # เหล็กอัดอยู่ที่/ใต้แกนสะเทิน → ใช้ไม่ได้ · ต้องขยายหน้าตัด
+    Mn1 = compute_Mn(As1, fy, d, a)                     # As1·fy·(d − a/2)
+    Mn2 = (Mu_kg_cm / phi) - Mn1
+    if Mn2 <= FLOAT_TOL:
+        return None     # singly พอแล้ว (caller ควรไม่เรียกถึงตรงนี้)
+    # couple-2: เหล็กอัด As′ ↔ เหล็กดึงเพิ่ม As2 (ระยะแขน d − d′)
+    As2 = Mn2 / (fy * (d - d_prime))
+    fs_prime = _EPS_CU_ES_KSC * (1.0 - d_prime / c)     # หน่วยแรงเหล็กอัดตามความเครียด
+    yields = fs_prime >= fy - FLOAT_TOL
+    if yields:
+        fs_prime = fy
+    if fs_prime <= FLOAT_TOL:
+        return None
+    As_prime = As2 * fy / fs_prime                       # As′·fs′ = As2·fy
+    return {
+        "As1": As1, "As2": As2, "As": As1 + As2, "As_prime": As_prime,
+        "a": a, "c": c, "Mn1": Mn1, "Mn2": Mn2,
+        "Mn": Mn1 + As2 * fy * (d - d_prime),
+        "fs_prime": fs_prime, "yields": yields,
+    }
+
+
+def analyze_doubly_capacity(
+    As_t: float, As_c: float, b: float, d: float, d_prime: float,
+    fc: float, fy: float, beta1: float,
+) -> tuple:
+    """วิเคราะห์กำลังโมเมนต์หน้าตัดเสริมเหล็กคู่จาก "เหล็กที่จัดจริง" (As_t ดึง · As_c อัด).
+    DRMK ตัวอย่าง 3.8 method. ใช้ verify φMn ≥ Mu หลังเลือกเหล็ก. คืน (Mn_kg_cm, a_cm, fs_prime_ksc).
+
+    สมดุลแรง: 0.85·fc·b·a + As_c·fs′ = As_t·fy · เช็คเหล็กอัดคราก (fs′ = min(fy, 6120(1−d′/c)))
+    · iterate หา a · Mn = 0.85fc·b·a·(d − a/2) + As_c·fs′·(d − d′).
+    """
+    fs_prime = fy
+    a = (As_t * fy - As_c * fs_prime) / (0.85 * fc * b)
+    for _ in range(8):
+        a = max(a, 1e-6)
+        c = a / beta1
+        fs_new = min(fy, _EPS_CU_ES_KSC * (1.0 - d_prime / c)) if c > d_prime else 0.0
+        a_new = (As_t * fy - As_c * fs_new) / (0.85 * fc * b)
+        if abs(a_new - a) < 1e-4 and abs(fs_new - fs_prime) < 1e-2:
+            a, fs_prime = a_new, fs_new
+            break
+        a, fs_prime = a_new, fs_new
+    a = max(a, 1e-6)
+    Mn = 0.85 * fc * b * a * (d - a / 2.0) + As_c * fs_prime * (d - d_prime)
+    return Mn, a, fs_prime
+
+
 # ----------------------------------------------------------------------------
 # Rebar selection
 # ----------------------------------------------------------------------------
@@ -1520,71 +1601,131 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     # Step 5 · Rn
     out.Rn = compute_Rn(out.Mu_kg_cm, inp.b, out.d_assumed, PHI_FLEXURE)
 
-    # Step 6 · ρ_design (may raise SectionTooSmallError)
-    out.rho_design = compute_rho_design(inp.fc, inp.fy, out.Rn)
-
-    # Step 7 · limit check (may raise OverReinforcedError)
-    out.rho_final, limit_notes = apply_rho_limits(out.rho_design, out.rho_min, out.rho_max)
-    out.notes.extend(limit_notes)
-
-    # Step 8 · As_req
-    out.As_required = compute_As(out.rho_final, inp.b, out.d_assumed)
-
-    # Step 9 · rebar selection
-    out.rebar = select_rebar(
-        out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max
-    )
-    if out.rebar is None:
-        out.notes.append("ไม่พบ rebar combo ที่ fit ในหน้าตัดนี้ · ต้องขยาย b หรือ ใช้ multi-layer (เกิน MVP)")
-        out.passes = False
-        return out
-
-    # Step 10 · d_actual after rebar selection (multilayer-aware · c.g. หลายชั้น)
+    # rebar-table helper (ใช้ทั้ง singly + doubly path)
     rebar_table = _load_rebar_table()
 
     def _db_of(rb):
         return next((s["diameter_cm"] for s in rebar_table["sizes"]
                      if s["name"] == rb.main_bars[0][0]), inp.db_assume)
 
-    out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
-    # multilayer (nl≥2) → c.g. ลึกขึ้น → d เล็กลง → recompute As ที่ d จริง · bounded · honest
-    #   single-layer (nl=1) → d_actual = baseline เดิมเป๊ะ (h−cover−stir−db/2) · ไม่ iterate (zero-reg)
-    for _ in range(3):
-        if out.rebar.n_layers < 2 or out.d_actual >= out.d_assumed - 0.01:
-            break
-        try:
-            Rn2 = compute_Rn(out.Mu_kg_cm, inp.b, out.d_actual, PHI_FLEXURE)
-            rho2 = compute_rho_design(inp.fc, inp.fy, Rn2)
-            rf2, _n2 = apply_rho_limits(rho2, out.rho_min, out.rho_max)
-        except CivilCalcError:
-            break   # ที่ d จริงหน้าตัดไม่พอ → หยุด · ρ_provided check ด้านล่างจะจับ over-reinforced (Codex P1 #26)
-        As2 = compute_As(rf2, inp.b, out.d_actual)
-        rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max)
-        if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
-            break   # ไม่มี combo ดีกว่า → หยุด (รับผลปัจจุบัน)
-        out.rebar, out.As_required, out.rho_final, out.Rn, out.rho_design = rb2, As2, rf2, Rn2, rho2
-        d_prev = out.d_actual
-        out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
-        if abs(out.d_actual - d_prev) < 0.01:
-            break
+    # Step 5.5 · ตัดสิน singly vs doubly — กำลัง singly สูงสุดที่ ρmax (DRMK book p70)
+    #   Mu ≤ φMn1_max → singly (เดิม · zero-reg) · เกิน → doubly (เสริมเหล็กรับแรงอัด)
+    _As1_max = out.rho_max * inp.b * out.d_assumed
+    _phi_Mn1_max = PHI_FLEXURE * compute_Mn(
+        _As1_max, inp.fy, out.d_assumed,
+        compute_stress_block_depth(_As1_max, inp.fy, inp.fc, inp.b))
 
-    # Step 11 · final check (flexure)
-    out.a_stress_block = compute_stress_block_depth(
-        out.rebar.As_provided, inp.fy, inp.fc, inp.b
-    )
-    out.Mn = compute_Mn(out.rebar.As_provided, inp.fy, out.d_actual, out.a_stress_block)
-    out.phi_Mn = PHI_FLEXURE * out.Mn
-    out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
-    if out.Mu_kg_cm > FLOAT_TOL:
-        out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
-    # ρ ที่ใช้จริง (As_provided) ที่ความลึกจริง ต้อง ≤ ρmax (singly-reinforced) — กัน over-reinforced
-    #   ที่ multilayer ทำให้ d เล็กลง (ครอบทุก path · แม้ recompute ไม่ raise · Codex P1 #26 round-2/3)
-    if out.rebar and out.d_actual > 0:
-        rho_prov = out.rebar.As_provided / (inp.b * out.d_actual)
-        if rho_prov > out.rho_max + 1e-9:
+    if out.Mu_kg_cm <= _phi_Mn1_max + FLOAT_TOL:
+        # ═══════════ SINGLY-REINFORCED (path เดิม · ไม่แตะ · zero-reg) ═══════════
+        # Step 6 · ρ_design (may raise SectionTooSmallError)
+        out.rho_design = compute_rho_design(inp.fc, inp.fy, out.Rn)
+
+        # Step 7 · limit check (may raise OverReinforcedError)
+        out.rho_final, limit_notes = apply_rho_limits(out.rho_design, out.rho_min, out.rho_max)
+        out.notes.extend(limit_notes)
+
+        # Step 8 · As_req
+        out.As_required = compute_As(out.rho_final, inp.b, out.d_assumed)
+
+        # Step 9 · rebar selection
+        out.rebar = select_rebar(
+            out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max
+        )
+        if out.rebar is None:
+            out.notes.append("ไม่พบ rebar combo ที่ fit ในหน้าตัดนี้ · ต้องขยาย b หรือ ใช้ multi-layer (เกิน MVP)")
+            out.passes = False
+            return out
+
+        # Step 10 · d_actual after rebar selection (multilayer-aware · c.g. หลายชั้น)
+        out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
+        # multilayer (nl≥2) → c.g. ลึกขึ้น → d เล็กลง → recompute As ที่ d จริง · bounded · honest
+        #   single-layer (nl=1) → d_actual = baseline เดิมเป๊ะ (h−cover−stir−db/2) · ไม่ iterate (zero-reg)
+        for _ in range(3):
+            if out.rebar.n_layers < 2 or out.d_actual >= out.d_assumed - 0.01:
+                break
+            try:
+                Rn2 = compute_Rn(out.Mu_kg_cm, inp.b, out.d_actual, PHI_FLEXURE)
+                rho2 = compute_rho_design(inp.fc, inp.fy, Rn2)
+                rf2, _n2 = apply_rho_limits(rho2, out.rho_min, out.rho_max)
+            except CivilCalcError:
+                break   # ที่ d จริงหน้าตัดไม่พอ → หยุด · ρ_provided check ด้านล่างจะจับ over-reinforced (Codex P1 #26)
+            As2 = compute_As(rf2, inp.b, out.d_actual)
+            rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max)
+            if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
+                break   # ไม่มี combo ดีกว่า → หยุด (รับผลปัจจุบัน)
+            out.rebar, out.As_required, out.rho_final, out.Rn, out.rho_design = rb2, As2, rf2, Rn2, rho2
+            d_prev = out.d_actual
+            out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
+            if abs(out.d_actual - d_prev) < 0.01:
+                break
+
+        # Step 11 · final check (flexure)
+        out.a_stress_block = compute_stress_block_depth(
+            out.rebar.As_provided, inp.fy, inp.fc, inp.b
+        )
+        out.Mn = compute_Mn(out.rebar.As_provided, inp.fy, out.d_actual, out.a_stress_block)
+        out.phi_Mn = PHI_FLEXURE * out.Mn
+        out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
+        if out.Mu_kg_cm > FLOAT_TOL:
+            out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
+        # ρ ที่ใช้จริง (As_provided) ที่ความลึกจริง ต้อง ≤ ρmax (singly-reinforced) — กัน over-reinforced
+        #   ที่ multilayer ทำให้ d เล็กลง (ครอบทุก path · แม้ recompute ไม่ raise · Codex P1 #26 round-2/3)
+        if out.rebar and out.d_actual > 0:
+            rho_prov = out.rebar.As_provided / (inp.b * out.d_actual)
+            if rho_prov > out.rho_max + 1e-9:
+                out.passes_flexure = False
+                out.notes.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({out.rho_max:.4f}) ที่ความลึกจริง d={out.d_actual:.2f} ซม. "
+                                 "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
+    else:
+        # ═══════════ DOUBLY-REINFORCED (NEW · DRMK book p70 · เหล็กรับแรงอัด) ═══════════
+        out.is_doubly = True
+        d_prime = inp.cover + inp.d_stirrup + inp.db_assume / 2.0   # ระยะถึง c.g. เหล็กอัด (บน)
+        d_cur, dr = out.d_assumed, None
+        for _ in range(4):   # iterate d (เหล็กดึง doubly มาก → มักหลายชั้น → d ลด → recompute)
+            dr = compute_doubly_reinforced(out.Mu_kg_cm, inp.b, d_cur, d_prime,
+                                           inp.fc, inp.fy, out.beta1, out.rho_max)
+            if dr is None:
+                break
+            # เหล็กดึง As — ข้าม over-reinforced filter (doubly เกิน singly ρmax โดยตั้งใจ) แต่คง multilayer (ส่ง h_cm)
+            rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h)
+            if rb is None:
+                dr = None
+                break
+            out.rebar = rb
+            d_new = _rebar_d(inp.h, inp.cover, inp.d_stirrup, rb, _db_of(rb))
+            if abs(d_new - d_cur) < 0.05:
+                d_cur = d_new
+                break
+            d_cur = d_new
+        if dr is None or out.rebar is None:
+            out.notes.append("🔴 หน้าตัดเล็กเกินแม้เสริมเหล็กคู่ (doubly) · ต้องขยายหน้าตัด (h/b) หรือ เพิ่ม f'c")
             out.passes_flexure = False
-            out.notes.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({out.rho_max:.4f}) ที่ความลึกจริง d={out.d_actual:.2f} ซม. "
-                             "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
+            out.passes = False
+            return out
+        out.d_actual = d_cur
+        # เหล็กอัด As′ (บน) — ไม่ใส่ ρmax filter (เหล็กอัดไม่จำกัด ρ ดึง)
+        out.rebar_compression = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h)
+        out.As1, out.As2 = dr["As1"], dr["As2"]
+        out.As_required = dr["As"]
+        out.As_prime_required = dr["As_prime"]
+        out.fs_prime_ksc = dr["fs_prime"]
+        out.comp_steel_yields = dr["yields"]
+        out.rho_final = (out.rebar.As_provided / (inp.b * out.d_actual)) if out.d_actual > 0 else 0.0
+        out.rho_design = out.rho_final
+        _yld = "คราก" if dr["yields"] else f"ไม่คราก (fs′={dr['fs_prime']:.0f} ksc)"
+        out.notes.append(
+            f"หน้าตัดเสริมเหล็กคู่ (doubly · Mu เกินกำลัง singly ที่ ρmax): เหล็กดึง As={dr['As']:.2f} ซม.² "
+            f"(As1={dr['As1']:.2f}+As2={dr['As2']:.2f}) · เหล็กอัดบน As′={dr['As_prime']:.2f} ซม.² ({_yld}) "
+            f"· d′={d_prime:.1f} ซม. · DRMK book p70 · ควรขยายหน้าตัดก่อนถ้าทำได้")
+        # Step 11 (doubly) · verify φMn จากเหล็กที่จัดจริง (As ดึง + As′ อัด · DRMK Ex 3.8 analysis)
+        As_c_prov = out.rebar_compression.As_provided if out.rebar_compression else 0.0
+        out.Mn, out.a_stress_block, _fs_act = analyze_doubly_capacity(
+            out.rebar.As_provided, As_c_prov, inp.b, out.d_actual, d_prime,
+            inp.fc, inp.fy, out.beta1)
+        out.phi_Mn = PHI_FLEXURE * out.Mn
+        out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
+        if out.Mu_kg_cm > FLOAT_TOL:
+            out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
 
     # Step 11.5 · Session 2 · Shear stirrup design (only for simply-supported · Session 2 scope)
     if inp.support == SupportType.SIMPLY_SUPPORTED:
