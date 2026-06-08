@@ -1725,23 +1725,23 @@ def design_beam(inp: BeamInput) -> BeamOutput:
         out.As1, out.As2 = dr["As1"], dr["As2"]
         out.As_required = dr["As"]
         out.As_prime_required = dr["As_prime"]
-        out.fs_prime_ksc = dr["fs_prime"]
-        out.comp_steel_yields = dr["yields"]
         out.rho_final = (out.rebar.As_provided / (inp.b * out.d_actual)) if out.d_actual > 0 else 0.0
         out.rho_design = out.rho_final
-        _yld = "คราก" if dr["yields"] else f"ไม่คราก (fs′={dr['fs_prime']:.0f} ksc)"
-        out.notes.append(
-            f"หน้าตัดเสริมเหล็กคู่ (doubly · Mu เกินกำลัง singly ที่ ρmax): เหล็กดึง As={dr['As']:.2f} ซม.² "
-            f"(As1={dr['As1']:.2f}+As2={dr['As2']:.2f}) · เหล็กอัดบน As′={dr['As_prime']:.2f} ซม.² ({_yld}) "
-            f"· d′={d_prime:.1f} ซม. · DRMK book p70 · ควรขยายหน้าตัดก่อนถ้าทำได้")
         # Step 11 (doubly) · verify φMn จากเหล็กที่จัดจริง (strain compatibility เต็ม · DRMK Ex 3.8)
         As_c_prov = out.rebar_compression.As_provided if out.rebar_compression else 0.0
         out.Mn, out.a_stress_block, out.fs_prime_ksc, _fs_t, _t_yields = analyze_doubly_capacity(
             out.rebar.As_provided, As_c_prov, inp.b, out.d_actual, d_prime,
             inp.fc, inp.fy, out.beta1)
+        # flag เหล็กอัดคราก/ไม่คราก จากผล "วิเคราะห์เหล็กจัดจริง" (ไม่ใช่ design dr · Codex P2 #27 r5)
+        out.comp_steel_yields = out.fs_prime_ksc >= inp.fy - 1.0
         out.phi_Mn = PHI_FLEXURE * out.Mn
         # ductility: เหล็กดึงต้องครากที่เหล็ก "จัดจริง" → φ=0.90 ถึงใช้ได้ (over-provision อาจทำเหล็กดึงไม่คราก · Codex P1 #27 r4)
         out.passes_flexure = (out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL) and _t_yields
+        _yld = "คราก" if out.comp_steel_yields else f"ไม่คราก (fs′={out.fs_prime_ksc:.0f} ksc)"
+        out.notes.append(
+            f"หน้าตัดเสริมเหล็กคู่ (doubly · Mu เกินกำลัง singly ที่ ρmax): เหล็กดึง As={dr['As']:.2f} ซม.² "
+            f"(As1={dr['As1']:.2f}+As2={dr['As2']:.2f}) · เหล็กอัดบน As′={dr['As_prime']:.2f} ซม.² ({_yld}) "
+            f"· d′={d_prime:.1f} ซม. · DRMK book p70 · ควรขยายหน้าตัดก่อนถ้าทำได้")
         if not _t_yields:
             out.notes.append(
                 f"🔴 เหล็กดึงไม่คราก (fs={_fs_t:.0f} < fy={inp.fy:.0f} ksc) ที่เหล็กจัดจริง — "

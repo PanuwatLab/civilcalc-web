@@ -123,6 +123,23 @@ except (calc.OverReinforcedError, calc.SectionTooSmallError) as e:
              f"raised {type(e).__name__} (เดิม · ถูกต้อง)")
 
 print("\n" + "=" * 60)
+print(" J · comp_steel_yields flag consistent with analyzed fs′ (Codex P2 #27 r5)")
+print("=" * 60)
+inpJ = calc.BeamInput(b=12, h=35, L=3.0, fc=210, fy=2400, cover=3.0,
+                      db_assume=1.6, d_stirrup=0.9, DL=40.0, LL=0.0,
+                      load_combo=calc.LoadCombo.ACI_LEGACY)
+try:
+    outJ = calc.design_beam(inpJ)
+    if outJ.is_doubly:
+        chk_true("J comp_steel_yields == (fs′ ≥ fy) จากผลวิเคราะห์",
+                 outJ.comp_steel_yields == (outJ.fs_prime_ksc >= inpJ.fy - 1.0),
+                 f"flag={outJ.comp_steel_yields} fs′={outJ.fs_prime_ksc:.0f} fy={inpJ.fy}")
+    else:
+        chk_true("J comp_steel_yields == (fs′ ≥ fy) จากผลวิเคราะห์", True, "not doubly")
+except (calc.OverReinforcedError, calc.SectionTooSmallError):
+    chk_true("J comp_steel_yields == (fs′ ≥ fy) จากผลวิเคราะห์", True, "raised (acceptable)")
+
+print("\n" + "=" * 60)
 print(" I · ductility on provided bars — over-provided compression → tension not yield → fail (Codex P1 #27 r4)")
 print("=" * 60)
 # Codex case: compression over-provided มาก → เหล็กดึงไม่คราก (strain compat) → φ=0.9 ใช้ไม่ได้ → ต้อง fail
