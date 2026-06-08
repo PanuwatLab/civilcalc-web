@@ -33,6 +33,10 @@ EPS_TENSION_LIMIT: float = 0.005   # ACI 318-08 strain-based limit (not used in 
 
 PHI_FLEXURE: float = 0.90          # Strength reduction factor for flexure (Thai compliance default)
 PHI_SHEAR: float = 0.85            # Strength reduction factor for shear (ว.ส.ท. compliant)
+MAX_AGGREGATE_CM: float = 2.0      # ขนาดมวลรวมหยาบโตสุด (default ~3/4"-1") · clear spacing ≥ 1.33·d_agg (ACI 25.2 · DRMK รูป1.13)
+MAX_REBAR_LAYERS: int = 3          # cap จำนวนชั้นเหล็กนอน (เกินนี้ → แนะขยายหน้าตัด)
+PRACTICAL_MAX_PER_LAYER: int = 6   # เส้น/ชั้น เชิงปฏิบัติ (industry norm · กันเหล็กจิ๋วหลายเส้นเบียดแถวเดียว · เกิน→ขึ้นชั้น)
+REBAR_LAYER_VCLEAR_CM: float = 2.5 # ระยะห่างแนวดิ่งระหว่างชั้นเหล็ก (clear · ACI 25.2.2)
 
 # Unit conversion · Thai engineering uses ตัน (tonf) / กก. (kgf) / ksc · NOT kN/SI
 # 1 kN = 101.97 kgf = 0.10197 tonf  (matches kNm_to_kgcm = 10197 kg·cm/kN·m · g=9.80665)
@@ -199,6 +203,7 @@ class RebarSelection:
     As_provided: float = 0.0                                          # cm²
     spacing_min_clear: float = 0.0                                    # cm (min clear spacing)
     fits_in_one_layer: bool = True
+    n_layers: int = 1                                                 # จำนวนชั้นเหล็ก (1 ปกติ · ≥2 เมื่อกว้างไม่พอ · multi-layer)
     notes: list[str] = field(default_factory=list)
 
 
@@ -371,8 +376,60 @@ def validate_input(inp: BeamInput) -> list[str]:
 
 
 def compute_effective_depth(h: float, cover: float, d_stirrup: float, db: float) -> float:
-    """d = h − cover − d_stirrup − db/2 (single layer assumption · MVP)"""
+    """d = h − cover − d_stirrup − db/2 (single layer · c.g. ของเหล็กชั้นเดียว)"""
     return h - cover - d_stirrup - db / 2.0
+
+
+def min_clear_spacing(db_cm: float) -> float:
+    """ระยะช่องว่างน้อยสุดระหว่างเหล็กนอน = max(db, 2.5 ซม., 1.33·มวลรวมโตสุด)
+    (ACI 25.2 · DRMK รูป 1.13 · [[Formula - Rebar Clear Spacing & Multi-Layer Arrangement]])"""
+    return max(db_cm, 2.5, 1.33 * MAX_AGGREGATE_CM)
+
+
+def max_bars_per_layer(available_cm: float, db_cm: float) -> int:
+    """จำนวนเหล็กสูงสุดต่อ 1 ชั้น เมื่อช่องในระหว่างปลอก = available_cm.
+    n·db + (n−1)·s ≤ available → n ≤ (available+s)/(db+s).
+    คืน **0** ถ้า available < db (เหล็กเส้นเดียวยังไม่ลอด → caller ต้องขยายหน้าตัด · Codex P1) ·
+    ไม่ floor เป็น 1 มิฉะนั้นยอมรับ layout ที่เหล็กไม่ลอดจริง. (verified vs DRMK ตาราง 3.3)"""
+    if available_cm < db_cm - 1e-9:        # แม้แต่ 1 เส้นยังไม่ลอด
+        return 0
+    s = min_clear_spacing(db_cm)
+    return max(1, int((available_cm + s) / (db_cm + s) + 1e-9))
+
+
+def _layer_counts(n_bars: int, n_layers: int) -> list:
+    """แจกแจงเหล็ก n เส้นลง n_layers ชั้น — ชั้นที่อยู่ห่างแกนสะเทินสุด (tension-most · index 0)
+    ได้จำนวนมากก่อน (≥ ชั้นถัดไป) → c.g. ใกล้ผิวรับแรงดึง = d มากสุดเท่าที่จัดได้ (conservative-friendly)."""
+    if n_layers <= 1:
+        return [n_bars]
+    base, rem = divmod(n_bars, n_layers)
+    return [base + 1] * rem + [base] * (n_layers - rem)
+
+
+def effective_depth_multilayer(h: float, cover: float, d_stirrup: float, db: float,
+                               n_bars: int, n_layers: int,
+                               s_vert: float = None) -> float:
+    """d = h − c.g. ของกลุ่มเหล็กหลายชั้น (วัดจากผิวรับแรงดึง).
+    ชั้น i ศูนย์กลางห่างผิวรับแรงดึง = cover + d_stirrup + db/2 + i·(db + s_vert).
+    n_layers==1 → เท่ากับ compute_effective_depth เดิม. รับประกัน d(multi) ≤ d(single)."""
+    if n_layers <= 1 or n_bars <= 0:
+        return compute_effective_depth(h, cover, d_stirrup, db)
+    if s_vert is None:
+        s_vert = REBAR_LAYER_VCLEAR_CM
+    counts = _layer_counts(n_bars, n_layers)
+    y0 = cover + d_stirrup + db / 2.0                 # ศูนย์กลางชั้นแรก (ห่างผิวรับแรงดึง)
+    pitch = db + s_vert                               # ระยะศูนย์กลาง-ศูนย์กลางระหว่างชั้น
+    cg = sum(c * (y0 + i * pitch) for i, c in enumerate(counts)) / float(n_bars)
+    return h - cg
+
+
+def _rebar_d(h: float, cover: float, d_stirrup: float, rebar, db_cm: float) -> float:
+    """d ของกลุ่มเหล็ก (multilayer-aware) จาก RebarSelection · single layer → เท่าสูตรเดิม."""
+    if not rebar or not rebar.main_bars:
+        return compute_effective_depth(h, cover, d_stirrup, db_cm)
+    n_bars = sum(c for _, c in rebar.main_bars)
+    return effective_depth_multilayer(h, cover, d_stirrup, db_cm, n_bars,
+                                      getattr(rebar, "n_layers", 1))
 
 
 def compute_beta1(fc: float) -> float:
@@ -1294,17 +1351,23 @@ def select_rebar(
     b: float,
     cover: float,
     d_stirrup: float,
-    max_bars_per_layer: int = 6,
+    h_cm: float = None,
+    rho_max: float = None,
 ) -> Optional[RebarSelection]:
     """Pick a practical rebar combination satisfying As_provided ≥ As_required.
 
-    Strategy: try uniform-size combos first (3-DB16 · 4-DB16 · ...) then 2-size mixes.
-    Constraint: bars must fit within b with min clear spacing.
+    Strategy: single-size combos first, then 2-size mixes.
+    Clear spacing = max(db, 2.5, 1.33·d_agg) (รวมมวลรวม · กัน honeycomb). ถ้าชั้นเดียวกว้างไม่พอ →
+    จัด multi-layer (≤ MAX_REBAR_LAYERS). Tie-break: **ชั้นน้อยกว่าชนะ** (single-layer ถ้า fit เสมอ) แล้ว As น้อยสุด.
 
-    Returns RebarSelection or None if no realistic combo found (caller should enlarge section).
+    ถ้าให้ h_cm + rho_max → **กรอง candidate ที่ over-reinforced** (ρ_provided=As/(b·d) ที่ความลึกจริง
+    ของ combo นั้น > rho_max) ออก → กัน false-failure ที่เลือก combo ชั้นน้อยแต่ over-reinforced
+    ทั้งที่ combo ชั้นมากกว่า (As น้อยกว่า) ผ่านได้ (Codex P2 #26). ไม่ให้ → ไม่กรอง (backward-compat).
+
+    Returns RebarSelection (มี n_layers) หรือ None ถ้าเกิน MAX_REBAR_LAYERS / over-reinforced ทุก combo.
     """
     table = _load_rebar_table()
-    sizes = table["sizes"]  # list of {"name": "DB16", "diameter_cm": 1.6, "area_cm2": 2.011}
+    sizes = table["sizes"]
 
     available = b - 2 * cover - 2 * d_stirrup
     if available <= 0:
@@ -1312,35 +1375,62 @@ def select_rebar(
 
     best: Optional[RebarSelection] = None
 
-    # 1) Try single-size combos (cheaper · cleaner)
+    def _over_reinforced(c: RebarSelection) -> bool:
+        # ρ_provided ที่ความลึกจริงของ combo นี้ > rho_max ? (ใช้ db ใหญ่สุด · n_layers ของ combo)
+        if not (h_cm and rho_max):
+            return False
+        nb = sum(n for _, n in c.main_bars)
+        mdb = max((int("".join(ch for ch in nm if ch.isdigit()) or 0) for nm, _ in c.main_bars), default=16) / 10.0
+        d = effective_depth_multilayer(h_cm, cover, d_stirrup, mdb, nb, c.n_layers)
+        return d <= 0 or (c.As_provided / (b * d)) > rho_max + 1e-9
+
+    def _key(c: RebarSelection):
+        # prefer (1) ชั้นน้อย → single ชนะ multi เสมอ
+        # (2) MULTILAYER: db เล็กกว่าก่อน (db เล็ก → c.g. ตื้น → d ใหญ่ → กำลังมากกว่าที่ As ใกล้กัน · Codex P2 false-failure)
+        #     single-layer: slot=0 (db ไม่กระทบ d มาก → ใช้ As เป็นหลัก = baseline เดิม)
+        # (3) over-provision น้อย (4) จำนวนเส้นน้อย (กัน 8-เส้นจิ๋วชนะ 2-เส้นปกติ)
+        maxdb = max((int("".join(ch for ch in nm if ch.isdigit()) or 0) for nm, _ in c.main_bars), default=0)
+        db_pref = maxdb if c.n_layers >= 2 else 0
+        return (c.n_layers, db_pref, round(c.As_provided, 4), sum(n for _, n in c.main_bars))
+
+    def _consider(combo: RebarSelection):
+        nonlocal best
+        if _over_reinforced(combo):     # ข้าม combo ที่ over-reinforced ที่ความลึกจริง (Codex P2 #26 · กัน false-failure)
+            return
+        if best is None or _key(combo) < _key(best):
+            best = combo
+
+    # 1) single-size combos
     for size in sizes:
         db = size["diameter_cm"]
         area_per_bar = size["area_cm2"]
-        # min clear spacing = max(db, 2.5 cm)
-        min_clear = max(db, 2.5)
-        for n in range(2, max_bars_per_layer + 1):
+        mc = min_clear_spacing(db)
+        per = min(max_bars_per_layer(available, db), PRACTICAL_MAX_PER_LAYER)   # เส้น/ชั้น · cap practical 6
+        if per < 1:                                     # เหล็กเส้นนี้ไม่ลอดความกว้าง → ข้าม (Codex P1)
+            continue
+        n_cap = MAX_REBAR_LAYERS * per
+        for n in range(2, n_cap + 1):
             if n * area_per_bar < As_required:
                 continue
-            # check fit: n bars + (n-1) clear spacing + n*db ≤ available
-            required_width = n * db + (n - 1) * min_clear
-            if required_width > available:
+            n_layers = -(-n // per)                     # ceil(n/per)
+            if n_layers > MAX_REBAR_LAYERS:
                 continue
-            # accept
-            combo = RebarSelection(
-                main_bars=[(size["name"], n)],
-                As_provided=n * area_per_bar,
-                spacing_min_clear=min_clear,
-                fits_in_one_layer=True,
-            )
-            # prefer combo closest to As_required (minimize over-provision)
-            if best is None or combo.As_provided < best.As_provided:
-                best = combo
-            break  # found smallest n for this size · move to next size
+            note = [] if n_layers == 1 else [
+                f"เหล็ก {n} เส้นจัด {n_layers} ชั้น (กว้างไม่พอชั้นเดียว · d ลดตาม c.g. · ระยะดิ่ง ≥{REBAR_LAYER_VCLEAR_CM} ซม.)"]
+            _consider(RebarSelection(
+                main_bars=[(size["name"], n)], As_provided=n * area_per_bar,
+                spacing_min_clear=mc, fits_in_one_layer=(n_layers == 1),
+                n_layers=n_layers, notes=note))
+            break  # smallest n for this size
 
-    # 2) Try 2-size mixes (e.g., 3-DB16 + 2-DB12) for efficiency
+    # 2) 2-size mixes
     for big in sizes:
         for small in sizes:
             if small["diameter_cm"] >= big["diameter_cm"]:
+                continue
+            mc = min_clear_spacing(big["diameter_cm"])          # ใช้ db ใหญ่ = conservative
+            per = min(max_bars_per_layer(available, big["diameter_cm"]), PRACTICAL_MAX_PER_LAYER)
+            if per < 1:                                 # bar ใหญ่ไม่ลอดความกว้าง → ข้าม (Codex P1 · กัน div-by-zero)
                 continue
             for n_big in range(2, 5):
                 for n_small in range(1, 3):
@@ -1348,26 +1438,16 @@ def select_rebar(
                     if total_area < As_required:
                         continue
                     n_total = n_big + n_small
-                    if n_total > max_bars_per_layer:
+                    n_layers = -(-n_total // per)
+                    if n_layers > MAX_REBAR_LAYERS:
                         continue
-                    # check fit
-                    min_clear = max(big["diameter_cm"], 2.5)
-                    required_width = n_total * big["diameter_cm"] + (n_total - 1) * min_clear
-                    # (use big db for conservative spacing)
-                    if required_width > available:
-                        continue
-                    combo = RebarSelection(
-                        main_bars=[
-                            (big["name"], n_big),
-                            (small["name"], n_small),
-                        ],
-                        As_provided=total_area,
-                        spacing_min_clear=min_clear,
-                        fits_in_one_layer=True,
-                        notes=["mixed-size combo · check production detailing"],
-                    )
-                    if best is None or combo.As_provided < best.As_provided:
-                        best = combo
+                    notes = ["mixed-size combo · check production detailing"]
+                    if n_layers > 1:
+                        notes.append(f"จัด {n_layers} ชั้น · d ลดตาม c.g.")
+                    _consider(RebarSelection(
+                        main_bars=[(big["name"], n_big), (small["name"], n_small)],
+                        As_provided=total_area, spacing_min_clear=mc,
+                        fits_in_one_layer=(n_layers == 1), n_layers=n_layers, notes=notes))
 
     return best
 
@@ -1452,21 +1532,41 @@ def design_beam(inp: BeamInput) -> BeamOutput:
 
     # Step 9 · rebar selection
     out.rebar = select_rebar(
-        out.As_required, inp.b, inp.cover, inp.d_stirrup
+        out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max
     )
     if out.rebar is None:
         out.notes.append("ไม่พบ rebar combo ที่ fit ในหน้าตัดนี้ · ต้องขยาย b หรือ ใช้ multi-layer (เกิน MVP)")
         out.passes = False
         return out
 
-    # Step 10 · d_actual after rebar selection
-    db_actual = out.rebar.main_bars[0][0]  # use primary bar
+    # Step 10 · d_actual after rebar selection (multilayer-aware · c.g. หลายชั้น)
     rebar_table = _load_rebar_table()
-    db_actual_cm = next(
-        (s["diameter_cm"] for s in rebar_table["sizes"] if s["name"] == db_actual),
-        inp.db_assume,
-    )
-    out.d_actual = compute_effective_depth(inp.h, inp.cover, inp.d_stirrup, db_actual_cm)
+
+    def _db_of(rb):
+        return next((s["diameter_cm"] for s in rebar_table["sizes"]
+                     if s["name"] == rb.main_bars[0][0]), inp.db_assume)
+
+    out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
+    # multilayer (nl≥2) → c.g. ลึกขึ้น → d เล็กลง → recompute As ที่ d จริง · bounded · honest
+    #   single-layer (nl=1) → d_actual = baseline เดิมเป๊ะ (h−cover−stir−db/2) · ไม่ iterate (zero-reg)
+    for _ in range(3):
+        if out.rebar.n_layers < 2 or out.d_actual >= out.d_assumed - 0.01:
+            break
+        try:
+            Rn2 = compute_Rn(out.Mu_kg_cm, inp.b, out.d_actual, PHI_FLEXURE)
+            rho2 = compute_rho_design(inp.fc, inp.fy, Rn2)
+            rf2, _n2 = apply_rho_limits(rho2, out.rho_min, out.rho_max)
+        except CivilCalcError:
+            break   # ที่ d จริงหน้าตัดไม่พอ → หยุด · ρ_provided check ด้านล่างจะจับ over-reinforced (Codex P1 #26)
+        As2 = compute_As(rf2, inp.b, out.d_actual)
+        rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max)
+        if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
+            break   # ไม่มี combo ดีกว่า → หยุด (รับผลปัจจุบัน)
+        out.rebar, out.As_required, out.rho_final, out.Rn, out.rho_design = rb2, As2, rf2, Rn2, rho2
+        d_prev = out.d_actual
+        out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
+        if abs(out.d_actual - d_prev) < 0.01:
+            break
 
     # Step 11 · final check (flexure)
     out.a_stress_block = compute_stress_block_depth(
@@ -1477,6 +1577,14 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
     if out.Mu_kg_cm > FLOAT_TOL:
         out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
+    # ρ ที่ใช้จริง (As_provided) ที่ความลึกจริง ต้อง ≤ ρmax (singly-reinforced) — กัน over-reinforced
+    #   ที่ multilayer ทำให้ d เล็กลง (ครอบทุก path · แม้ recompute ไม่ raise · Codex P1 #26 round-2/3)
+    if out.rebar and out.d_actual > 0:
+        rho_prov = out.rebar.As_provided / (inp.b * out.d_actual)
+        if rho_prov > out.rho_max + 1e-9:
+            out.passes_flexure = False
+            out.notes.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({out.rho_max:.4f}) ที่ความลึกจริง d={out.d_actual:.2f} ซม. "
+                             "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
 
     # Step 11.5 · Session 2 · Shear stirrup design (only for simply-supported · Session 2 scope)
     if inp.support == SupportType.SIMPLY_SUPPORTED:
@@ -1654,12 +1762,12 @@ def _flexure_design_for_moment(
         rho_design = compute_rho_design(fc, fy, Rn)   # raises SectionTooSmallError if too small
         rho_final, limit_notes = apply_rho_limits(rho_design, rho_min, rho_max)
         As_req = compute_As(rho_final, b, d)
-        rebar = select_rebar(As_req, b, cover, d_stirrup)
+        rebar = select_rebar(As_req, b, cover, d_stirrup, h, rho_max)
         if rebar is None:
             out.update({"As_required": As_req, "rebar": None, "passes": False,
                         "note": "ไม่พบ rebar combo ที่ fit · ต้องขยาย b หรือ multi-layer"})
             return out
-        d_actual = compute_effective_depth(h, cover, d_stirrup, _db_cm(rebar))
+        d_actual = _rebar_d(h, cover, d_stirrup, rebar, _db_cm(rebar))
         a = compute_stress_block_depth(rebar.As_provided, fy, fc, b)
         Mn = compute_Mn(rebar.As_provided, fy, d_actual, a)
         phi_Mn = PHI_FLEXURE * Mn
@@ -1670,19 +1778,29 @@ def _flexure_design_for_moment(
             continue
         # depth stable but capacity short → bump steel proportional to shortfall
         As_target = As_req * (Mu_kgcm / max(phi_Mn, 1.0)) * 1.02
-        bumped = select_rebar(As_target, b, cover, d_stirrup)
+        bumped = select_rebar(As_target, b, cover, d_stirrup, h, rho_max)
         if bumped is not None:
             rebar = bumped
-            d_actual = compute_effective_depth(h, cover, d_stirrup, _db_cm(rebar))
+            d_actual = _rebar_d(h, cover, d_stirrup, rebar, _db_cm(rebar))
             a = compute_stress_block_depth(rebar.As_provided, fy, fc, b)
             Mn = compute_Mn(rebar.As_provided, fy, d_actual, a)
             phi_Mn = PHI_FLEXURE * Mn
         break
 
+    passes = phi_Mn >= Mu_kgcm - FLOAT_TOL
+    notes_out = list(limit_notes)
+    # ρ_provided ที่ความลึกจริง ต้อง ≤ ρmax — กัน over-reinforced ที่ multilayer ทำให้ d เล็กลง
+    #   (เหมือน design_beam · ครอบ continuous/cantilever path · Codex P1 #26 round-4)
+    if rebar and d_actual > 0:
+        rho_prov = rebar.As_provided / (b * d_actual)
+        if rho_prov > rho_max + 1e-9:
+            passes = False
+            notes_out.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({rho_max:.4f}) ที่ความลึกจริง d={d_actual:.2f} ซม. "
+                             "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
     out.update({"As_required": As_req, "rho_final": rho_final, "rebar": rebar,
-                "Rn": Rn, "notes": limit_notes,
+                "Rn": Rn, "notes": notes_out,
                 "d_actual": d_actual, "a_stress_block": a, "Mn": Mn, "phi_Mn": phi_Mn,
-                "passes": phi_Mn >= Mu_kgcm - FLOAT_TOL,
+                "passes": passes,
                 "safety_margin_pct": (phi_Mn - Mu_kgcm) / Mu_kgcm * 100.0})
     return out
 
