@@ -1370,7 +1370,14 @@
         Mu: o.Mu * K, Vu: o.Vu * K, RA: o.R_A * K, RB: o.R_B * K,
         As_req: o.As_required, As_prov: o.rebar ? o.rebar.As_provided : 0,
         rebarMain: o.rebar ? o.rebar.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '—',
-        b: P.b, h: P.h, d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
+        b: P.b, h: P.h, cover: P.cover, d: o.d_actual, margin: Math.round(margin), dc: Math.round(10000 / (100 + margin)),
+        nLayers: o.rebar ? (o.rebar.n_layers || 1) : 1,   // จำนวนชั้นเหล็กล่างจาก engine (display ใช้ตรง · ไม่ recompute)
+        // doubly-reinforced (เหล็กรับแรงอัด · เมื่อ singly เกิน ρmax · DRMK book p70)
+        isDoubly: !!o.is_doubly, As1: o.As1 || 0, As2: o.As2 || 0,
+        rebarComp: (o.is_doubly && o.rebar_compression) ? o.rebar_compression.main_bars.map(t => t[1] + '-' + t[0]).join('+') : '',
+        compLayers: (o.is_doubly && o.rebar_compression) ? (o.rebar_compression.n_layers || 1) : 1,
+        AsPrime: o.As_prime_required || 0, AsPrimeProv: (o.is_doubly && o.rebar_compression) ? o.rebar_compression.As_provided : 0,
+        fsPrime: o.fs_prime_ksc || 0, compYields: !!o.comp_steel_yields,
         pass: !!o.passes, citations: o.citations || [],
         // Phase 2d · ค่ากลาง engine สำหรับ show-work data-driven (parity-safe · ไม่คำนวณซ้ำใน JS)
         beta1: o.beta1, rho_b: o.rho_b, rho_min: o.rho_min, rho_max: o.rho_max,
@@ -1425,7 +1432,7 @@
       } : {};
       const _L = sumLoads();
       state.res = Object.assign({
-        b: P.b, h: P.h, Mu: gov ? Math.round(govMpos * K) : Math.round(mp), MuNeg: Math.round(mn),
+        b: P.b, h: P.h, cover: P.cover, Mu: gov ? Math.round(govMpos * K) : Math.round(mp), MuNeg: Math.round(mn),
         Vu: govShVu > 0 ? Math.round(govShVu * 1000) : ac.Vmax, pass, dc, margin,   // Vu จากช่วง Vu สูงสุด (ตรงกับ Vc/Vs · Codex P2)
         beta1: mat.beta1, rho_b: mat.rho_b, rho_min: mat.rho_min, rho_max: mat.rho_max,
         DL: _L.DL, LL: _L.LL, Wu: 1.4 * _L.DL + 1.7 * _L.LL,
@@ -1450,6 +1457,8 @@
     setPartials(arr) { ccModel.partials = (arr || []).map((q, i) => ({ id: 950 + i, x0: q.x0, x1: q.x1, w: q.w })); },
     recompute, render, renderWork,
     drawMainSections, drawDetailing,
+    detailBars: () => detailBars(),   // §A · ให้ audit เทียบจำนวนเหล็กหน้าตัด == engine ต่อ location
+
     ctab: () => state.ctab,
     setCtab(t) { state.ctab = t; },
     // selectCtab — สลับแท็บผ่าน DOM-updating path เดียวกับ click handler (sync state+DOM · Codex P3)
@@ -1865,10 +1874,17 @@
         { t: 'res', v: `Rn = ${f(m.Rn, 2)} ksc` },
         { t: 'f', v: "ρ = (0.85f'c/fy)[1−√(1−2Rn/0.85f'c)]" },
         { t: 'res', v: `ρ_design = ${f(m.rho_design, 5)}` }], null),
-      wstep(7, 'ตรวจขอบเขต → ρ_final', 'วสท. 1008', [
-        { t: 'f', v: 'ρmin ≤ ρ_design ≤ ρmax' },
-        { t: 'sub', v: `${f(m.rho_min, 4)} ≤ ${f(m.rho_design, 5)} ≤ ${f(m.rho_max, 4)} ${inRange ? '✓' : '⚠ ปรับเข้าขอบเขต'}` },
-        { t: 'res', v: `ρ_final = ${f(m.rho_final, 5)}` }], inRange ? 'อยู่ในช่วงเหนียว (ductile) — ผ่าน' : 'ρ ถูกปรับให้อยู่ในขอบเขต ว.ส.ท.'),
+      // Step 7 — singly: ตรวจ ρ ในขอบเขต · doubly: เกิน ρmax → เสริมเหล็กคู่ (ไม่ขัดกับ verdict · Codex P2 #27)
+      m.isDoubly
+        ? wstep(7, 'เกิน ρmax → เสริมเหล็กคู่ (doubly)', 'DRMK p70', [
+            { t: 'f', v: `ρ ที่ต้องการ > ρmax = ${f(m.rho_max, 4)} → singly ไม่พอ` },
+            { t: 'sub', v: 'หน้าตัดถูกจำกัด → เพิ่มเหล็กรับแรงอัด (As′ บน) รับโมเมนต์ส่วนเกิน' },
+            { t: 'res', v: `As1 = ρmax·b·d = ${f(m.As1, 2)} cm² (คู่คอนกรีต) · As2 = ${f(m.As2, 2)} cm² (คู่เหล็กอัด)` }],
+            'เหล็กดึงรวม As = As1 + As2 · ออกแบบให้เหล็กดึงครากเสมอ (ductile)')
+        : wstep(7, 'ตรวจขอบเขต → ρ_final', 'วสท. 1008', [
+            { t: 'f', v: 'ρmin ≤ ρ_design ≤ ρmax' },
+            { t: 'sub', v: `${f(m.rho_min, 4)} ≤ ${f(m.rho_design, 5)} ≤ ${f(m.rho_max, 4)} ${inRange ? '✓' : '⚠ ปรับเข้าขอบเขต'}` },
+            { t: 'res', v: `ρ_final = ${f(m.rho_final, 5)}` }], inRange ? 'อยู่ในช่วงเหนียว (ductile) — ผ่าน' : 'ρ ถูกปรับให้อยู่ในขอบเขต ว.ส.ท.'),
       wstep(8, 'พื้นที่เหล็กต้องการ As', null, [
         { t: 'f', v: `As = ρ·b·d = ${f(m.rho_final, 5)}·${m.b}·${f(dDesign, 1)}` },
         { t: 'res', v: `As,req = ${f(m.As_req, 2)} cm²` }], null),
@@ -1876,11 +1892,21 @@
         { t: 'f', v: `ใช้ ${m.rebarMain}  (As = ${f(m.As_prov, 2)} cm²)` },
         { t: 'res', v: `As,prov = ${f(m.As_prov, 2)} cm² ${okAs ? '≥' : '<'} ${f(m.As_req, 2)} ${okAs ? '✓' : '✗ ต้องเพิ่มเหล็ก'}` },
         { t: 'sub', v: `ระยะห่างเหล็ก clear ≈ ${f(m.spacingClear, 1)} ซม` }], okAs ? 'จัดได้ 1 ชั้น' : null),
-      wstep('10–11', 'a → Mn → φMn เทียบ Mu', 'SDM', [
-        { t: 'f', v: "a = As·fy/(0.85·f'c·b)" },
-        { t: 'res', v: `a = ${f(m.a, 2)} ซม` },
-        { t: 'f', v: 'φMn = 0.9·As·fy·(d − a/2)' },
-        { t: 'res', v: `φMn = ${ccUnits.M(m.phiMn)}  ${okMn ? '≥' : '<'}  Mu ${ccUnits.M(m.Mu)} ${okMn ? '✓' : '✗'}` }], `safety margin = (φMn−Mu)/Mu = ${m.margin >= 0 ? '+' : ''}${m.margin}%`),
+      // Step 10–11 — singly: a→Mn→φMn · doubly: เหล็กอัด As′ + Mn เหล็กคู่ (couple-1+couple-2 · Codex P2 #27)
+      m.isDoubly
+        ? wstep('10–11', 'เหล็กรับแรงอัด As′ → Mn (เหล็กคู่)', 'DRMK Ex 3.8', [
+            { t: 'f', v: "f's = 6120·(1 − d'/c)" },
+            { t: 'res', v: `f's = ${f(m.fsPrime, 0)} ksc ${m.compYields ? '≥ fy → คราก' : '< fy → ไม่คราก'}` },
+            { t: 'f', v: "As′ = As2·fy/f's" },
+            { t: 'res', v: `As′ = ${f(m.AsPrime, 2)} cm² → ใช้ ${m.rebarComp || '—'} (As′ prov = ${f(m.AsPrimeProv, 2)} cm²)` },
+            { t: 'f', v: "φMn = 0.9·[0.85f'c·b·a·(d−a/2) + As′·f's·(d−d')]" },
+            { t: 'res', v: `φMn = ${ccUnits.M(m.phiMn)}  ${okMn ? '≥' : '<'}  Mu ${ccUnits.M(m.Mu)} ${okMn ? '✓' : '✗'}` }],
+            `safety margin = (φMn−Mu)/Mu = ${m.margin >= 0 ? '+' : ''}${m.margin}% · เหล็กอัดต้องมีปลอกยึด`)
+        : wstep('10–11', 'a → Mn → φMn เทียบ Mu', 'SDM', [
+            { t: 'f', v: "a = As·fy/(0.85·f'c·b)" },
+            { t: 'res', v: `a = ${f(m.a, 2)} ซม` },
+            { t: 'f', v: 'φMn = 0.9·As·fy·(d − a/2)' },
+            { t: 'res', v: `φMn = ${ccUnits.M(m.phiMn)}  ${okMn ? '≥' : '<'}  Mu ${ccUnits.M(m.Mu)} ${okMn ? '✓' : '✗'}` }], `safety margin = (φMn−Mu)/Mu = ${m.margin >= 0 ? '+' : ''}${m.margin}%`),
     ];
     $('#workSteps').innerHTML = steps.join('');
 
@@ -1946,8 +1972,11 @@
         if (s) return `${m.stirLegs === 4 ? 2 : 1}ป-${m.stirBar || 'RB9'}@${(s / 100).toFixed(2)}`;
         return stirText(key === 'S1' ? '0.10' : '0.25');
       };
+      // doubly: กลางช่วงมีเหล็กรับแรงอัด (บน) จาก engine → โชว์เพิ่มในเซลล์เหล็ก (DRMK book p70)
+      const midRebar = (m.rebarMain || '—') + ' (ล่าง)' +
+        (m.isDoubly && m.rebarComp ? ` · ${m.rebarComp} (บน·รับอัด)` : '');
       rows = [['ปลายซ้าย', '—', topLbl, m.RA ? ccUnits.Pn(m.RA) : '—', stirCell('S1')],
-              ['กลางช่วง', '+' + ccUnits.Mn(m.Mu), (m.rebarMain || '—') + ' (ล่าง)', '—', stirCell('S2')],
+              ['กลางช่วง', '+' + ccUnits.Mn(m.Mu), midRebar, '—', stirCell('S2')],
               ['ปลายขวา', '—', topLbl, m.RB ? ccUnits.Pn(m.RB) : '—', stirCell('S1')]];
     }
     $('#summaryRows').innerHTML = rows.map(r => `<tr>
@@ -2011,7 +2040,7 @@
   // detailBars — จำนวน/ขนาดเหล็กจาก engine ต่อตำแหน่ง · แยก หลัก(2 มุม) + เสริม
   //   ตาม convention [[Convention - Beam Rebar Layout (Main + Extra)]] (pi confirm 2026-06-05)
   function detailBars() {
-    const fromRebar = rb => { if (!rb || !rb.main_bars || !rb.main_bars.length) return { n: 0, size: 'DB16', list: [] }; const list = rb.main_bars.map(t => [t[0], t[1]]); const n = list.reduce((s, t) => s + t[1], 0); return { n, size: list[0][0], list }; };
+    const fromRebar = rb => { if (!rb || !rb.main_bars || !rb.main_bars.length) return { n: 0, size: 'DB16', list: [], n_layers: 1 }; const list = rb.main_bars.map(t => [t[0], t[1]]); const n = list.reduce((s, t) => s + t[1], 0); return { n, size: list[0][0], list, n_layers: rb.n_layers || 1 }; };   // n_layers จาก engine RebarSelection → หน้าตัดวาดชั้นตรง (ปิด display cascade)
     const fromStr = s => { const p = (s && s !== '—') ? s.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean) : []; const list = p.map(mm => [mm[2], +mm[1]]); const n = list.reduce((a, t) => a + t[1], 0); return { n, size: list.length ? list[0][0] : 'DB16', list }; };
     const stir = sh => ({ bar: (sh && sh.bar) || 'RB9', s1: sh && sh.S1_cm, s2: sh && sh.S2_cm });
     if (state.mode === 'cont') {
@@ -2024,7 +2053,10 @@
       };
     }
     const m = liveData();
-    return { spanBot: [fromStr(m.rebarMain)], supTop: [{ n: 0, size: 'DB16' }, { n: 0, size: 'DB16' }], spanStir: [{ bar: m.stirBar || 'RB9', s1: m.S1, s2: m.S2 }] };  // ปลายคานเดี่ยว = ไม่มี −M
+    const sb = fromStr(m.rebarMain); sb.n_layers = m.nLayers || 1;   // single bottom n_layers จาก engine result (fromStr อ่านจาก string ไม่มีชั้น → เสียบจาก state.res.nLayers)
+    // doubly: เหล็กรับแรงอัด (บน · midspan) จาก engine · isDoubly flag → section/summary โชว์
+    const comp = m.isDoubly ? (() => { const c = fromStr(m.rebarComp); c.n_layers = m.compLayers || 1; return c; })() : { n: 0, size: 'DB16', n_layers: 1 };
+    return { spanBot: [sb], supTop: [{ n: 0, size: 'DB16', n_layers: 1 }, { n: 0, size: 'DB16', n_layers: 1 }], spanStir: [{ bar: m.stirBar || 'RB9', s1: m.S1, s2: m.S2 }], comp, isDoubly: !!m.isDoubly };  // ปลายคานเดี่ยว = ไม่มี −M · comp = เหล็กอัด (doubly)
   }
 
   // curtData — ระยะหยุดเหล็กจาก engine (out.curtailment) จัดเรียงตาม index span/node เหมือน detailBars · parity-safe (อ่านตรง ไม่คำนวณซ้ำ)
@@ -2341,7 +2373,7 @@
 
   /* ── cross-sections (rcBeamSection style) ── */
   function buildSection(loc) {
-    const m = liveData();   // Phase 4B fix · ป้าย b×h = engine จริง (เดิมแช่ MOCK → รูปหน้าตัดโชว์ขนาดผิด) · bar counts ยัง schematic
+    const m = liveData();   // Phase 4B fix · ป้าย b×h = engine จริง (เดิมแช่ MOCK → รูปหน้าตัดโชว์ขนาดผิด) · bar counts+layers = engine จริงผ่าน detailBars (§A · ปิด cascade)
 
     const W = 130, Hh = 150, pad = 22;
     const bw = W - pad * 2, bh = Hh - pad * 2;
@@ -2356,19 +2388,60 @@
       const iw = (bw - 2 * si) * 0.42;
       svg.appendChild(svgEl('rect', { x: W / 2 - iw / 2, y: pad + si + 2, width: iw, height: bh - 2 * si - 4, fill: 'none', stroke: '#94A3B8', 'stroke-width': 1, rx: 3 }));
     }
-    // bar counts depend on location
-    let nTop = 2, nBot = 3;
-    if (loc === 'mid') { nTop = 2; nBot = state.mode === 'cont' ? 3 : 3; }
-    if (loc === 'left' || loc === 'right') { nTop = state.mode === 'cont' ? 6 : 2; nBot = state.mode === 'cont' ? 3 : 2; }
-    const dotsRow = (n, y, r) => {
-      const x0 = pad + si + 6, x1 = W - pad - si - 6;
-      for (let i = 0; i < n; i++) {
-        const cx = n === 1 ? (x0 + x1) / 2 : x0 + (i / (n - 1)) * (x1 - x0);
-        svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#1D4ED8' }));
+    // bar counts + layers จาก engine จริง (detailBars · ปิด display cascade ถาวร · เลิก hardcode/recompute)
+    //   ผูกกับ "ช่วงวิกฤต" (gIdx = เหล็กล่าง/+M มากสุด) แล้ว map ตำแหน่งจริง — ปิด Codex P2 asymmetric/cantilever:
+    //   'mid' = เหล็กล่างช่วงวิกฤต · 'left'/'right' = หัวเสาฝั่งซ้าย/ขวา "ของช่วงนั้น" (ตามตำแหน่งจริง · ซ้าย≠ขวา ·
+    //   node gIdx / gIdx+1) · 'sup' = หัวเสาวิกฤตรวม (−M มากสุดทุกเสา · สำหรับ overview 2 ช่อง)
+    //   เสาที่ engine ไม่มี −M (ปลายนอก/คานเดี่ยว) → nominal 2 (ไม่ overstate ฝั่ง non-governing)
+    const bars = detailBars();
+    const argmaxN = arr => { let bi = -1, bn = -1; (arr || []).forEach((x, i) => { if (x && x.n > bn) { bn = x.n; bi = i; } }); return bi; };
+    const gIdx = bars ? Math.max(0, argmaxN(bars.spanBot)) : 0;   // ช่วง +M วิกฤต (เหล็กล่างมากสุด · ใช้ผูก mid + หัวเสาซ้าย/ขวา)
+    let nTop = 2, nBot = 3, topLayers = 0, botLayers = (m && m.nLayers) || 0;   // fallback nominal เมื่อ engine ยังไม่ ready (bars=null)
+    if (loc === 'mid') {
+      const b = bars && bars.spanBot[gIdx];
+      nTop = 2;                                              // กลางช่วง: เหล็กบน = nominal hanger (engine ไม่คิด +M top)
+      // doubly: เหล็กบน = เหล็กรับแรงอัด (As′) จาก engine (แทน nominal · DRMK book p70)
+      if (bars && bars.isDoubly && bars.comp && bars.comp.n) { nTop = bars.comp.n; topLayers = bars.comp.n_layers || 0; }
+      if (b && b.n) { nBot = b.n; botLayers = b.n_layers || 0; }
+      else nBot = 3;
+    } else {   // 'left' / 'right' / 'sup' = หน้าตัดหัวเสา (−M)
+      nBot = 2; botLayers = 0;                              // หัวเสา: เหล็กล่าง = เส้นหลักวิ่งผ่าน (nominal 2 มุม)
+      let t = null;
+      if (bars) {
+        if (loc === 'sup') t = (bars.supTop || []).reduce((best, x) => (x && x.n > (best ? best.n : -1)) ? x : best, null);   // governing support (overview)
+        else t = bars.supTop && bars.supTop[loc === 'left' ? gIdx : gIdx + 1];   // หัวเสาฝั่งจริงของช่วงวิกฤต (ตำแหน่ง · ซ้าย≠ขวา)
       }
+      if (t && t.n) { nTop = t.n; topLayers = t.n_layers || 0; }
+      else nTop = 2;                                        // เสาไม่มี −M → nominal 2 (ไม่ overstate)
+    }
+    // จำนวนชั้นจากความกว้างจริง (port สูตร engine: s_clear=max(db,2.5,1.33·d_agg) · cap 6 เส้น/ชั้น) → กันวาดเบียดแถวเดียว
+    const _layers = (n, db_cm) => {
+      const cov = (m && m.cover) || (typeof P !== 'undefined' && P.cover) || 4;   // cover จาก engine result (snapshot · ตรงผลที่คำนวณ · Codex P2) → fallback live P.cover
+      const avail = (m.b || 30) - 2 * cov - 2 * 0.9;        // stirrup 0.9 (ซม.)
+      const s = Math.max(db_cm, 2.5, 1.33 * 2.0);           // MAX_AGGREGATE_CM = 2.0
+      const per = Math.min(6, Math.max(1, Math.floor((avail + s) / (db_cm + s) + 1e-9)));
+      return Math.max(1, Math.ceil(n / per));
     };
-    dotsRow(nTop, pad + si + 8, 3.4);
-    dotsRow(nBot, Hh - pad - si - 8, 3.6);
+    // วาดเหล็ก n เส้นเป็น nLayers ชั้น · ชั้นนอกสุด (ผิวรับแรง) เต็มก่อน · ชั้นถัดเข้าด้านใน(ทาง NA)
+    //   forced = ใช้ n_layers จาก engine result ตรงๆ (ถ้ามี · ตรงผลคำนวณเป๊ะ · Codex P2) · ไม่งั้น recompute
+    const dotsRows = (n, yOuter, r, dir, db_cm, forced) => {
+      const x0 = pad + si + 6, x1 = W - pad - si - 6;
+      const nL = (forced && forced >= 1) ? Math.min(forced, Math.max(1, n)) : _layers(n, db_cm), rowGap = 2 * r + 2.5;
+      let placed = 0;
+      for (let L = 0; L < nL; L++) {
+        const cnt = Math.min(Math.ceil(n / nL), n - placed);  // ชั้นนอกเต็มก่อน (เฉลี่ยปัดขึ้น)
+        const y = yOuter + dir * L * rowGap;
+        for (let i = 0; i < cnt; i++) {
+          const cx = cnt === 1 ? (x0 + x1) / 2 : x0 + (i / (cnt - 1)) * (x1 - x0);
+          svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#1D4ED8' }));
+        }
+        placed += cnt;
+        if (placed >= n) break;
+      }
+      return nL;
+    };
+    const nlTop = dotsRows(nTop, pad + si + 8, 3.4, +1, 2.0, topLayers);   // เหล็กบน (−M หัวเสา) · ใช้ n_layers จาก engine support top · 0 → recompute fallback
+    const nlBot = dotsRows(nBot, Hh - pad - si - 8, 3.6, -1, 2.0, botLayers);  // เหล็กล่าง (+M) · ใช้ n_layers จาก engine span bottom · 0 → recompute fallback
     // labels
     const tl = svgEl('text', { x: W / 2, y: 13, 'font-size': 9, fill: '#64748B', 'text-anchor': 'middle' }); tl.textContent = `${m.b}×${m.h}`; svg.appendChild(tl);
     return { svg, nTop, nBot };
@@ -2378,7 +2451,7 @@
   function drawMainSections() {
     const host = $('#sectionMain'); if (!host) return; host.innerHTML = '';
     const items = state.mode === 'cont'
-      ? [['mid', 'กลางคาน (+M · เหล็กล่าง)', '0.25'], ['left', 'หัวเสา (−M · เหล็กบน)', '0.10']]
+      ? [['mid', 'กลางคาน (+M · เหล็กล่าง)', '0.25'], ['sup', 'หัวเสา (−M · เหล็กบน)', '0.10']]   // 'sup' = หัวเสาวิกฤตรวม (overview · Codex P2)
       : [['mid', 'กลางช่วง (+M · เหล็กล่าง)', '0.25'], ['left', 'ปลายคาน (เฉือน)', '0.10']];
     items.forEach(([loc, label, sp]) => {
       const wrap = document.createElement('div'); wrap.className = 'flex flex-col items-center';
@@ -2640,6 +2713,10 @@ EPS_TENSION_LIMIT: float = 0.005   # ACI 318-08 strain-based limit (not used in 
 
 PHI_FLEXURE: float = 0.90          # Strength reduction factor for flexure (Thai compliance default)
 PHI_SHEAR: float = 0.85            # Strength reduction factor for shear (ว.ส.ท. compliant)
+MAX_AGGREGATE_CM: float = 2.0      # ขนาดมวลรวมหยาบโตสุด (default ~3/4"-1") · clear spacing ≥ 1.33·d_agg (ACI 25.2 · DRMK รูป1.13)
+MAX_REBAR_LAYERS: int = 3          # cap จำนวนชั้นเหล็กนอน (เกินนี้ → แนะขยายหน้าตัด)
+PRACTICAL_MAX_PER_LAYER: int = 6   # เส้น/ชั้น เชิงปฏิบัติ (industry norm · กันเหล็กจิ๋วหลายเส้นเบียดแถวเดียว · เกิน→ขึ้นชั้น)
+REBAR_LAYER_VCLEAR_CM: float = 2.5 # ระยะห่างแนวดิ่งระหว่างชั้นเหล็ก (clear · ACI 25.2.2)
 
 # Unit conversion · Thai engineering uses ตัน (tonf) / กก. (kgf) / ksc · NOT kN/SI
 # 1 kN = 101.97 kgf = 0.10197 tonf  (matches kNm_to_kgcm = 10197 kg·cm/kN·m · g=9.80665)
@@ -2806,6 +2883,7 @@ class RebarSelection:
     As_provided: float = 0.0                                          # cm²
     spacing_min_clear: float = 0.0                                    # cm (min clear spacing)
     fits_in_one_layer: bool = True
+    n_layers: int = 1                                                 # จำนวนชั้นเหล็ก (1 ปกติ · ≥2 เมื่อกว้างไม่พอ · multi-layer)
     notes: list[str] = field(default_factory=list)
 
 
@@ -2850,6 +2928,15 @@ class BeamOutput:
     As_required: float = 0.0        # cm²
     rebar: Optional[RebarSelection] = None
 
+    # doubly-reinforced (compression steel · เมื่อ singly เกิน ρmax · DRMK book p70)
+    is_doubly: bool = False                    # True → หน้าตัดเสริมเหล็กรับแรงอัด
+    As1: float = 0.0                           # tension steel จับคู่คอนกรีต (= ρmax·b·d · cm²)
+    As2: float = 0.0                           # tension steel เพิ่ม จับคู่เหล็กอัด (cm²)
+    As_prime_required: float = 0.0             # เหล็กรับแรงอัด (บน) ต้องการ (cm²)
+    fs_prime_ksc: float = 0.0                  # หน่วยแรงในเหล็กอัด (ksc · = fy ถ้าคราก)
+    comp_steel_yields: bool = False            # เหล็กอัดถึงจุดครากไหม
+    rebar_compression: Optional[RebarSelection] = None   # เหล็กรับแรงอัดที่เลือก
+
     # verification
     a_stress_block: float = 0.0     # cm
     Mn: float = 0.0                 # nominal moment (kg·cm)
@@ -2870,6 +2957,8 @@ class BeamOutput:
         d["input"] = self.input.to_dict()
         if self.rebar:
             d["rebar"] = asdict(self.rebar)
+        if self.rebar_compression:
+            d["rebar_compression"] = asdict(self.rebar_compression)
         return d
 
 
@@ -2978,8 +3067,60 @@ def validate_input(inp: BeamInput) -> list[str]:
 
 
 def compute_effective_depth(h: float, cover: float, d_stirrup: float, db: float) -> float:
-    """d = h − cover − d_stirrup − db/2 (single layer assumption · MVP)"""
+    """d = h − cover − d_stirrup − db/2 (single layer · c.g. ของเหล็กชั้นเดียว)"""
     return h - cover - d_stirrup - db / 2.0
+
+
+def min_clear_spacing(db_cm: float) -> float:
+    """ระยะช่องว่างน้อยสุดระหว่างเหล็กนอน = max(db, 2.5 ซม., 1.33·มวลรวมโตสุด)
+    (ACI 25.2 · DRMK รูป 1.13 · [[Formula - Rebar Clear Spacing & Multi-Layer Arrangement]])"""
+    return max(db_cm, 2.5, 1.33 * MAX_AGGREGATE_CM)
+
+
+def max_bars_per_layer(available_cm: float, db_cm: float) -> int:
+    """จำนวนเหล็กสูงสุดต่อ 1 ชั้น เมื่อช่องในระหว่างปลอก = available_cm.
+    n·db + (n−1)·s ≤ available → n ≤ (available+s)/(db+s).
+    คืน **0** ถ้า available < db (เหล็กเส้นเดียวยังไม่ลอด → caller ต้องขยายหน้าตัด · Codex P1) ·
+    ไม่ floor เป็น 1 มิฉะนั้นยอมรับ layout ที่เหล็กไม่ลอดจริง. (verified vs DRMK ตาราง 3.3)"""
+    if available_cm < db_cm - 1e-9:        # แม้แต่ 1 เส้นยังไม่ลอด
+        return 0
+    s = min_clear_spacing(db_cm)
+    return max(1, int((available_cm + s) / (db_cm + s) + 1e-9))
+
+
+def _layer_counts(n_bars: int, n_layers: int) -> list:
+    """แจกแจงเหล็ก n เส้นลง n_layers ชั้น — ชั้นที่อยู่ห่างแกนสะเทินสุด (tension-most · index 0)
+    ได้จำนวนมากก่อน (≥ ชั้นถัดไป) → c.g. ใกล้ผิวรับแรงดึง = d มากสุดเท่าที่จัดได้ (conservative-friendly)."""
+    if n_layers <= 1:
+        return [n_bars]
+    base, rem = divmod(n_bars, n_layers)
+    return [base + 1] * rem + [base] * (n_layers - rem)
+
+
+def effective_depth_multilayer(h: float, cover: float, d_stirrup: float, db: float,
+                               n_bars: int, n_layers: int,
+                               s_vert: float = None) -> float:
+    """d = h − c.g. ของกลุ่มเหล็กหลายชั้น (วัดจากผิวรับแรงดึง).
+    ชั้น i ศูนย์กลางห่างผิวรับแรงดึง = cover + d_stirrup + db/2 + i·(db + s_vert).
+    n_layers==1 → เท่ากับ compute_effective_depth เดิม. รับประกัน d(multi) ≤ d(single)."""
+    if n_layers <= 1 or n_bars <= 0:
+        return compute_effective_depth(h, cover, d_stirrup, db)
+    if s_vert is None:
+        s_vert = REBAR_LAYER_VCLEAR_CM
+    counts = _layer_counts(n_bars, n_layers)
+    y0 = cover + d_stirrup + db / 2.0                 # ศูนย์กลางชั้นแรก (ห่างผิวรับแรงดึง)
+    pitch = db + s_vert                               # ระยะศูนย์กลาง-ศูนย์กลางระหว่างชั้น
+    cg = sum(c * (y0 + i * pitch) for i, c in enumerate(counts)) / float(n_bars)
+    return h - cg
+
+
+def _rebar_d(h: float, cover: float, d_stirrup: float, rebar, db_cm: float) -> float:
+    """d ของกลุ่มเหล็ก (multilayer-aware) จาก RebarSelection · single layer → เท่าสูตรเดิม."""
+    if not rebar or not rebar.main_bars:
+        return compute_effective_depth(h, cover, d_stirrup, db_cm)
+    n_bars = sum(c for _, c in rebar.main_bars)
+    return effective_depth_multilayer(h, cover, d_stirrup, db_cm, n_bars,
+                                      getattr(rebar, "n_layers", 1))
 
 
 def compute_beta1(fc: float) -> float:
@@ -3884,6 +4025,83 @@ def compute_Mn(As: float, fy: float, d: float, a: float) -> float:
     return As * fy * (d - a / 2.0)
 
 
+# εcu·Es = 0.003 × 2,040,000 ≈ 6,120 ksc · หน่วยแรงสูงสุดในเหล็กตามความเครียด (DRMK p65-70)
+_EPS_CU_ES_KSC: float = 6120.0
+
+
+def compute_doubly_reinforced(
+    Mu_kg_cm: float, b: float, d: float, d_prime: float,
+    fc: float, fy: float, beta1: float, rho_max: float,
+    phi: float = PHI_FLEXURE,
+) -> Optional[dict]:
+    """ออกแบบหน้าตัดเสริมเหล็กคู่ (doubly-reinforced) เมื่อ singly เกิน ρmax.
+
+    DRMK SDM 3 Bending · book p70 · ตัวอย่าง 3.10 (verified · uat_doubly).
+    หน่วย: Mu_kg_cm = kg·cm · b/d/d_prime = cm · fc/fy = ksc · As = cm².
+    คืน dict {As1, As2, As, As_prime, fs_prime, yields, a, c, Mn1, Mn2, Mn} หรือ
+    None ถ้า doubly ช่วยไม่ได้ (c ≤ d′ → เหล็กอัดอยู่นอกโซนอัด · ต้องขยายหน้าตัด).
+    ductility: (ρ − ρ′·fs′/fy) = ρmax โดยอัตโนมัติ → เหล็กดึงครากเสมอ (DRMK Eq 3.36).
+    """
+    # couple-1: คอนกรีต ↔ เหล็กดึง As1 (ที่ ρmax)
+    As1 = rho_max * b * d
+    a = compute_stress_block_depth(As1, fy, fc, b)      # As1·fy/(0.85 fc b)
+    c = a / beta1
+    if c <= d_prime + FLOAT_TOL:
+        return None     # เหล็กอัดอยู่ที่/ใต้แกนสะเทิน → ใช้ไม่ได้ · ต้องขยายหน้าตัด
+    Mn1 = compute_Mn(As1, fy, d, a)                     # As1·fy·(d − a/2)
+    Mn2 = (Mu_kg_cm / phi) - Mn1
+    if Mn2 <= FLOAT_TOL:
+        return None     # singly พอแล้ว (caller ควรไม่เรียกถึงตรงนี้)
+    # couple-2: เหล็กอัด As′ ↔ เหล็กดึงเพิ่ม As2 (ระยะแขน d − d′)
+    As2 = Mn2 / (fy * (d - d_prime))
+    fs_prime = _EPS_CU_ES_KSC * (1.0 - d_prime / c)     # หน่วยแรงเหล็กอัดตามความเครียด
+    yields = fs_prime >= fy - FLOAT_TOL
+    if yields:
+        fs_prime = fy
+    if fs_prime <= FLOAT_TOL:
+        return None
+    As_prime = As2 * fy / fs_prime                       # As′·fs′ = As2·fy
+    return {
+        "As1": As1, "As2": As2, "As": As1 + As2, "As_prime": As_prime,
+        "a": a, "c": c, "Mn1": Mn1, "Mn2": Mn2,
+        "Mn": Mn1 + As2 * fy * (d - d_prime),
+        "fs_prime": fs_prime, "yields": yields,
+    }
+
+
+def analyze_doubly_capacity(
+    As_t: float, As_c: float, b: float, d: float, d_prime: float,
+    fc: float, fy: float, beta1: float,
+) -> tuple:
+    """วิเคราะห์กำลังโมเมนต์หน้าตัดเสริมเหล็กคู่จาก "เหล็กที่จัดจริง" (As_t ดึง · As_c อัด)
+    ด้วย strain compatibility เต็ม (เหล็กดึง+อัด อาจคราก/ไม่คราก). DRMK Ex 3.8.
+    คืน (Mn_kg_cm, a_cm, fs_prime_ksc, fs_tension_ksc, tension_yields).
+
+    สมดุล: 0.85·fc·b·(β1·c) + As_c·fs_c(c) = As_t·fs_t(c)
+      fs_t(c) = min(fy, 6120·(d−c)/c) · fs_c(c) = min(fy, 6120·(c−d′)/c) [0 ถ้า c≤d′]
+    net(c) = Cc+Cs−T เพิ่มตาม c → bisection หา c สมดุล · เช็ค ductility (เหล็กดึงครากไหม · Codex P1 #27 r4).
+    """
+    def _fst(c):
+        return min(fy, _EPS_CU_ES_KSC * (d - c) / c) if c > 0 else fy
+    def _fsc(c):
+        return min(fy, _EPS_CU_ES_KSC * (c - d_prime) / c) if c > d_prime else 0.0
+    def _net(c):   # Cc + Cs − T · เพิ่มตาม c (Cc,Cs↑ · T↓)
+        return 0.85 * fc * b * (beta1 * c) + As_c * _fsc(c) - As_t * _fst(c)
+    lo, hi = 1e-4, d
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if _net(mid) < 0.0:
+            lo = mid
+        else:
+            hi = mid
+    c = 0.5 * (lo + hi)
+    a = beta1 * c
+    fs_prime, fs_t = _fsc(c), _fst(c)
+    Mn = 0.85 * fc * b * a * (d - a / 2.0) + As_c * fs_prime * (d - d_prime)
+    tension_yields = fs_t >= fy - 1.0   # เหล็กดึงคราก → ductile → φ=0.90 ใช้ได้
+    return Mn, a, fs_prime, fs_t, tension_yields
+
+
 # ----------------------------------------------------------------------------
 # Rebar selection
 # ----------------------------------------------------------------------------
@@ -3901,17 +4119,23 @@ def select_rebar(
     b: float,
     cover: float,
     d_stirrup: float,
-    max_bars_per_layer: int = 6,
+    h_cm: float = None,
+    rho_max: float = None,
 ) -> Optional[RebarSelection]:
     """Pick a practical rebar combination satisfying As_provided ≥ As_required.
 
-    Strategy: try uniform-size combos first (3-DB16 · 4-DB16 · ...) then 2-size mixes.
-    Constraint: bars must fit within b with min clear spacing.
+    Strategy: single-size combos first, then 2-size mixes.
+    Clear spacing = max(db, 2.5, 1.33·d_agg) (รวมมวลรวม · กัน honeycomb). ถ้าชั้นเดียวกว้างไม่พอ →
+    จัด multi-layer (≤ MAX_REBAR_LAYERS). Tie-break: **ชั้นน้อยกว่าชนะ** (single-layer ถ้า fit เสมอ) แล้ว As น้อยสุด.
 
-    Returns RebarSelection or None if no realistic combo found (caller should enlarge section).
+    ถ้าให้ h_cm + rho_max → **กรอง candidate ที่ over-reinforced** (ρ_provided=As/(b·d) ที่ความลึกจริง
+    ของ combo นั้น > rho_max) ออก → กัน false-failure ที่เลือก combo ชั้นน้อยแต่ over-reinforced
+    ทั้งที่ combo ชั้นมากกว่า (As น้อยกว่า) ผ่านได้ (Codex P2 #26). ไม่ให้ → ไม่กรอง (backward-compat).
+
+    Returns RebarSelection (มี n_layers) หรือ None ถ้าเกิน MAX_REBAR_LAYERS / over-reinforced ทุก combo.
     """
     table = _load_rebar_table()
-    sizes = table["sizes"]  # list of {"name": "DB16", "diameter_cm": 1.6, "area_cm2": 2.011}
+    sizes = table["sizes"]
 
     available = b - 2 * cover - 2 * d_stirrup
     if available <= 0:
@@ -3919,35 +4143,62 @@ def select_rebar(
 
     best: Optional[RebarSelection] = None
 
-    # 1) Try single-size combos (cheaper · cleaner)
+    def _over_reinforced(c: RebarSelection) -> bool:
+        # ρ_provided ที่ความลึกจริงของ combo นี้ > rho_max ? (ใช้ db ใหญ่สุด · n_layers ของ combo)
+        if not (h_cm and rho_max):
+            return False
+        nb = sum(n for _, n in c.main_bars)
+        mdb = max((int("".join(ch for ch in nm if ch.isdigit()) or 0) for nm, _ in c.main_bars), default=16) / 10.0
+        d = effective_depth_multilayer(h_cm, cover, d_stirrup, mdb, nb, c.n_layers)
+        return d <= 0 or (c.As_provided / (b * d)) > rho_max + 1e-9
+
+    def _key(c: RebarSelection):
+        # prefer (1) ชั้นน้อย → single ชนะ multi เสมอ
+        # (2) MULTILAYER: db เล็กกว่าก่อน (db เล็ก → c.g. ตื้น → d ใหญ่ → กำลังมากกว่าที่ As ใกล้กัน · Codex P2 false-failure)
+        #     single-layer: slot=0 (db ไม่กระทบ d มาก → ใช้ As เป็นหลัก = baseline เดิม)
+        # (3) over-provision น้อย (4) จำนวนเส้นน้อย (กัน 8-เส้นจิ๋วชนะ 2-เส้นปกติ)
+        maxdb = max((int("".join(ch for ch in nm if ch.isdigit()) or 0) for nm, _ in c.main_bars), default=0)
+        db_pref = maxdb if c.n_layers >= 2 else 0
+        return (c.n_layers, db_pref, round(c.As_provided, 4), sum(n for _, n in c.main_bars))
+
+    def _consider(combo: RebarSelection):
+        nonlocal best
+        if _over_reinforced(combo):     # ข้าม combo ที่ over-reinforced ที่ความลึกจริง (Codex P2 #26 · กัน false-failure)
+            return
+        if best is None or _key(combo) < _key(best):
+            best = combo
+
+    # 1) single-size combos
     for size in sizes:
         db = size["diameter_cm"]
         area_per_bar = size["area_cm2"]
-        # min clear spacing = max(db, 2.5 cm)
-        min_clear = max(db, 2.5)
-        for n in range(2, max_bars_per_layer + 1):
+        mc = min_clear_spacing(db)
+        per = min(max_bars_per_layer(available, db), PRACTICAL_MAX_PER_LAYER)   # เส้น/ชั้น · cap practical 6
+        if per < 1:                                     # เหล็กเส้นนี้ไม่ลอดความกว้าง → ข้าม (Codex P1)
+            continue
+        n_cap = MAX_REBAR_LAYERS * per
+        for n in range(2, n_cap + 1):
             if n * area_per_bar < As_required:
                 continue
-            # check fit: n bars + (n-1) clear spacing + n*db ≤ available
-            required_width = n * db + (n - 1) * min_clear
-            if required_width > available:
+            n_layers = -(-n // per)                     # ceil(n/per)
+            if n_layers > MAX_REBAR_LAYERS:
                 continue
-            # accept
-            combo = RebarSelection(
-                main_bars=[(size["name"], n)],
-                As_provided=n * area_per_bar,
-                spacing_min_clear=min_clear,
-                fits_in_one_layer=True,
-            )
-            # prefer combo closest to As_required (minimize over-provision)
-            if best is None or combo.As_provided < best.As_provided:
-                best = combo
-            break  # found smallest n for this size · move to next size
+            note = [] if n_layers == 1 else [
+                f"เหล็ก {n} เส้นจัด {n_layers} ชั้น (กว้างไม่พอชั้นเดียว · d ลดตาม c.g. · ระยะดิ่ง ≥{REBAR_LAYER_VCLEAR_CM} ซม.)"]
+            _consider(RebarSelection(
+                main_bars=[(size["name"], n)], As_provided=n * area_per_bar,
+                spacing_min_clear=mc, fits_in_one_layer=(n_layers == 1),
+                n_layers=n_layers, notes=note))
+            break  # smallest n for this size
 
-    # 2) Try 2-size mixes (e.g., 3-DB16 + 2-DB12) for efficiency
+    # 2) 2-size mixes
     for big in sizes:
         for small in sizes:
             if small["diameter_cm"] >= big["diameter_cm"]:
+                continue
+            mc = min_clear_spacing(big["diameter_cm"])          # ใช้ db ใหญ่ = conservative
+            per = min(max_bars_per_layer(available, big["diameter_cm"]), PRACTICAL_MAX_PER_LAYER)
+            if per < 1:                                 # bar ใหญ่ไม่ลอดความกว้าง → ข้าม (Codex P1 · กัน div-by-zero)
                 continue
             for n_big in range(2, 5):
                 for n_small in range(1, 3):
@@ -3955,26 +4206,16 @@ def select_rebar(
                     if total_area < As_required:
                         continue
                     n_total = n_big + n_small
-                    if n_total > max_bars_per_layer:
+                    n_layers = -(-n_total // per)
+                    if n_layers > MAX_REBAR_LAYERS:
                         continue
-                    # check fit
-                    min_clear = max(big["diameter_cm"], 2.5)
-                    required_width = n_total * big["diameter_cm"] + (n_total - 1) * min_clear
-                    # (use big db for conservative spacing)
-                    if required_width > available:
-                        continue
-                    combo = RebarSelection(
-                        main_bars=[
-                            (big["name"], n_big),
-                            (small["name"], n_small),
-                        ],
-                        As_provided=total_area,
-                        spacing_min_clear=min_clear,
-                        fits_in_one_layer=True,
-                        notes=["mixed-size combo · check production detailing"],
-                    )
-                    if best is None or combo.As_provided < best.As_provided:
-                        best = combo
+                    notes = ["mixed-size combo · check production detailing"]
+                    if n_layers > 1:
+                        notes.append(f"จัด {n_layers} ชั้น · d ลดตาม c.g.")
+                    _consider(RebarSelection(
+                        main_bars=[(big["name"], n_big), (small["name"], n_small)],
+                        As_provided=total_area, spacing_min_clear=mc,
+                        fits_in_one_layer=(n_layers == 1), n_layers=n_layers, notes=notes))
 
     return best
 
@@ -4047,43 +4288,152 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     # Step 5 · Rn
     out.Rn = compute_Rn(out.Mu_kg_cm, inp.b, out.d_assumed, PHI_FLEXURE)
 
-    # Step 6 · ρ_design (may raise SectionTooSmallError)
-    out.rho_design = compute_rho_design(inp.fc, inp.fy, out.Rn)
-
-    # Step 7 · limit check (may raise OverReinforcedError)
-    out.rho_final, limit_notes = apply_rho_limits(out.rho_design, out.rho_min, out.rho_max)
-    out.notes.extend(limit_notes)
-
-    # Step 8 · As_req
-    out.As_required = compute_As(out.rho_final, inp.b, out.d_assumed)
-
-    # Step 9 · rebar selection
-    out.rebar = select_rebar(
-        out.As_required, inp.b, inp.cover, inp.d_stirrup
-    )
-    if out.rebar is None:
-        out.notes.append("ไม่พบ rebar combo ที่ fit ในหน้าตัดนี้ · ต้องขยาย b หรือ ใช้ multi-layer (เกิน MVP)")
-        out.passes = False
-        return out
-
-    # Step 10 · d_actual after rebar selection
-    db_actual = out.rebar.main_bars[0][0]  # use primary bar
+    # rebar-table helper (ใช้ทั้ง singly + doubly path)
     rebar_table = _load_rebar_table()
-    db_actual_cm = next(
-        (s["diameter_cm"] for s in rebar_table["sizes"] if s["name"] == db_actual),
-        inp.db_assume,
-    )
-    out.d_actual = compute_effective_depth(inp.h, inp.cover, inp.d_stirrup, db_actual_cm)
 
-    # Step 11 · final check (flexure)
-    out.a_stress_block = compute_stress_block_depth(
-        out.rebar.As_provided, inp.fy, inp.fc, inp.b
-    )
-    out.Mn = compute_Mn(out.rebar.As_provided, inp.fy, out.d_actual, out.a_stress_block)
-    out.phi_Mn = PHI_FLEXURE * out.Mn
-    out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
-    if out.Mu_kg_cm > FLOAT_TOL:
-        out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
+    def _db_of(rb):
+        return next((s["diameter_cm"] for s in rebar_table["sizes"]
+                     if s["name"] == rb.main_bars[0][0]), inp.db_assume)
+
+    # Step 5.5 · ตัดสิน singly vs doubly — กำลัง singly สูงสุดที่ ρmax (DRMK book p70)
+    #   Mu ≤ φMn1_max → singly (เดิม · zero-reg) · เกิน + simply-supported → doubly (เสริมเหล็กรับแรงอัด)
+    #   ⚠️ doubly เฉพาะ SIMPLY_SUPPORTED — สมมติเหล็กดึงล่าง/เหล็กอัดบน · cantilever (fixed-end −M)
+    #   เหล็กดึงบน/อัดล่าง = สลับด้าน → ไม่รองรับใน scope นี้ → คงพฤติกรรมเดิม (raise OverReinforcedError) · Codex P1 #27
+    _As1_max = out.rho_max * inp.b * out.d_assumed
+    _phi_Mn1_max = PHI_FLEXURE * compute_Mn(
+        _As1_max, inp.fy, out.d_assumed,
+        compute_stress_block_depth(_As1_max, inp.fy, inp.fc, inp.b))
+    _use_doubly = (out.Mu_kg_cm > _phi_Mn1_max + FLOAT_TOL
+                   and inp.support == SupportType.SIMPLY_SUPPORTED)
+
+    if not _use_doubly:
+        # ═══════════ SINGLY-REINFORCED (path เดิม · ไม่แตะ · zero-reg) ═══════════
+        #   non-simply-supported ที่เกิน ρmax → compute_rho_design/apply_rho_limits raise เหมือนเดิม
+        # Step 6 · ρ_design (may raise SectionTooSmallError)
+        out.rho_design = compute_rho_design(inp.fc, inp.fy, out.Rn)
+
+        # Step 7 · limit check (may raise OverReinforcedError)
+        out.rho_final, limit_notes = apply_rho_limits(out.rho_design, out.rho_min, out.rho_max)
+        out.notes.extend(limit_notes)
+
+        # Step 8 · As_req
+        out.As_required = compute_As(out.rho_final, inp.b, out.d_assumed)
+
+        # Step 9 · rebar selection
+        out.rebar = select_rebar(
+            out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max
+        )
+        if out.rebar is None:
+            out.notes.append("ไม่พบ rebar combo ที่ fit ในหน้าตัดนี้ · ต้องขยาย b หรือ ใช้ multi-layer (เกิน MVP)")
+            out.passes = False
+            return out
+
+        # Step 10 · d_actual after rebar selection (multilayer-aware · c.g. หลายชั้น)
+        out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
+        # multilayer (nl≥2) → c.g. ลึกขึ้น → d เล็กลง → recompute As ที่ d จริง · bounded · honest
+        #   single-layer (nl=1) → d_actual = baseline เดิมเป๊ะ (h−cover−stir−db/2) · ไม่ iterate (zero-reg)
+        for _ in range(3):
+            if out.rebar.n_layers < 2 or out.d_actual >= out.d_assumed - 0.01:
+                break
+            try:
+                Rn2 = compute_Rn(out.Mu_kg_cm, inp.b, out.d_actual, PHI_FLEXURE)
+                rho2 = compute_rho_design(inp.fc, inp.fy, Rn2)
+                rf2, _n2 = apply_rho_limits(rho2, out.rho_min, out.rho_max)
+            except CivilCalcError:
+                break   # ที่ d จริงหน้าตัดไม่พอ → หยุด · ρ_provided check ด้านล่างจะจับ over-reinforced (Codex P1 #26)
+            As2 = compute_As(rf2, inp.b, out.d_actual)
+            rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max)
+            if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
+                break   # ไม่มี combo ดีกว่า → หยุด (รับผลปัจจุบัน)
+            out.rebar, out.As_required, out.rho_final, out.Rn, out.rho_design = rb2, As2, rf2, Rn2, rho2
+            d_prev = out.d_actual
+            out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, out.rebar, _db_of(out.rebar))
+            if abs(out.d_actual - d_prev) < 0.01:
+                break
+
+        # Step 11 · final check (flexure)
+        out.a_stress_block = compute_stress_block_depth(
+            out.rebar.As_provided, inp.fy, inp.fc, inp.b
+        )
+        out.Mn = compute_Mn(out.rebar.As_provided, inp.fy, out.d_actual, out.a_stress_block)
+        out.phi_Mn = PHI_FLEXURE * out.Mn
+        out.passes_flexure = out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL
+        if out.Mu_kg_cm > FLOAT_TOL:
+            out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
+        # ρ ที่ใช้จริง (As_provided) ที่ความลึกจริง ต้อง ≤ ρmax (singly-reinforced) — กัน over-reinforced
+        #   ที่ multilayer ทำให้ d เล็กลง (ครอบทุก path · แม้ recompute ไม่ raise · Codex P1 #26 round-2/3)
+        if out.rebar and out.d_actual > 0:
+            rho_prov = out.rebar.As_provided / (inp.b * out.d_actual)
+            if rho_prov > out.rho_max + 1e-9:
+                out.passes_flexure = False
+                out.notes.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({out.rho_max:.4f}) ที่ความลึกจริง d={out.d_actual:.2f} ซม. "
+                                 "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
+    else:
+        # ═══════════ DOUBLY-REINFORCED (NEW · DRMK book p70 · เหล็กรับแรงอัด) ═══════════
+        out.is_doubly = True
+        # fixed-point: req(d,d′) → เลือกเหล็ก → อัปเดต d,d′ เป็น geometry "เหล็กจริง" → วน จนชุดเหล็กนิ่ง (bar-set stable)
+        #   d′ = h − _rebar_d(rebar_compression) = centroid จากผิวบน (multilayer-aware · mirror · Codex P1 r1)
+        #   ที่จุดนิ่ง: dr คิดที่ d ของเหล็กจริง → As_prov/As′_prov ≥ req โดยสร้าง (req ตรง geometry · Codex P2 r6/r7)
+        d_prime = inp.cover + inp.d_stirrup + inp.db_assume / 2.0
+        d_cur, dr, rb, rbc, prev_key = out.d_assumed, None, None, None, None
+        for _ in range(12):
+            dr = compute_doubly_reinforced(out.Mu_kg_cm, inp.b, d_cur, d_prime,
+                                           inp.fc, inp.fy, out.beta1, out.rho_max)
+            if dr is None:
+                break
+            rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h)         # multilayer · ข้าม ρmax filter (ตั้งใจ)
+            rbc = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h)   # เหล็กอัด · ไม่จำกัด ρ ดึง
+            if rb is None or rbc is None:                                               # fit ไม่ได้ → fail (Codex P1 r3)
+                dr = None
+                break
+            key = (tuple(rb.main_bars), tuple(rbc.main_bars))
+            d_cur = _rebar_d(inp.h, inp.cover, inp.d_stirrup, rb, _db_of(rb))
+            d_prime = inp.h - _rebar_d(inp.h, inp.cover, inp.d_stirrup, rbc, _db_of(rbc))
+            if key == prev_key:               # ชุดเหล็กไม่เปลี่ยน → จุดนิ่ง
+                break
+            prev_key = key
+        # recompute requirement ที่ "geometry เหล็กจริง" (d_cur/d′ ของเหล็กชุดล่าสุด) · Codex P2 r6/r7
+        if dr is not None and rb is not None and rbc is not None:
+            dr = compute_doubly_reinforced(out.Mu_kg_cm, inp.b, d_cur, d_prime,
+                                           inp.fc, inp.fy, out.beta1, out.rho_max)
+        # consistency gate: เหล็กที่เลือก "พอ" กับ req ที่ geometry จริงไหม (As_prov ≥ As_req · As′_prov ≥ As′_req)
+        #   ผ่าน → reported req สอดคล้องเหล็กจริง (ไม่มี req>prov หลอกตา) · ไม่ผ่าน/ไม่ลู่เข้า → fail (conservative · Codex P2 r6/r7)
+        if (dr is None or rb is None or rbc is None
+                or rb.As_provided < dr["As"] - 0.05
+                or rbc.As_provided < dr["As_prime"] - 0.05):
+            out.notes.append("🔴 หน้าตัดเล็กเกิน/ไม่ลู่เข้าแม้เสริมเหล็กคู่ (doubly) · ต้องขยายหน้าตัด (h/b) หรือ เพิ่ม f'c")
+            out.rebar, out.rebar_compression = None, None
+            out.passes_flexure = False
+            out.passes = False
+            return out
+        out.rebar, out.rebar_compression = rb, rbc
+        out.d_actual = d_cur
+        out.As1, out.As2 = dr["As1"], dr["As2"]
+        out.As_required = dr["As"]
+        out.As_prime_required = dr["As_prime"]
+        out.rho_final = (out.rebar.As_provided / (inp.b * out.d_actual)) if out.d_actual > 0 else 0.0
+        out.rho_design = out.rho_final
+        # Step 11 (doubly) · verify φMn จากเหล็กที่จัดจริง (strain compatibility เต็ม · DRMK Ex 3.8)
+        As_c_prov = out.rebar_compression.As_provided if out.rebar_compression else 0.0
+        out.Mn, out.a_stress_block, out.fs_prime_ksc, _fs_t, _t_yields = analyze_doubly_capacity(
+            out.rebar.As_provided, As_c_prov, inp.b, out.d_actual, d_prime,
+            inp.fc, inp.fy, out.beta1)
+        # flag เหล็กอัดคราก/ไม่คราก จากผล "วิเคราะห์เหล็กจัดจริง" (ไม่ใช่ design dr · Codex P2 #27 r5)
+        out.comp_steel_yields = out.fs_prime_ksc >= inp.fy - 1.0
+        out.phi_Mn = PHI_FLEXURE * out.Mn
+        # ductility: เหล็กดึงต้องครากที่เหล็ก "จัดจริง" → φ=0.90 ถึงใช้ได้ (over-provision อาจทำเหล็กดึงไม่คราก · Codex P1 #27 r4)
+        out.passes_flexure = (out.phi_Mn >= out.Mu_kg_cm - FLOAT_TOL) and _t_yields
+        _yld = "คราก" if out.comp_steel_yields else f"ไม่คราก (fs′={out.fs_prime_ksc:.0f} ksc)"
+        out.notes.append(
+            f"หน้าตัดเสริมเหล็กคู่ (doubly · Mu เกินกำลัง singly ที่ ρmax): เหล็กดึง As={dr['As']:.2f} ซม.² "
+            f"(As1={dr['As1']:.2f}+As2={dr['As2']:.2f}) · เหล็กอัดบน As′={dr['As_prime']:.2f} ซม.² ({_yld}) "
+            f"· d′={d_prime:.1f} ซม. · DRMK book p70 · ควรขยายหน้าตัดก่อนถ้าทำได้")
+        if not _t_yields:
+            out.notes.append(
+                f"🔴 เหล็กดึงไม่คราก (fs={_fs_t:.0f} < fy={inp.fy:.0f} ksc) ที่เหล็กจัดจริง — "
+                "หน้าตัด over-reinforced หลังเลือกเหล็ก · φ=0.90 ใช้ไม่ได้ (ไม่ ductile) · ต้องขยายหน้าตัด หรือ ลด/ปรับเหล็ก")
+        if out.Mu_kg_cm > FLOAT_TOL:
+            out.safety_margin_pct = (out.phi_Mn - out.Mu_kg_cm) / out.Mu_kg_cm * 100.0
 
     # Step 11.5 · Session 2 · Shear stirrup design (only for simply-supported · Session 2 scope)
     if inp.support == SupportType.SIMPLY_SUPPORTED:
@@ -4261,12 +4611,12 @@ def _flexure_design_for_moment(
         rho_design = compute_rho_design(fc, fy, Rn)   # raises SectionTooSmallError if too small
         rho_final, limit_notes = apply_rho_limits(rho_design, rho_min, rho_max)
         As_req = compute_As(rho_final, b, d)
-        rebar = select_rebar(As_req, b, cover, d_stirrup)
+        rebar = select_rebar(As_req, b, cover, d_stirrup, h, rho_max)
         if rebar is None:
             out.update({"As_required": As_req, "rebar": None, "passes": False,
                         "note": "ไม่พบ rebar combo ที่ fit · ต้องขยาย b หรือ multi-layer"})
             return out
-        d_actual = compute_effective_depth(h, cover, d_stirrup, _db_cm(rebar))
+        d_actual = _rebar_d(h, cover, d_stirrup, rebar, _db_cm(rebar))
         a = compute_stress_block_depth(rebar.As_provided, fy, fc, b)
         Mn = compute_Mn(rebar.As_provided, fy, d_actual, a)
         phi_Mn = PHI_FLEXURE * Mn
@@ -4277,19 +4627,29 @@ def _flexure_design_for_moment(
             continue
         # depth stable but capacity short → bump steel proportional to shortfall
         As_target = As_req * (Mu_kgcm / max(phi_Mn, 1.0)) * 1.02
-        bumped = select_rebar(As_target, b, cover, d_stirrup)
+        bumped = select_rebar(As_target, b, cover, d_stirrup, h, rho_max)
         if bumped is not None:
             rebar = bumped
-            d_actual = compute_effective_depth(h, cover, d_stirrup, _db_cm(rebar))
+            d_actual = _rebar_d(h, cover, d_stirrup, rebar, _db_cm(rebar))
             a = compute_stress_block_depth(rebar.As_provided, fy, fc, b)
             Mn = compute_Mn(rebar.As_provided, fy, d_actual, a)
             phi_Mn = PHI_FLEXURE * Mn
         break
 
+    passes = phi_Mn >= Mu_kgcm - FLOAT_TOL
+    notes_out = list(limit_notes)
+    # ρ_provided ที่ความลึกจริง ต้อง ≤ ρmax — กัน over-reinforced ที่ multilayer ทำให้ d เล็กลง
+    #   (เหมือน design_beam · ครอบ continuous/cantilever path · Codex P1 #26 round-4)
+    if rebar and d_actual > 0:
+        rho_prov = rebar.As_provided / (b * d_actual)
+        if rho_prov > rho_max + 1e-9:
+            passes = False
+            notes_out.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({rho_max:.4f}) ที่ความลึกจริง d={d_actual:.2f} ซม. "
+                             "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
     out.update({"As_required": As_req, "rho_final": rho_final, "rebar": rebar,
-                "Rn": Rn, "notes": limit_notes,
+                "Rn": Rn, "notes": notes_out,
                 "d_actual": d_actual, "a_stress_block": a, "Mn": Mn, "phi_Mn": phi_Mn,
-                "passes": phi_Mn >= Mu_kgcm - FLOAT_TOL,
+                "passes": passes,
                 "safety_margin_pct": (phi_Mn - Mu_kgcm) / Mu_kgcm * 100.0})
     return out
 
@@ -5832,12 +6192,40 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         A(`${lbl}: หน้าตัดป้าย b×h ตรง engine (drift probe)`,
           !res || !res.b || secTxt.indexOf(res.b + '×' + res.h) !== -1,
           'engine=' + (res ? res.b + '×' + res.h : '?') + ' · section="' + secTxt.replace(/\s+/g, '').slice(0, 24) + '"');
+        // §A drift guard: จำนวนเหล็กในหน้าตัด == engine detailBars (governing) — automated catch ปิด display cascade ถาวร
+        const eb = TT().detailBars();
+        if (eb) {
+          const govN = arr => (arr || []).reduce((mx, x) => (x && x.n > mx) ? x.n : mx, 0);
+          const gBot = govN(eb.spanBot);   // governing +M span bottom (โชว์ใน section 'mid')
+          A(`${lbl}: หน้าตัด เหล็กล่าง count == engine (§A · governing)`,
+            gBot === 0 || secTxt.indexOf('ล่าง ' + gBot) !== -1,
+            'engine ล่าง=' + gBot + ' · section="' + secTxt.replace(/\s+/g, ' ').slice(0, 40) + '"');
+          if (mode === 'cont') {
+            const gTop = govN(eb.supTop);   // governing −M support top (overview section 'sup')
+            A(`${lbl}: หน้าตัด เหล็กบน count == engine (§A · governing)`,
+              gTop === 0 || secTxt.indexOf('บน ' + gTop) !== -1,
+              'engine บน=' + gTop + ' · section="' + secTxt.replace(/\s+/g, ' ').slice(0, 40) + '"');
+          }
+        }
       });
 
       // ── C · curtailment continuous + จุดโหลด → A2a(ล่าง)+A2b(บน) envelope exact ครบ → applicable=true ──
       TT().setMode('cont'); TT().setSection(35, 65, 240, 'SD40');
       TT().setPoints([{ x: 2.5, P: 6000, kind: 'LL' }]);   // จุดโหลด → envelope จริง (บน-ล่าง exact)
       TT().recompute(); TT().setCtab('detail'); TT().drawDetailing();
+      // §A position guard: หน้าตัด 3 ช่อง หัวเสาซ้าย/ขวา = engine supTop ตำแหน่งจริงของช่วงวิกฤต (ไม่ใช่ governing รวม) — ปิด Codex P2 asymmetric/cantilever
+      const eb2 = TT().detailBars();
+      if (eb2 && eb2.supTop && eb2.spanBot) {
+        let gi = -1, gn = -1; eb2.spanBot.forEach((x, i) => { if (x && x.n > gn) { gn = x.n; gi = i; } }); gi = Math.max(0, gi);
+        const expTop = i => { const t = eb2.supTop[i]; return (t && t.n) ? t.n : 2; };   // เสาไม่มี −M → nominal 2
+        const capN = el => { const mm = ((el && el.textContent) || '').match(/บน\s*(\d+)/); return mm ? +mm[1] : null; };
+        const secs = [...document.querySelectorAll('#sectionsRow > div')];
+        const leftN = secs[0] ? capN(secs[0]) : null, rightN = secs[2] ? capN(secs[2]) : null;
+        A('§A หน้าตัด 3 ช่อง: หัวเสาซ้าย == engine supTop[gIdx] (position-accurate · Codex P2)',
+          leftN === null || leftN === expTop(gi), 'left บน=' + leftN + ' exp=' + expTop(gi));
+        A('§A หน้าตัด 3 ช่อง: หัวเสาขวา == engine supTop[gIdx+1] (position-accurate · Codex P2)',
+          rightN === null || rightN === expTop(gi + 1), 'right บน=' + rightN + ' exp=' + expTop(gi + 1));
+      }
       const warnEl = document.getElementById('ccCurtailWarn');
       A('curtailment A2b: cont+จุดโหลด → banner ซ่อน (applicable=true · บน-ล่าง exact · ไม่มี ⚠️)',
         !!(warnEl && (warnEl.classList.contains('step-hidden') || warnEl.textContent.trim().length === 0)),
@@ -5868,6 +6256,33 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         !!sSvg && sSvg.getAttribute('data-curt') === 'engine',
         sSvg ? sSvg.getAttribute('data-curt') : 'n/a');
       TT().setPoints([]); TT().setMode('cont');
+
+      // ── C3 · doubly-reinforced (เหล็กรับแรงอัด · DRMK book p70) — section top == engine As′ ──
+      TT().setMode('single'); TT().setSection(20, 40, 240, 'SD40'); TT().setPoints([]);
+      const _dtb = document.querySelector('#loadRows');
+      const _dclean = () => [..._dtb.querySelectorAll('tr[data-auditinj]')].forEach(r => r.remove());
+      _dclean();
+      [['DL', 8 * 101.97], ['LL', 8 * 101.97]].forEach(([k, kg]) => {   // โหลดหนัก → เกิน singly ρmax → doubly
+        const tr = document.createElement('tr'); tr.dataset.auditinj = '1'; tr.dataset.kind = k;
+        tr.innerHTML = `<td>${k}</td><td class="load-val" data-kg="${kg}">${kg}</td>`; _dtb.appendChild(tr);
+      });
+      TT().recompute(); TT().drawMainSections();
+      const _dr = TT().res(), _deb = TT().detailBars();
+      A('doubly: คานแคบ+โหลดหนัก → is_doubly + ผ่าน (เสริมเหล็กรับแรงอัด · DRMK book p70)',
+        !!(_dr && _dr.isDoubly && _dr.pass), 'isDoubly=' + (_dr && _dr.isDoubly) + ' pass=' + (_dr && _dr.pass));
+      const _dsvg = document.querySelector('#sectionMain svg');
+      let _dtop = 0;
+      if (_dsvg) { const vb = _dsvg.getAttribute('viewBox').split(' ').map(Number); _dtop = [..._dsvg.querySelectorAll('circle')].map(c => +c.getAttribute('cy')).filter(y => y < vb[3] / 2).length; }
+      A('doubly: หน้าตัด เหล็กบน(midspan) = As′ engine count (เหล็กรับแรงอัด · ไม่ใช่ nominal)',
+        !!(_deb && _deb.isDoubly) && _deb.comp.n > 0 && _dtop === _deb.comp.n,
+        'engComp=' + (_deb && _deb.comp && _deb.comp.n) + ' drawnTop=' + _dtop);
+      // show-work ต้องเป็น doubly (As′/เสริมเหล็กคู่) ไม่ใช่ singly ρ_final ที่ขัดกับ verdict (Codex P2 #27 r4)
+      TT().renderWork();
+      const _dwork = (document.querySelector('#workSteps') || {}).textContent || '';
+      A('doubly: show-work แสดงสูตรเหล็กคู่ (As′/เสริมเหล็กคู่) ไม่ขัด verdict',
+        /เสริมเหล็กคู่|As′/.test(_dwork) && !/ρ_final/.test(_dwork),
+        'hasDoubly=' + /เสริมเหล็กคู่|As′/.test(_dwork) + ' hasSinglyRhoFinal=' + /ρ_final/.test(_dwork));
+      _dclean(); TT().setPoints([]); TT().setMode('cont');
 
       // ── D · mode-switch integrity (applyMode toggle) ──
       TT().setMode('cont'); TT().render();

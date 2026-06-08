@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
 
       - name: Syntax check (all Python files)
-        run: python -m py_compile calc.py embed_calc.py uat_recheck.py uat_continuous.py uat_curtailment.py tools/web_arch_audit.py
+        run: python -m py_compile calc.py embed_calc.py uat_recheck.py uat_continuous.py uat_curtailment.py uat_multilayer.py uat_doubly.py tools/web_arch_audit.py
 
       - name: Web arch guard (sensor · warn-only · non-blocking)
         continue-on-error: true
@@ -33,3 +33,9 @@ jobs:
 
       - name: Engine tests — curtailment / detailing (fig-8.32 + moment envelope)
         run: python uat_curtailment.py
+
+      - name: Engine tests — multi-layer rebar (clear spacing + c.g. depth)
+        run: python uat_multilayer.py
+
+      - name: Engine tests — doubly-reinforced (compression steel · DRMK book p70)
+        run: python uat_doubly.py

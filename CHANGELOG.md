@@ -3,10 +3,23 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/) · เวอร์ชันตาม [SemVer](https://semver.org/)
 
 ## [Unreleased]
+
+## [0.6.0] — 2026-06-08
 ### เพิ่ม
-- **Beam Workspace Phase 1 — ตั้งชื่อกริด + เบอร์คาน + metadata** (ทั้ง 2 โหมด · in-memory) — ตั้งชื่อกริดเอง (free-text · cap 8 ตัว) · การ์ดเบอร์คาน (prefix B/GB/RB/CB + เลข + ชั้น + หมายเหตุ · optional ไม่บล็อกคำนวณ) · หัวผล cross-ref "คาน B1 · ช่วงกริด g1–g2 · ชั้น X" · ป้าย "ปลายยื่น" ที่คานยื่น · ชื่อ display-only (engine เข้าถึง by index) · XSS-safe · **ไม่แตะ engine** · runDesignAudit 27→32 (+5 naming guards)
-- ตั้งค่า GitHub workflow: branch protection (main + dev), PR template, CI (รันเทสต์ Python ทุก PR), README, CHANGELOG
-- **เครื่องมือ dev (ไม่ใช่ฟีเจอร์แอป)** — `tools/web_arch_audit.py` sensor วัดสุขภาพโครงสร้าง `index.html` (script-block size · function length · cross-scope globals · responsibility count → SPLIT verdict · **sensor-only ไม่แตะโค้ด**) + CI step **warn-only** (ไม่บล็อก build) + trend log `tools/arch-trend.jsonl`
+- **Multi-layer rebar (การจัดเหล็กหลายชั้น)** — แก้ honeycomb: เดิมเรียงเหล็กแถวเดียวเสมอ + ระยะห่างไม่รวมมวลรวม → `s_clear = max(db, 2.5, 1.33·d_agg)` · `max_bars_per_layer` (เทียบ DRMK ตาราง 3.3) · `effective_depth_multilayer` (c.g. หลายชั้น · ≤ ชั้นเดียวเสมอ) · guard ρ_provided ≤ ρmax ทุก path · **§A: รูปหน้าตัดดึงเบอร์+จำนวน+ชั้นจาก engine จริง (`detailBars`)** ต่อตำแหน่ง (governing span/support · ปิด display drift ถาวร)
+- **Doubly-reinforced beam (คานเสริมเหล็กรับแรงอัด · ช่วงเดียว)** — ปลดล็อกคานแคบ/โหลดหนักที่เกิน ρmax (เดิม error) → เพิ่มเหล็กรับแรงอัด As′ (บน) ตาม DRMK บท 3 (เสริมเหล็กคู่) · As = As1+As2 · ตรวจการครากเหล็กดึง/อัดด้วย strain compatibility · fixed-point design (req↔geometry สอดคล้อง) · **เฉพาะ simply-supported** · โชว์ As′ ในหน้าตัด/ตาราง/วิธีทำ
+### ภายใน (กันถดถอย)
+- ตาข่ายเทสต์: `uat_multilayer` (34) + `uat_doubly` (30) · `runDesignAudit` 38→46 · baseline sweep (1656 same / 0 regression) · knowledge-first จาก DRMK → vault
+
+## [0.5.0] — 2026-06-07
+### เพิ่ม
+- **ระยะหยุดเหล็ก (Curtailment / Bar cutoff)** — ระยะตัด-ยื่นเหล็กจริงตาม DRMK รูป 8.32 (เหล็กล่าง L/8 · เหล็กบน L/4·L/3 จากหน้าเสา · เลยจุดดัดกลับ ≥ max(d,12db)) · **moment envelope จริง** เมื่อมีจุดโหลด (ช่วงเดียว + ต่อเนื่อง · asymmetric ซ้าย/ขวา) · รูปด้านข้างคาน + ตาราง + BBS wire ตรง engine
+- **Transparency "ดูวิธีทำ"** — แสดงสูตร + แทนค่า + อ้างอิง ว.ส.ท./DRMK ทีละสเต็ป + อัตราส่วนใช้กำลัง D/C (%) 2 โหมด
+- **พิมพ์ PDF รายการคำนวณ ก.ว.** — A4 print-CSS + title block + ช่องเซ็น (vector · 2 โหมด)
+- **Beam Workspace Phase 1** — ตั้งชื่อกริด + เบอร์คาน (prefix B/GB/RB/CB) + metadata + per-mode grid state (display-only · ไม่แตะ engine)
+### ภายใน
+- ตาข่ายเทสต์ถาวร: `runTests()` (value parity) + `runDesignAudit()` (UI drift) + `window.__civilTest` hook
+- เครื่องมือ dev `tools/web_arch_audit.py` (sensor สุขภาพโครงสร้าง · warn-only ใน CI) · GitHub workflow (branch protection · PR template · CI)
 
 ## [0.4.0] — 2026-05-30
 ### เพิ่ม
