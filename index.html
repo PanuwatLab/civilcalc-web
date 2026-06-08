@@ -1451,6 +1451,8 @@
     setPartials(arr) { ccModel.partials = (arr || []).map((q, i) => ({ id: 950 + i, x0: q.x0, x1: q.x1, w: q.w })); },
     recompute, render, renderWork,
     drawMainSections, drawDetailing,
+    detailBars: () => detailBars(),   // §A · ให้ audit เทียบจำนวนเหล็กหน้าตัด == engine ต่อ location
+
     ctab: () => state.ctab,
     setCtab(t) { state.ctab = t; },
     // selectCtab — สลับแท็บผ่าน DOM-updating path เดียวกับ click handler (sync state+DOM · Codex P3)
@@ -2012,7 +2014,7 @@
   // detailBars — จำนวน/ขนาดเหล็กจาก engine ต่อตำแหน่ง · แยก หลัก(2 มุม) + เสริม
   //   ตาม convention [[Convention - Beam Rebar Layout (Main + Extra)]] (pi confirm 2026-06-05)
   function detailBars() {
-    const fromRebar = rb => { if (!rb || !rb.main_bars || !rb.main_bars.length) return { n: 0, size: 'DB16', list: [] }; const list = rb.main_bars.map(t => [t[0], t[1]]); const n = list.reduce((s, t) => s + t[1], 0); return { n, size: list[0][0], list }; };
+    const fromRebar = rb => { if (!rb || !rb.main_bars || !rb.main_bars.length) return { n: 0, size: 'DB16', list: [], n_layers: 1 }; const list = rb.main_bars.map(t => [t[0], t[1]]); const n = list.reduce((s, t) => s + t[1], 0); return { n, size: list[0][0], list, n_layers: rb.n_layers || 1 }; };   // n_layers จาก engine RebarSelection → หน้าตัดวาดชั้นตรง (ปิด display cascade)
     const fromStr = s => { const p = (s && s !== '—') ? s.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean) : []; const list = p.map(mm => [mm[2], +mm[1]]); const n = list.reduce((a, t) => a + t[1], 0); return { n, size: list.length ? list[0][0] : 'DB16', list }; };
     const stir = sh => ({ bar: (sh && sh.bar) || 'RB9', s1: sh && sh.S1_cm, s2: sh && sh.S2_cm });
     if (state.mode === 'cont') {
@@ -2025,7 +2027,8 @@
       };
     }
     const m = liveData();
-    return { spanBot: [fromStr(m.rebarMain)], supTop: [{ n: 0, size: 'DB16' }, { n: 0, size: 'DB16' }], spanStir: [{ bar: m.stirBar || 'RB9', s1: m.S1, s2: m.S2 }] };  // ปลายคานเดี่ยว = ไม่มี −M
+    const sb = fromStr(m.rebarMain); sb.n_layers = m.nLayers || 1;   // single bottom n_layers จาก engine result (fromStr อ่านจาก string ไม่มีชั้น → เสียบจาก state.res.nLayers)
+    return { spanBot: [sb], supTop: [{ n: 0, size: 'DB16', n_layers: 1 }, { n: 0, size: 'DB16', n_layers: 1 }], spanStir: [{ bar: m.stirBar || 'RB9', s1: m.S1, s2: m.S2 }] };  // ปลายคานเดี่ยว = ไม่มี −M
   }
 
   // curtData — ระยะหยุดเหล็กจาก engine (out.curtailment) จัดเรียงตาม index span/node เหมือน detailBars · parity-safe (อ่านตรง ไม่คำนวณซ้ำ)
@@ -2342,7 +2345,7 @@
 
   /* ── cross-sections (rcBeamSection style) ── */
   function buildSection(loc) {
-    const m = liveData();   // Phase 4B fix · ป้าย b×h = engine จริง (เดิมแช่ MOCK → รูปหน้าตัดโชว์ขนาดผิด) · bar counts ยัง schematic
+    const m = liveData();   // Phase 4B fix · ป้าย b×h = engine จริง (เดิมแช่ MOCK → รูปหน้าตัดโชว์ขนาดผิด) · bar counts+layers = engine จริงผ่าน detailBars (§A · ปิด cascade)
 
     const W = 130, Hh = 150, pad = 22;
     const bw = W - pad * 2, bh = Hh - pad * 2;
@@ -2357,10 +2360,23 @@
       const iw = (bw - 2 * si) * 0.42;
       svg.appendChild(svgEl('rect', { x: W / 2 - iw / 2, y: pad + si + 2, width: iw, height: bh - 2 * si - 4, fill: 'none', stroke: '#94A3B8', 'stroke-width': 1, rx: 3 }));
     }
-    // bar counts depend on location
-    let nTop = 2, nBot = 3;
-    if (loc === 'mid') { nTop = 2; nBot = state.mode === 'cont' ? 3 : 3; }
-    if (loc === 'left' || loc === 'right') { nTop = state.mode === 'cont' ? 6 : 2; nBot = state.mode === 'cont' ? 3 : 2; }
+    // bar counts + layers จาก engine จริง (detailBars · ปิด display cascade ถาวร · เลิก hardcode/recompute)
+    //   governing section: 'mid' = ช่ว ง +M เหล็กล่างมากสุด · 'left'/'right' = หัวเสา −M เหล็กบนมากสุด
+    //   (ตรง engine rec_top "เหล็กบนพาดผ่านทุกหัวเสาภายใน" + BBS/elevation ที่ใช้ maxSize · single-source)
+    const bars = detailBars();
+    const gov = arr => (arr || []).reduce((best, x) => (x && x.n > (best ? best.n : -1)) ? x : best, null);  // เลือกหน้าตัดวิกฤต (max-n · กันกับดัก 0-เส้นเสาปลายนอก)
+    let nTop = 2, nBot = 3, topLayers = 0, botLayers = (m && m.nLayers) || 0;   // fallback nominal เมื่อ engine ยังไม่ ready (bars=null)
+    if (loc === 'mid') {
+      const b = bars && gov(bars.spanBot);
+      nTop = 2;                                              // กลางช่วง: เหล็กบน = nominal hanger (engine ไม่คิด +M top)
+      if (b && b.n) { nBot = b.n; botLayers = b.n_layers || 0; }
+      else nBot = 3;
+    } else if (loc === 'left' || loc === 'right') {
+      const t = bars && gov(bars.supTop);
+      nBot = 2; botLayers = 0;                              // หัวเสา: เหล็กล่าง = เส้นหลักวิ่งผ่าน (nominal 2 มุม)
+      if (t && t.n) { nTop = t.n; topLayers = t.n_layers || 0; }
+      else nTop = state.mode === 'cont' ? 2 : 2;            // ไม่มี −M (เสาปลายนอก/คานเดี่ยว) → nominal 2
+    }
     // จำนวนชั้นจากความกว้างจริง (port สูตร engine: s_clear=max(db,2.5,1.33·d_agg) · cap 6 เส้น/ชั้น) → กันวาดเบียดแถวเดียว
     const _layers = (n, db_cm) => {
       const cov = (m && m.cover) || (typeof P !== 'undefined' && P.cover) || 4;   // cover จาก engine result (snapshot · ตรงผลที่คำนวณ · Codex P2) → fallback live P.cover
@@ -2387,8 +2403,8 @@
       }
       return nL;
     };
-    const nlTop = dotsRows(nTop, pad + si + 8, 3.4, +1, 2.0);   // เหล็กบน · ชั้นถัดลงด้านใน (−M · recompute · engine top n_layers ยังไม่ expose)
-    const nlBot = dotsRows(nBot, Hh - pad - si - 8, 3.6, -1, 2.0, (m && m.nLayers) || 0);  // เหล็กล่าง +M · ใช้ n_layers จาก engine result (Codex P2)
+    const nlTop = dotsRows(nTop, pad + si + 8, 3.4, +1, 2.0, topLayers);   // เหล็กบน (−M หัวเสา) · ใช้ n_layers จาก engine support top · 0 → recompute fallback
+    const nlBot = dotsRows(nBot, Hh - pad - si - 8, 3.6, -1, 2.0, botLayers);  // เหล็กล่าง (+M) · ใช้ n_layers จาก engine span bottom · 0 → recompute fallback
     // labels
     const tl = svgEl('text', { x: W / 2, y: 13, 'font-size': 9, fill: '#64748B', 'text-anchor': 'middle' }); tl.textContent = `${m.b}×${m.h}`; svg.appendChild(tl);
     return { svg, nTop, nBot };
@@ -5970,6 +5986,21 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         A(`${lbl}: หน้าตัดป้าย b×h ตรง engine (drift probe)`,
           !res || !res.b || secTxt.indexOf(res.b + '×' + res.h) !== -1,
           'engine=' + (res ? res.b + '×' + res.h : '?') + ' · section="' + secTxt.replace(/\s+/g, '').slice(0, 24) + '"');
+        // §A drift guard: จำนวนเหล็กในหน้าตัด == engine detailBars (governing) — automated catch ปิด display cascade ถาวร
+        const eb = TT().detailBars();
+        if (eb) {
+          const govN = arr => (arr || []).reduce((mx, x) => (x && x.n > mx) ? x.n : mx, 0);
+          const gBot = govN(eb.spanBot);   // governing +M span bottom (โชว์ใน section 'mid')
+          A(`${lbl}: หน้าตัด เหล็กล่าง count == engine (§A · governing)`,
+            gBot === 0 || secTxt.indexOf('ล่าง ' + gBot) !== -1,
+            'engine ล่าง=' + gBot + ' · section="' + secTxt.replace(/\s+/g, ' ').slice(0, 40) + '"');
+          if (mode === 'cont') {
+            const gTop = govN(eb.supTop);   // governing −M support top (โชว์ใน section 'left')
+            A(`${lbl}: หน้าตัด เหล็กบน count == engine (§A · governing)`,
+              gTop === 0 || secTxt.indexOf('บน ' + gTop) !== -1,
+              'engine บน=' + gTop + ' · section="' + secTxt.replace(/\s+/g, ' ').slice(0, 40) + '"');
+          }
+        }
       });
 
       // ── C · curtailment continuous + จุดโหลด → A2a(ล่าง)+A2b(บน) envelope exact ครบ → applicable=true ──
