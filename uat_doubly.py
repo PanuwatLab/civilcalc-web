@@ -123,6 +123,21 @@ except (calc.OverReinforcedError, calc.SectionTooSmallError) as e:
              f"raised {type(e).__name__} (เดิม · ถูกต้อง)")
 
 print("\n" + "=" * 60)
+print(" K · final-geometry recompute — non-converged iteration ไม่ false-fail (Codex P2 #27 r6)")
+print("=" * 60)
+# loop ออกโดยไม่ converge → ต้อง recompute ที่ geometry สุดท้าย (เดิม: bars stale → false-fail)
+inpK = calc.BeamInput(b=20, h=40, L=5.0, fc=210, fy=2400, cover=3.0,
+                      db_assume=1.6, d_stirrup=0.9, DL=40.0, LL=0.0,
+                      load_combo=calc.LoadCombo.ACI_LEGACY)
+outK = calc.design_beam(inpK)
+chk_true("K non-converged doubly ผ่าน (recompute final geometry)", outK.is_doubly and outK.passes_flexure,
+         f"is_doubly={outK.is_doubly} passes_flex={outK.passes_flexure} margin={outK.safety_margin_pct:.1f}%")
+# bars consistent กับ d_actual: As_provided ≥ As_required ที่ geometry สุดท้าย
+chk_true("K bars consistent กับ geometry สุดท้าย (As_prov ≥ As_req)",
+         outK.rebar and outK.rebar.As_provided >= outK.As_required - 1e-6,
+         f"As_prov={outK.rebar.As_provided if outK.rebar else None} As_req={outK.As_required:.2f}")
+
+print("\n" + "=" * 60)
 print(" J · comp_steel_yields flag consistent with analyzed fs′ (Codex P2 #27 r5)")
 print("=" * 60)
 inpJ = calc.BeamInput(b=12, h=35, L=3.0, fc=210, fy=2400, cover=3.0,

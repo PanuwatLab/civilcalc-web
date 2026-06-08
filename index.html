@@ -4401,7 +4401,21 @@ def design_beam(inp: BeamInput) -> BeamOutput:
             out.passes_flexure = False
             out.passes = False
             return out
-        out.d_actual = d_cur
+        # final pass: recompute + reselect ที่ geometry สุดท้าย (กัน dr/เหล็ก stale เมื่อ loop ออกโดยไม่ converge ·
+        #   bars ต้องอิง lever arm สุดท้าย ไม่ใช่ของรอบก่อน · Codex P2 #27 r6)
+        dr = compute_doubly_reinforced(out.Mu_kg_cm, inp.b, d_cur, d_prime,
+                                       inp.fc, inp.fy, out.beta1, out.rho_max)
+        rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h) if dr else None
+        rbc = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h) if dr else None
+        if dr is None or rb is None or rbc is None:
+            out.notes.append("🔴 หน้าตัดเล็กเกินแม้เสริมเหล็กคู่ (doubly) · ต้องขยายหน้าตัด (h/b) หรือ เพิ่ม f'c")
+            out.rebar, out.rebar_compression = None, None
+            out.passes_flexure = False
+            out.passes = False
+            return out
+        out.rebar, out.rebar_compression = rb, rbc
+        out.d_actual = _rebar_d(inp.h, inp.cover, inp.d_stirrup, rb, _db_of(rb))
+        d_prime = inp.h - _rebar_d(inp.h, inp.cover, inp.d_stirrup, rbc, _db_of(rbc))
         out.As1, out.As2 = dr["As1"], dr["As2"]
         out.As_required = dr["As"]
         out.As_prime_required = dr["As_prime"]
