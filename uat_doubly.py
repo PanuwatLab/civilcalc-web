@@ -122,6 +122,25 @@ except (calc.OverReinforcedError, calc.SectionTooSmallError) as e:
              f"raised {type(e).__name__} (เดิม · ถูกต้อง)")
 
 print("\n" + "=" * 60)
+print(" H · compression bars can't fit → fail (no false-pass · Codex P1 #27 r3)")
+print("=" * 60)
+# b=10 แคบมาก · As′ ต้องการเยอะ → ไม่มี combo เหล็กอัด fit → ต้อง passes=False + rebar_compression=None
+# (เดิม: As_c=0 → วิเคราะห์เป็น singly over-reinforced → false-pass)
+inpH = calc.BeamInput(b=10, h=25, L=10.0, fc=350, fy=5000, cover=3.0,
+                      db_assume=1.6, d_stirrup=0.9, DL=2.0, LL=0.0,
+                      load_combo=calc.LoadCombo.ACI_LEGACY)
+try:
+    outH = calc.design_beam(inpH)
+    chk_true("H compression can't fit → NOT passing", not outH.passes,
+             f"passes={outH.passes} is_doubly={outH.is_doubly} comp={outH.rebar_compression}")
+    chk_true("H no passing design with rebar_compression=None",
+             not (outH.passes and outH.is_doubly and outH.rebar_compression is None),
+             f"passes={outH.passes} comp={outH.rebar_compression}")
+except (calc.OverReinforcedError, calc.SectionTooSmallError):
+    chk_true("H compression can't fit → NOT passing", True, "raised (acceptable)")
+    chk_true("H no passing design with rebar_compression=None", True, "raised (acceptable)")
+
+print("\n" + "=" * 60)
 n_pass, n_fail = len(PASS), len(FAIL)
 print(f" RESULT: {n_pass} PASS / {n_fail} FAIL  {'ALL GREEN' if not n_fail else 'SEE FAILURES'}")
 print("=" * 60)

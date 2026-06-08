@@ -4358,11 +4358,12 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 break
             # เหล็กดึง As — ข้าม over-reinforced filter (doubly เกิน singly ρmax โดยตั้งใจ) แต่คง multilayer (ส่ง h_cm)
             rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h)
-            if rb is None:
-                dr = None
-                break
             # เหล็กอัด As′ (บน) — ไม่ใส่ ρmax filter (เหล็กอัดไม่จำกัด ρ ดึง) · ใช้กำหนด d′ จริง
             rbc = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h)
+            # เหล็กดึง "หรือ" เหล็กอัด fit ไม่ได้ → doubly ใช้ไม่ได้ · ต้อง fail (ไม่ใช่วิเคราะห์ As_c=0 = false-pass · Codex P1 #27 r3)
+            if rb is None or rbc is None:
+                out.rebar, out.rebar_compression, dr = None, None, None
+                break
             out.rebar, out.rebar_compression = rb, rbc
             d_new = _rebar_d(inp.h, inp.cover, inp.d_stirrup, rb, _db_of(rb))
             # d′ จากเบอร์เหล็กอัดจริง (Codex P1 #27 · เดิมแช่ db_assume → over-estimate φMn → false-pass)
