@@ -3,6 +3,11 @@
 รูปแบบตาม [Keep a Changelog](https://keepachangelog.com/) · เวอร์ชันตาม [SemVer](https://semver.org/)
 
 ## [Unreleased]
+### เพิ่ม
+- **Doubly-reinforced — คานต่อเนื่อง / คานยื่น (เหล็กรับแรงอัดสลับด้าน)** — ขยาย doubly จากช่วงเดียว (v0.6.0) ไปยังคานต่อเนื่อง/คานยื่นที่เกิน ρmax: −M หัวเสา/ปลายยื่น (เหล็กดึงบน · เหล็กอัด **ล่าง**) และ +M ช่วง (เหล็กดึงล่าง · เหล็กอัด **บน**) — แทนที่ hard-fail "หน้าตัดไม่พอ" เดิม · helper `_doubly_design_for_moment` (New Module · `design_beam` ช่วงเดียวไม่แตะ = zero-reg by construction) · ผลตรงกับช่วงเดียวเป๊ะ (face-agnostic · ตาราง+รูปหน้าตัด+**BBS** โชว์ As′ หน้าถูกต้อง)
+- **BBS (ตารางตัดเหล็ก) รวมเหล็กรับแรงอัด** — เพิ่มแถวเหล็กอัด As′ ลง BBS ทั้ง 2 โหมด (มาร์ก `TC`/`MC` · ตำแหน่ง "ล่าง·รับอัด·หัวเสา" / "บน·รับอัด·กลางช่วง") → takeoff ครบ ไม่ขัดกับตาราง/หน้าตัด (ปิด sibling-surface gap · รวมช่วงเดียว #27 ที่เดิมก็ขาด)
+### ภายใน (กันถดถอย)
+- ตาข่ายเทสต์ใหม่ `uat_doubly_continuous` (31 · parity กับ single-span ที่ verify DRMK Ex 3.10) + `runDesignAudit` 46→50 (guard หน้าวางเหล็กอัด −M = ล่าง + BBS มีแถวเหล็กอัด 2 โหมด) · zero-reg: recheck 65 · continuous 25 · multilayer 34 · curtailment 69 · doubly 30 · runTests 8
 
 ## [0.6.0] — 2026-06-08
 ### เพิ่ม

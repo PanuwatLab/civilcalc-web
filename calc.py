@@ -1958,32 +1958,130 @@ def _flexure_design_for_moment(
 
     passes = phi_Mn >= Mu_kgcm - FLOAT_TOL
     notes_out = list(limit_notes)
+    over_reinforced = False
     # ρ_provided ที่ความลึกจริง ต้อง ≤ ρmax — กัน over-reinforced ที่ multilayer ทำให้ d เล็กลง
     #   (เหมือน design_beam · ครอบ continuous/cantilever path · Codex P1 #26 round-4)
     if rebar and d_actual > 0:
         rho_prov = rebar.As_provided / (b * d_actual)
         if rho_prov > rho_max + 1e-9:
             passes = False
+            over_reinforced = True   # marker → _safe_flexure_design ลอง doubly fallback (continuous/cantilever)
             notes_out.append(f"🔴 ρ ที่ใช้ ({rho_prov:.4f}) > ρmax ({rho_max:.4f}) ที่ความลึกจริง d={d_actual:.2f} ซม. "
                              "— over-reinforced (singly-reinforced ไม่ผ่าน) · ต้องขยายหน้าตัด หรือ ใส่เหล็กรับแรงอัด")
     out.update({"As_required": As_req, "rho_final": rho_final, "rebar": rebar,
                 "Rn": Rn, "notes": notes_out,
                 "d_actual": d_actual, "a_stress_block": a, "Mn": Mn, "phi_Mn": phi_Mn,
-                "passes": passes,
+                "passes": passes, "_over_reinforced": over_reinforced,
                 "safety_margin_pct": (phi_Mn - Mu_kgcm) / Mu_kgcm * 100.0})
     return out
 
 
-def _safe_flexure_design(Mu_kNm, b, h, fc, fy, cover, d_stirrup, db_assume):
-    """_flexure_design_for_moment that never raises: section inadequate (over-reinforced /
-    too small for singly-reinforced) → graceful failing dict instead of crashing the run.
-    (Cantilevers commonly produce large hogging moments → must degrade, not crash.)"""
+def _safe_flexure_design(Mu_kNm, b, h, fc, fy, cover, d_stirrup, db_assume, comp_on_top=True):
+    """_flexure_design_for_moment that never raises: section inadequate → degrade gracefully.
+
+    เมื่อ singly over-reinforced (raise SectionTooSmallError/OverReinforcedError หรือ ρ_prov>ρmax
+    ที่ความลึกจริง · marker `_over_reinforced`) → **ลอง doubly fallback** (เสริมเหล็กรับแรงอัด)
+    แทนการ fail ทันที · ครอบทุกหน้า: +M ช่วง (comp_on_top=True · เหล็กอัดบน) · −M หัวเสา/คานยื่น
+    (comp_on_top=False · เหล็กอัดล่าง). (Cantilevers commonly produce large hogging moments.)"""
+    res, over, err = None, False, None
     try:
-        return _flexure_design_for_moment(Mu_kNm, b, h, fc, fy, cover, d_stirrup, db_assume)
+        res = _flexure_design_for_moment(Mu_kNm, b, h, fc, fy, cover, d_stirrup, db_assume)
+        over = bool(res.get("_over_reinforced"))
     except (SectionTooSmallError, OverReinforcedError) as exc:
-        return {"Mu_kNm": Mu_kNm, "As_required": None, "rebar": None, "passes": False,
-                "d_actual": None, "phi_Mn": 0.0, "rho_final": 0.0,
-                "note": f"หน้าตัดไม่พอสำหรับ singly-reinforced: {exc}"}
+        over, err = True, exc
+    if over:
+        doubly = _doubly_design_for_moment(
+            Mu_kNm, b, h, fc, fy, cover, d_stirrup, db_assume, comp_on_top)
+        if doubly is not None:
+            return doubly                        # doubly ช่วยได้ → ผ่าน (override singly-fail)
+    if res is not None:
+        return res                               # singly result (ผ่าน หรือ fail ที่ doubly ก็ช่วยไม่ได้)
+    return {"Mu_kNm": Mu_kNm, "As_required": None, "rebar": None, "passes": False,
+            "d_actual": None, "phi_Mn": 0.0, "rho_final": 0.0,
+            "note": f"หน้าตัดไม่พอแม้เสริมเหล็กคู่ (doubly): {err}"}
+
+
+def _doubly_design_for_moment(
+    Mu_kNm, b, h, fc, fy, cover, d_stirrup, db_assume, comp_on_top=True,
+):
+    """ออกแบบหน้าตัดเสริมเหล็กคู่ (doubly) สำหรับโมเมนต์เดียว — flexure core ของคานต่อเนื่อง/คานยื่น.
+
+    Mirror ของ doubly branch ใน design_beam (fixed-point bar-stable + consistency gate +
+    strain-compatibility · ตรง pattern PR #27) แต่ **standalone** → design_beam (single-span)
+    ไม่ถูกแตะ = byte-identical (New Module · zero-reg by construction).
+
+    หน้าวางเหล็กอัด:
+      comp_on_top=True  → +M ช่วง (เหล็กดึงล่าง · เหล็กอัดบน)
+      comp_on_top=False → −M หัวเสา/คานยื่น (เหล็กดึงบน · เหล็กอัดล่าง)
+    **สูตร flexure เป็น face-agnostic** (d = h − ระยะหุ้มเหล็กดึง · d′ = ระยะหุ้มเหล็กอัด เท่ากันทั้งสองหน้า
+    ตาม DRMK Ex 3.10) → comp_on_top ใช้กำกับ "หน้าวาง" สำหรับ display เท่านั้น ไม่ใช่ input ของ math.
+
+    คืน dict (รูปร่างเดียวกับ _flexure_design_for_moment + doubly fields) หรือ None ถ้า doubly ช่วยไม่ได้
+    (caller จะคง failing singly dict).
+    """
+    Mu_kgcm = kNm_to_kgcm(abs(Mu_kNm))
+    beta1 = compute_beta1(fc)
+    rho_max = compute_rho_max(compute_rho_b(fc, fy, beta1))
+    rebar_table = _load_rebar_table()
+
+    def _db_cm(rb):
+        return next((s["diameter_cm"] for s in rebar_table["sizes"]
+                     if s["name"] == rb.main_bars[0][0]), db_assume)
+
+    # fixed-point: req(d,d′) → เลือกเหล็ก → อัปเดต d,d′ เป็น geometry "เหล็กจริง" → วน จนชุดเหล็กนิ่ง
+    d_cur = compute_effective_depth(h, cover, d_stirrup, db_assume)
+    d_prime = cover + d_stirrup + db_assume / 2.0
+    dr = rb = rbc = prev_key = None
+    for _ in range(12):
+        dr = compute_doubly_reinforced(Mu_kgcm, b, d_cur, d_prime, fc, fy, beta1, rho_max)
+        if dr is None:
+            break
+        rb = select_rebar(dr["As"], b, cover, d_stirrup, h)          # เหล็กดึง · multilayer · ข้าม ρmax filter (ตั้งใจ)
+        rbc = select_rebar(dr["As_prime"], b, cover, d_stirrup, h)    # เหล็กอัด
+        if rb is None or rbc is None:
+            dr = None
+            break
+        key = (tuple(rb.main_bars), tuple(rbc.main_bars))
+        d_cur = _rebar_d(h, cover, d_stirrup, rb, _db_cm(rb))
+        d_prime = h - _rebar_d(h, cover, d_stirrup, rbc, _db_cm(rbc))
+        if key == prev_key:               # ชุดเหล็กไม่เปลี่ยน → จุดนิ่ง
+            break
+        prev_key = key
+    # recompute requirement ที่ geometry เหล็กจริง (d_cur/d′ ชุดล่าสุด)
+    if dr is not None and rb is not None and rbc is not None:
+        dr = compute_doubly_reinforced(Mu_kgcm, b, d_cur, d_prime, fc, fy, beta1, rho_max)
+    # consistency gate: เหล็กที่เลือก "พอ" กับ req ที่ geometry จริงไหม · ไม่ผ่าน/ไม่ลู่เข้า → None (fail conservative)
+    if (dr is None or rb is None or rbc is None
+            or rb.As_provided < dr["As"] - 0.05
+            or rbc.As_provided < dr["As_prime"] - 0.05):
+        return None
+    # verify φMn จากเหล็กที่จัดจริง (strain compatibility เต็ม · DRMK Ex 3.8)
+    Mn, a, fs_prime, fs_t, t_yields = analyze_doubly_capacity(
+        rb.As_provided, rbc.As_provided, b, d_cur, d_prime, fc, fy, beta1)
+    phi_Mn = PHI_FLEXURE * Mn
+    passes = (phi_Mn >= Mu_kgcm - FLOAT_TOL) and t_yields   # ductility: เหล็กดึงต้องครากที่เหล็กจัดจริง
+    comp_yields = fs_prime >= fy - 1.0
+    rho_final = (rb.As_provided / (b * d_cur)) if d_cur > 0 else 0.0
+    _yld = "คราก" if comp_yields else f"ไม่คราก (fs′={fs_prime:.0f} ksc)"
+    _face = "บน" if comp_on_top else "ล่าง"
+    notes = [
+        f"หน้าตัดเสริมเหล็กคู่ (doubly · Mu เกินกำลัง singly ที่ ρmax): เหล็กดึง As={dr['As']:.2f} ซม.² "
+        f"(As1={dr['As1']:.2f}+As2={dr['As2']:.2f}) · เหล็กอัด{_face} As′={dr['As_prime']:.2f} ซม.² ({_yld}) "
+        f"· d′={d_prime:.1f} ซม. · DRMK book p70 · เหล็กอัดต้องมีปลอกยึดทุกมุม (ระยะ ≤16db′) · ควรขยายหน้าตัดก่อนถ้าทำได้"
+    ]
+    if not t_yields:
+        notes.append(
+            f"🔴 เหล็กดึงไม่คราก (fs={fs_t:.0f} < fy={fy:.0f} ksc) ที่เหล็กจัดจริง — over-reinforced หลังเลือกเหล็ก "
+            "· φ=0.90 ใช้ไม่ได้ (ไม่ ductile) · ต้องขยายหน้าตัด")
+    return {
+        "Mu_kNm": Mu_kNm, "As_required": dr["As"], "rho_final": rho_final, "rebar": rb,
+        "notes": notes, "d_actual": d_cur, "a_stress_block": a, "Mn": Mn, "phi_Mn": phi_Mn,
+        "passes": passes,
+        "safety_margin_pct": ((phi_Mn - Mu_kgcm) / Mu_kgcm * 100.0) if Mu_kgcm > FLOAT_TOL else 0.0,
+        "is_doubly": True, "As1": dr["As1"], "As2": dr["As2"],
+        "As_prime_required": dr["As_prime"], "rebar_compression": rbc,
+        "fs_prime_ksc": fs_prime, "comp_steel_yields": comp_yields, "comp_on_top": comp_on_top,
+    }
 
 
 def _fmt_main_bars(rebar) -> str:
@@ -2230,7 +2328,7 @@ def _design_one_cantilever(cant, side, inp, adj_span_L):
     M_end, V_face = s["M_end"], s["V_face"]
     Mu_top = abs(M_end)                                    # kN·m · TOP steel (hogging)
     top = _safe_flexure_design(Mu_top, inp.b, inp.h, inp.fc, inp.fy,
-                               inp.cover, inp.d_stirrup, inp.db_assume)
+                               inp.cover, inp.d_stirrup, inp.db_assume, comp_on_top=False)
     d_act = top.get("d_actual") or compute_effective_depth(inp.h, inp.cover, inp.d_stirrup, inp.db_assume)
     try:
         sd = design_shear(Wu_kN_m=cant["w"], L_m=cant["L"], R_A_kN=V_face, R_B_kN=0.0,
@@ -2272,6 +2370,8 @@ def _design_one_cantilever(cant, side, inp, adj_span_L):
         "Mu_tonm": round(Mu_top * KNM_TO_TONM, 3), "M_end_tonm": round(M_end * KNM_TO_TONM, 3),
         "Vu_face_ton": round(V_face * KN_TO_TON, 3),
         "top": top, "top_bars": _fmt_main_bars(top.get("rebar")), "shear": sd,
+        "is_doubly": bool(top.get("is_doubly")),
+        "comp_bars": _fmt_main_bars(top.get("rebar_compression")) if top.get("is_doubly") else "—",
         "Ld_cm": (round(ld_cm, 1) if ld_cm else None),
         "Ld_note": (f"เหล็กบนต่อเนื่องเข้าช่วงข้างเคียง ≥ Ld = {ld_cm/100:.2f} ม. (วัดจากหน้าเสา) · งอฉาก 90° ปลาย 12db"
                     if ld_cm else None),
@@ -2752,7 +2852,8 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         M_pos = vm[i]["M_pos"]
         Vu = vm[i]["V_absmax"]
         bottom = _safe_flexure_design(
-            M_pos, inp.b, inp.h, inp.fc, inp.fy, inp.cover, inp.d_stirrup, inp.db_assume)
+            M_pos, inp.b, inp.h, inp.fc, inp.fy, inp.cover, inp.d_stirrup, inp.db_assume,
+            comp_on_top=True)   # +M ช่วง · เหล็กดึงล่าง · ถ้า doubly → เหล็กอัดบน
         d_act = bottom.get("d_actual") or compute_effective_depth(inp.h, inp.cover, inp.d_stirrup, inp.db_assume)
         R_hi = max(abs(vm[i]["V_left"]), abs(vm[i]["V_right"]))
         R_lo = min(abs(vm[i]["V_left"]), abs(vm[i]["V_right"]))
@@ -2770,6 +2871,8 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
             "Vu_kN": Vu, "Vu_ton": Vu * KN_TO_TON,
             "n_points": len(pts[i]),
             "bottom": bottom, "bottom_bars": _fmt_main_bars(bottom.get("rebar")),
+            "is_doubly": bool(bottom.get("is_doubly")),
+            "comp_bars": _fmt_main_bars(bottom.get("rebar_compression")) if bottom.get("is_doubly") else "—",
             "shear": sd,
         })
 
@@ -2782,11 +2885,14 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
                                  "desc": ("ปลายอิสระ (M⁻=0)" if sidx in (0, n) else f"ที่รองรับ {_grid_label(sidx)}")})
             continue
         top = _safe_flexure_design(
-            Mneg, inp.b, inp.h, inp.fc, inp.fy, inp.cover, inp.d_stirrup, inp.db_assume)
+            Mneg, inp.b, inp.h, inp.fc, inp.fy, inp.cover, inp.d_stirrup, inp.db_assume,
+            comp_on_top=False)   # −M หัวเสา · เหล็กดึงบน · ถ้า doubly → เหล็กอัดล่าง
         supports_out.append({
             "label": _grid_label(sidx), "M_neg_kNm": Mneg, "M_neg_tonm": Mneg * KNM_TO_TONM,
             "neg_denom": None, "desc": f"ที่รองรับ {_grid_label(sidx)}",
-            "top": top, "top_bars": _fmt_main_bars(top.get("rebar"))})
+            "top": top, "top_bars": _fmt_main_bars(top.get("rebar")),
+            "is_doubly": bool(top.get("is_doubly")),
+            "comp_bars": _fmt_main_bars(top.get("rebar_compression")) if top.get("is_doubly") else "—"})
 
     reactions = [{"label": _grid_label(i), "R_kN": az["reactions"][i],
                   "R_ton": az["reactions"][i] * KN_TO_TON} for i in range(n + 1)]
