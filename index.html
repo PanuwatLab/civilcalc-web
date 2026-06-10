@@ -2529,6 +2529,10 @@
           const mark = isEnd ? (i === 0 ? 'TE1' : 'TE2') : `T${i}`;
           const pos = isEnd ? `บน·เสริมปลาย* ${su.label}` : `บน·เสริมหัวเสา ${su.label}`;
           groups.forEach((g, k) => rows.push([mark + (groups.length > 1 ? String.fromCharCode(97 + k) : ''), g[0], g[1], len, pos]));
+          // doubly (−M หัวเสา): เหล็กรับแรงอัดอยู่ "ล่าง" → ต้องมีใน BBS ด้วย (takeoff ครบ · ตรงตาราง/หน้าตัด · DRMK p70)
+          const _sc = bars.supComp && bars.supComp[i];
+          if (_sc && _sc.n > 0) (_sc.list || [[_sc.size, _sc.n]]).forEach((g, k) =>
+            rows.push([`TC${i}${(_sc.list && _sc.list.length > 1) ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], len, `ล่าง·รับอัด·หัวเสา ${su.label}`]));
         });
         // เสริมกลาง (+M) + ปลอก — รายช่วง · envelope (A2a) = ตัด cut_bars (L−ซ้าย−ขวา) + ที่เหลือวิ่งเต็ม · fig-8.32 = L−2·L/8
         // align curtailment.bottom ด้วย span label (ไม่ใช่ตำแหน่ง) — engine skip ช่วง M_pos=0 → positional misalign (Codex P2)
@@ -2551,6 +2555,10 @@
             const lenM = +(_cb.cut_eighth_m != null ? (sp.L - 2 * _cb.cut_eighth_m) : (sp.L || 0) * 3 / 4).toFixed(2);   // fig-8.32 L−2·L/8 · ไม่มี data → 3L/4 schematic
             gM.forEach((g, k) => rows.push([`M${i + 1}${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, `ล่าง·เสริมกลาง ${sp.label}`]));
           }
+          // doubly (+M ช่วง): เหล็กรับแรงอัดอยู่ "บน" → ต้องมีใน BBS (takeoff ครบ · ตรงตาราง/หน้าตัด)
+          const _mc = bars.spanComp && bars.spanComp[i];
+          if (_mc && _mc.n > 0) (_mc.list || [[_mc.size, _mc.n]]).forEach((g, k) =>
+            rows.push([`MC${i + 1}${(_mc.list && _mc.list.length > 1) ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], +(sp.L || 0).toFixed(2), `บน·รับอัด·กลางช่วง ${sp.label}`]));
           const sh = sp.shear || {}, nStir = stirrupCount(sh) * (sh.n_legs === 4 ? 2 : 1);   // 2ป = 2 ชิ้น/station (Codex P2)
           if (nStir) rows.push([`S${i + 1}`, sh.bar || 'RB9', nStir, perim, `ปลอก·ช่วง ${sp.label}`]);
         });
@@ -2575,6 +2583,11 @@
       } else {
         const lenM = +L.toFixed(2);   // ไม่ตัด (cut_eighth=null) → เสริมวิ่งเต็ม (ยาว L · เดิม L×2/3)
         gM.forEach((g, k) => rows.push([`M1${gM.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], lenM, 'ล่าง·เสริมกลาง·วิ่งเต็ม']));
+      }
+      // doubly ช่วงเดียว (#27 · +M → "บน"): เหล็กรับแรงอัดต้องมีใน BBS (ปิด gap เดิม · ตรงตาราง/หน้าตัด)
+      if (bars && bars.isDoubly && bars.comp && bars.comp.n > 0) {
+        const _cg = bars.comp.list || [[bars.comp.size, bars.comp.n]];
+        _cg.forEach((g, k) => rows.push([`MC1${_cg.length > 1 ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], +L.toFixed(2), 'บน·รับอัด·กลางช่วง']));
       }
       if (m.stirN) rows.push(['S1', m.stirBar || 'RB9', m.stirN * (m.stirLegs === 4 ? 2 : 1), perim, 'ปลอกปิด' + (m.stirLegs === 4 ? ' (2ป·4ขา)' : '')]);   // 2ป = 2 ชิ้น/station (Codex P2)
     }
@@ -6401,6 +6414,11 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('doubly: show-work แสดงสูตรเหล็กคู่ (As′/เสริมเหล็กคู่) ไม่ขัด verdict',
         /เสริมเหล็กคู่|As′/.test(_dwork) && !/ρ_final/.test(_dwork),
         'hasDoubly=' + /เสริมเหล็กคู่|As′/.test(_dwork) + ' hasSinglyRhoFinal=' + /ρ_final/.test(_dwork));
+      // BBS ช่วงเดียว doubly: ต้องมีแถวเหล็กรับแรงอัด (ปิด gap #27 · sibling-surface)
+      TT().drawDetailing();
+      const _dbbs = (document.querySelector('#bbsRows') || {}).textContent || '';
+      A('doubly: BBS ช่วงเดียวมีแถวเหล็กรับแรงอัด (รับอัด) — takeoff ไม่ขาด (#27 gap closed)',
+        !(_deb && _deb.isDoubly) || /รับอัด/.test(_dbbs), 'hasCompRow=' + /รับอัด/.test(_dbbs));
       _dclean(); TT().setPoints([]); TT().setMode('cont');
 
       // ── C4 · doubly-reinforced CONTINUOUS (−M หัวเสา · เหล็กอัด "ล่าง" สลับด้านจาก +M · DRMK book p70) ──
@@ -6418,12 +6436,18 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('doubly-cont: หัวเสา −M โหลดหนัก → doubly + ตาราง "(ล่าง·รับอัด)"',
         _csi >= 0 && /ล่าง·รับอัด/.test(_ctbl), 'supDoublyIdx=' + _csi);
       // หน้าตัดหัวเสา doubly: เหล็กรับแรงอัดวาด "ล่าง" = engine As′ count (สลับด้านจาก +M · ไม่ใช่ nominal 2)
-      const _compN = _csi >= 0 ? _cdb.supComp[_csi].n : 0;
-      const _hasBotComp = [...document.querySelectorAll('svg')]
-        .filter(v => (v.getAttribute('viewBox') || '').includes('130 150'))
-        .some(v => { const vb = v.getAttribute('viewBox').split(' ').map(Number); const bot = [...v.querySelectorAll('circle')].map(c => +c.getAttribute('cy')).filter(y => y >= vb[3] / 2).length; return _compN > 2 && bot === _compN; });
+      //   re-render สดก่อน scan (กัน #sectionMain stale จาก block ก่อนหน้า) · scope #sectionMain ('sup'=หัวเสาวิกฤต)
+      TT().drawMainSections();
+      const _scNs = (_cdb && _cdb.supComp || []).filter(c => c && c.n > 2).map(c => c.n);   // เหล็กอัดหัวเสา doubly (>nominal)
+      const _hasBotComp = [...document.querySelectorAll('#sectionMain svg')]
+        .some(v => { const vb = (v.getAttribute('viewBox') || '0 0 130 150').split(' ').map(Number); const bot = [...v.querySelectorAll('circle')].map(c => +c.getAttribute('cy')).filter(y => y >= vb[3] / 2).length; return _scNs.includes(bot); });
       A('doubly-cont: หน้าตัดหัวเสา −M เหล็กรับแรงอัดวาด "ล่าง" = engine As′ (face ถูก · ไม่ใช่ nominal)',
-        _compN > 0 && _hasBotComp, 'compN=' + _compN + ' drawnBottomMatch=' + _hasBotComp);
+        _csi < 0 || _hasBotComp, 'compNs=[' + _scNs.join(',') + '] drawnBottomMatch=' + _hasBotComp);
+      // BBS (ตารางตัดเหล็ก) ต้องมีแถวเหล็กรับแรงอัดเมื่อ doubly — sibling-surface · takeoff ครบ (บทเรียน #20/#21)
+      TT().drawDetailing();
+      const _cbbs = (document.querySelector('#bbsRows') || {}).textContent || '';
+      A('doubly-cont: BBS มีแถวเหล็กรับแรงอัด (รับอัด) เมื่อ doubly — takeoff ไม่ขาด',
+        _csi < 0 || /รับอัด/.test(_cbbs), 'hasCompRow=' + /รับอัด/.test(_cbbs));
       _dclean(); TT().setPoints([]); TT().setMode('cont');
 
       // ── D · mode-switch integrity (applyMode toggle) ──
