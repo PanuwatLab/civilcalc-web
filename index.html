@@ -2392,14 +2392,14 @@
     const VBW = 130, VBH = 162, capH = 17, mg = 11;       // viewBox คงที่ (svg-fit) · capH=ที่ป้าย b×h · mg=ขอบ
     const mb = m.b || 30, mh = m.h || 50;
     const cover_cm = (m && m.cover) || (typeof P !== 'undefined' && P.cover) || 4;   // cover จริงจาก engine result
-    const dstir_cm = 0.9;                                  // ปลอก RB9 (schematic)
+    const dstir_cm = (typeof dsVal === 'function' && P) ? dsVal(P.dstir) : 0.9;   // ขนาดปลอกจริงของผู้ใช้ (RB6/RB9/DB10 · ตรง engine d_stirrup · เดิม hardcode 0.9)
     const k = Math.min((VBW - 2 * mg) / mb, (VBH - capH - mg) / mh);   // px/ซม. · คงสัดส่วน (fit-box · ตัวเดียวทั้ง x,y)
     const W = mb * k, Hh = mh * k;                         // ขนาดคอนกรีตที่วาด = สัดส่วนจริง
     const ox = (VBW - W) / 2, oy = capH + (VBH - capH - mg - Hh) / 2;  // จัดกึ่งกลาง
     const svg = svgEl('svg', { viewBox: `0 0 ${VBW} ${VBH}`, class: 'svg-fit', 'font-family': 'JetBrains Mono, monospace' });
     // concrete (สัดส่วนจริง)
     svg.appendChild(svgEl('rect', { x: ox, y: oy, width: W, height: Hh, fill: '#EEF2F6', stroke: '#94A3B8', 'stroke-width': 1.2 }));
-    // stirrup tie · inset = (cover + ปลอก) scale จริง (เดิม fix 7px ไม่ตาม cover → G3)
+    // stirrup tie · inset = (cover + ปลอก) scale จริง (เดิม fix 7px ไม่ตาม cover · verified visually · ไม่มี guard เฉพาะ)
     const insP = (cover_cm + dstir_cm) * k;
     const sx = ox + insP, sy = oy + insP, sw = Math.max(4, W - 2 * insP), sh = Math.max(4, Hh - 2 * insP);
     svg.appendChild(svgEl('rect', { x: sx, y: sy, width: sw, height: sh, fill: 'none', stroke: '#94A3B8', 'stroke-width': 1, rx: 3 }));
@@ -2417,7 +2417,7 @@
     const argmaxN = arr => { let bi = -1, bn = -1; (arr || []).forEach((x, i) => { if (x && x.n > bn) { bn = x.n; bi = i; } }); return bi; };
     const gIdx = bars ? Math.max(0, argmaxN(bars.spanBot)) : 0;   // ช่วง +M วิกฤต (เหล็กล่างมากสุด · ใช้ผูก mid + หัวเสาซ้าย/ขวา)
     // เบอร์เหล็กต่อหน้า (#3 · pi 2026-06-11) — จาก engine list (mixed-size ครบ) · nominal → เบอร์หลักของคาน
-    const _szNum = s => +(((s || 'DB16').match(/\d+/)) || [16])[0];
+    const _szNum = s => { const mt = String(s == null ? 'DB16' : s).match(/\d+/); return mt ? +mt[0] : 16; };   // total · กัน numeric input crash (s.match) เมื่อ surface ขยาย
     const _maxSz = arr => { const f = (arr || []).filter(Boolean); return f.length ? f.reduce((a, b) => _szNum(b) > _szNum(a) ? b : a) : 'DB16'; };
     const _mainBot = bars ? _maxSz((bars.spanBot || []).map(s => s.size)) : 'DB16';
     // single-span: supTop เป็น n=0 ล้วน → filter ว่าง → fallback เบอร์ล่าง (mirror elevation `topSize||botSize` + BBS · กัน drift "บน 2-DB16" เมื่อเหล็กล่าง≠DB16 · P2 fix 2026-06-21)
@@ -2482,18 +2482,24 @@
       const sizes = _orderSizes(n, list, fb);              // index 0 = ใหญ่สุด
       const big = sizes.reduce((mx, s) => Math.max(mx, _szCm(s)), _szCm(fb));
       const rMax = Math.max(2.0, Math.min(5.0, 1.7 + big * 0.85));
-      const x0 = sx + rMax + 1, x1 = sx + sw - rMax - 1;
+      // center tangent กับเส้นปลอก (เดิม +1 ทำให้บาร์ลึกเกินจริง) · คานแคบ x-span กลับด้าน → ยุบกึ่งกลาง
+      let x0 = sx + rMax, x1 = sx + sw - rMax;
+      if (x1 < x0) { const c = sx + sw / 2; x0 = x1 = c; }
       const nL = (forced && forced >= 1) ? Math.min(forced, Math.max(1, n)) : _layers(n, big);
-      const rowGap = Math.max(2 * rMax + 1.5, (big + 2.5) * k);   // ระยะดิ่งระหว่างชั้น ≥ db+2.5 ซม. (scale) หรือไม่ทับ
-      const y0 = yEdge + dir * (rMax + 1);
+      // ระยะดิ่งระหว่างชั้น ≥ db+2.5 ซม. (scale) · แต่ clamp ไม่ให้ชั้นในข้ามกึ่งกลางหน้าตัด (คานตื้น)
+      let rowGap = Math.max(2 * rMax + 1.2, (big + 2.5) * k);
+      if (nL > 1) rowGap = Math.min(rowGap, Math.max(2 * rMax + 0.5, (sh / 2 - rMax) / (nL - 1)));
+      const y0 = yEdge + dir * rMax;
       let placed = 0, idx = 0;
       for (let L = 0; L < nL; L++) {
         const cnt = Math.min(Math.ceil(n / nL), n - placed);   // ชั้นนอกเต็มก่อน (เฉลี่ยปัดขึ้น)
         const y = y0 + dir * L * rowGap;
+        const pitch = cnt > 1 ? (x1 - x0) / (cnt - 1) : 0;     // กันวงกลมทับเมื่อแน่น → clamp r ≤ ครึ่ง pitch (คงลำดับใหญ่/เล็ก)
         const ord = [];                                        // ลำดับตำแหน่ง: มุมก่อน (0, cnt-1, 1, cnt-2 ...)
         for (let a = 0, z = cnt - 1; a <= z;) { ord.push(a); if (a !== z) ord.push(z); a++; z--; }
         ord.forEach(pos => {
-          const r = _barR(sizes[idx++] || fb);
+          let r = _barR(sizes[idx++] || fb);
+          if (pitch > 0) r = Math.min(r, Math.max(1.4, pitch / 2 - 0.3));   // หน้าตัดแน่น (คานสูงแคบ) → ย่อกันทับ
           const cx = cnt === 1 ? (x0 + x1) / 2 : x0 + (pos / (cnt - 1)) * (x1 - x0);
           svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#1D4ED8', 'data-bar': tag }));
         });
@@ -6406,6 +6412,15 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           A(`${lbl}: หน้าตัด เบอร์ผสม → วงกลมหลายขนาด (G2 · bar-size)`,
             _midSizes < 2 || _drawnR >= 2,
             'engineSizes=' + _midSizes + ' drawnRadii=' + _drawnR);
+          // G2 top-face (cont): หัวเสาเบอร์ผสม → วงกลมหลายขนาด (เหล็กบน · ปิด coverage gap หน้าบน)
+          if (mode === 'cont') {
+            let _ti = -1, _tn = -1; (eb.supTop || []).forEach((x, i) => { if (x && x.n > _tn) { _tn = x.n; _ti = i; } }); _ti = Math.max(0, _ti);
+            const _topSizes = new Set(((eb.supTop[_ti] || {}).list || []).map(t => t[0])).size;
+            const _drawnTR = _ms[1] ? new Set([..._ms[1].querySelectorAll('circle[data-bar="top"]')].map(c => c.getAttribute('r'))).size : 0;
+            A(`${lbl}: หน้าตัดหัวเสา เบอร์ผสม → วงกลมหลายขนาด (G2 · top-face)`,
+              _topSizes < 2 || _drawnTR >= 2,
+              'engineTopSizes=' + _topSizes + ' drawnTopRadii=' + _drawnTR);
+          }
         }
       });
 
