@@ -2195,8 +2195,8 @@
           const where = isEnv ? 'จาก moment envelope จริง' : 'ที่ L/8';
           const lbl = cb.cut_bars ? `ตัด ${cb.cut_bars} ${where}${nContExtra > 0 ? ` · +${nContExtra} วิ่งเต็ม` : ''}` : `+${fmtBars(gM)} เสริมกลาง`;
           labelBar(svg, X((xA + xB) / 2), yBotX - (nContExtra > 0 ? 14 : 4), lbl, '#2563EB', 'middle', 9);
-          const dimLbl = isEnv ? `ตัด ${cutL.toFixed(2)}/${cutR.toFixed(2)} ม.` : `L/8=${cb.cut_eighth_m.toFixed(2)}`;
-          labelBar(svg, X(aB), yBotX + 13, dimLbl, '#2563EB', 'middle', 8);
+          // ความยาวเหล็กเสริมที่ตัด เป็นเส้น dim มีลูกศร ใต้คาน (pi 2026-06-11 · เดิมเป็นตัวหนังสือ "ตัด X/Y")
+          dim(svg, X(aB), X(bB), beamBot + 18, (bB - aB).toFixed(2));
         }
       } else if (cb) {   // single ไม่ตัด → เสริมวิ่งเต็มหมด
         rebar(svg, X(x0), X(xN), yBotX, 'none', true, botDash);
@@ -2238,9 +2238,11 @@
         rebar(svg, X(aO), X(bO), yTopX, 'none', true, curtAppx);   // เส้นเดียว หยุดเรียบ (ไม่มีตะขอ · ไม่ซ้อนกล่อง)
         if (!compact) {
           labelBar(svg, X((aO + bO) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
-          const tDim = tEnv ? `ยื่น ซ้าย ${extL.toFixed(2)} · ขวา ${extR.toFixed(2)} ม. (envelope)`
-                            : `ยื่น L/4=${ct.cut_half_m.toFixed(2)} · L/3=${ct.cut_third_m.toFixed(2)}`;
-          labelBar(svg, X(nx), beamTop - 26, tDim, '#64748B', 'middle', 8);
+          // ระยะยื่นเป็นเส้น dim มีลูกศร — ซ้าย/ขวา จากหน้าเสา (เห็น asymmetric ชัด · ยื่นเข้าช่วงในมากกว่าช่วงริม · pi 2026-06-11 · เดิมเป็นตัวหนังสือลอย)
+          const yDimT = beamTop - 28;
+          if (X(faceL) - X(aO) > 10) dim(svg, X(aO), X(faceL), yDimT, extL.toFixed(2));
+          if (X(bO) - X(faceR) > 10) dim(svg, X(faceR), X(bO), yDimT, extR.toFixed(2));
+          if (tEnv) labelBar(svg, X(nx), beamTop - 33, '(envelope)', '#94A3B8', 'middle', 7);
         }
       } else {
         // nominal/fallback schematic — คงเดิม (กัน regression nominal-end convention · ปลายจริงไม่มี −M engine)
@@ -2256,13 +2258,15 @@
     if (!compact && curtAppx) labelBar(svg, vbW - marginX, topPad - 18,
       (curt && curt.bottomExact) ? '≈ เหล็กบนเป็นค่าประมาณ (รูป 8.32) · ล่างคำนวณจาก envelope แล้ว' : '≈ ระยะตัดเป็นค่าประมาณ · ตรวจ moment envelope', '#B45309', 'end', 9);
 
-    // ระยะปลอก (#4) — ป้ายราย span กลางความสูงคาน (เหนือเส้นปลอกเทาๆ · ไม่ทับ bar บน/ล่าง)
+    // ระยะปลอก (#4) — ป้ายราย span "ในเนื้อคาน" กลางความสูง (pi 2026-06-11 · ย้ายจากใต้คาน) + halo สีเนื้อคาน อ่านทับเส้นปลอก
     if (!compact) {
+      const cyMid = (beamTop + beamBot) / 2;
       c.spans.forEach((sp, si) => {
         const st = bars && bars.spanStir && bars.spanStir[si];
         const s1 = st && st.s1 ? (st.s1 / 100).toFixed(2) : '0.10', s2 = st && st.s2 ? (st.s2 / 100).toFixed(2) : '0.25';
-        const txt = `ปลอก ${st ? st.bar : 'RB9'}@${s1}·${s2}`;
-        labelBar(svg, X((c.nodes[si] + c.nodes[si + 1]) / 2), beamBot + 22, txt, '#64748B', 'middle', 9);
+        const txt = `ปลอก ${st ? st.bar : 'RB9'}@${s1}(ปลาย)·${s2}(กลาง)`;
+        const t = svgEl('text', { x: X((c.nodes[si] + c.nodes[si + 1]) / 2), y: cyMid + 3, 'font-size': 9, fill: '#475569', 'text-anchor': 'middle', 'font-weight': 600, stroke: '#EEF2F6', 'stroke-width': 3.2, 'paint-order': 'stroke', 'stroke-linejoin': 'round' });
+        t.textContent = txt; svg.appendChild(t);
       });
     }
 
@@ -2405,27 +2409,44 @@
     const bars = detailBars();
     const argmaxN = arr => { let bi = -1, bn = -1; (arr || []).forEach((x, i) => { if (x && x.n > bn) { bn = x.n; bi = i; } }); return bi; };
     const gIdx = bars ? Math.max(0, argmaxN(bars.spanBot)) : 0;   // ช่วง +M วิกฤต (เหล็กล่างมากสุด · ใช้ผูก mid + หัวเสาซ้าย/ขวา)
+    // เบอร์เหล็กต่อหน้า (#3 · pi 2026-06-11) — จาก engine list (mixed-size ครบ) · nominal → เบอร์หลักของคาน
+    const _szNum = s => +(((s || 'DB16').match(/\d+/)) || [16])[0];
+    const _maxSz = arr => { const f = (arr || []).filter(Boolean); return f.length ? f.reduce((a, b) => _szNum(b) > _szNum(a) ? b : a) : 'DB16'; };
+    const _mainTop = bars ? _maxSz(bars.supTop.filter(s => s.n > 0).map(s => s.size)) : 'DB16';
+    const _mainBot = bars ? _maxSz((bars.spanBot || []).map(s => s.size)) : 'DB16';
+    const _fmtL = (list, n, fb) => (list && list.length) ? list.map(t => `${t[1]}-${t[0]}`).join(' + ') : `${n}-${fb}`;
+    // #2 (pi 2026-06-11) — แยก "เหล็กหลัก (2 มุม วิ่งเต็ม) + เสริมพิเศษ (ตัด)" ด้วย extraBarGroups เดียวกับรูปด้านข้าง/BBS
+    //   → ทุก surface พูดภาษาเดียวกัน (หน้าตัด ↔ รูปด้านข้าง ↔ BBS) · ไม่มี extra → โชว์ยอดหลักเฉยๆ
+    const _decompLbl = list => {
+      if (!list || !list.length) return null;
+      const ex = extraBarGroups(list);
+      const exMap = {}; ex.forEach(g => exMap[g[0]] = (exMap[g[0]] || 0) + g[1]);
+      const main = list.map(t => [t[0], t[1] - (exMap[t[0]] || 0)]).filter(t => t[1] > 0);
+      return ex.length ? `${fmtBars(main)} หลัก + ${fmtBars(ex)} เสริม` : fmtBars(main);
+    };
     let nTop = 2, nBot = 3, topLayers = 0, botLayers = (m && m.nLayers) || 0;   // fallback nominal เมื่อ engine ยังไม่ ready (bars=null)
+    let topLbl = `2-${_mainTop}`, botLbl = `2-${_mainBot}`;
     if (loc === 'mid') {
       const b = bars && bars.spanBot[gIdx];
       nTop = 2;                                              // กลางช่วง: เหล็กบน = nominal hanger (engine ไม่คิด +M top)
       // doubly +M: เหล็กบน = เหล็กรับแรงอัด (As′) จาก engine · continuous → spanComp[gIdx] · single → comp (DRMK book p70)
       const cmpMid = bars && (bars.spanComp ? bars.spanComp[gIdx] : bars.comp);
-      if (bars && bars.isDoubly && cmpMid && cmpMid.n) { nTop = cmpMid.n; topLayers = cmpMid.n_layers || 0; }
-      if (b && b.n) { nBot = b.n; botLayers = b.n_layers || 0; }
-      else nBot = 3;
+      if (bars && bars.isDoubly && cmpMid && cmpMid.n) { nTop = cmpMid.n; topLayers = cmpMid.n_layers || 0; topLbl = `${_fmtL(cmpMid.list, nTop, _mainTop)} (รับอัด)`; }
+      else topLbl = `2-${_mainTop}`;
+      if (b && b.n) { nBot = b.n; botLayers = b.n_layers || 0; botLbl = _decompLbl(b.list) || _fmtL(b.list, nBot, _mainBot); }
+      else { nBot = 3; botLbl = `3-${_mainBot}`; }
     } else {   // 'left' / 'right' / 'sup' = หน้าตัดหัวเสา (−M)
-      nBot = 2; botLayers = 0;                              // หัวเสา: เหล็กล่าง = เส้นหลักวิ่งผ่าน (nominal 2 มุม)
+      nBot = 2; botLayers = 0; botLbl = `2-${_mainBot}`;    // หัวเสา: เหล็กล่าง = เส้นหลักวิ่งผ่าน (nominal 2 มุม)
       let t = null, sIdx = -1;
       if (bars) {
         if (loc === 'sup') (bars.supTop || []).forEach((x, i) => { if (x && x.n > (t ? t.n : -1)) { t = x; sIdx = i; } });   // governing support (overview)
         else { sIdx = (loc === 'left' ? gIdx : gIdx + 1); t = bars.supTop && bars.supTop[sIdx]; }   // หัวเสาฝั่งจริงของช่วงวิกฤต (ตำแหน่ง · ซ้าย≠ขวา)
       }
-      if (t && t.n) { nTop = t.n; topLayers = t.n_layers || 0; }
-      else nTop = 2;                                        // เสาไม่มี −M → nominal 2 (ไม่ overstate)
+      if (t && t.n) { nTop = t.n; topLayers = t.n_layers || 0; topLbl = _decompLbl(t.list) || _fmtL(t.list, nTop, _mainTop); }
+      else { nTop = 2; topLbl = `2-${_mainTop}`; }          // เสาไม่มี −M → nominal 2 (ไม่ overstate)
       // doubly −M: เหล็กรับแรงอัดอยู่ "ล่าง" (สลับด้านจากช่วง +M · DRMK book p70) → แทน nominal 2
       const cmpSup = (bars && bars.supComp && sIdx >= 0) ? bars.supComp[sIdx] : null;
-      if (cmpSup && cmpSup.n) { nBot = cmpSup.n; botLayers = cmpSup.n_layers || 0; }
+      if (cmpSup && cmpSup.n) { nBot = cmpSup.n; botLayers = cmpSup.n_layers || 0; botLbl = `${_fmtL(cmpSup.list, nBot, _mainBot)} (รับอัด)`; }
     }
     // จำนวนชั้นจากความกว้างจริง (port สูตร engine: s_clear=max(db,2.5,1.33·d_agg) · cap 6 เส้น/ชั้น) → กันวาดเบียดแถวเดียว
     const _layers = (n, db_cm) => {
@@ -2457,7 +2478,7 @@
     const nlBot = dotsRows(nBot, Hh - pad - si - 8, 3.6, -1, 2.0, botLayers);  // เหล็กล่าง (+M) · ใช้ n_layers จาก engine span bottom · 0 → recompute fallback
     // labels
     const tl = svgEl('text', { x: W / 2, y: 13, 'font-size': 9, fill: '#64748B', 'text-anchor': 'middle' }); tl.textContent = `${m.b}×${m.h}`; svg.appendChild(tl);
-    return { svg, nTop, nBot };
+    return { svg, nTop, nBot, topLbl, botLbl };
   }
   function drawSection(sel, loc) { const host = $(sel); if (!host) return; host.innerHTML = ''; const box = document.createElement('div'); box.style.maxWidth = '150px'; box.style.margin = '0 auto'; box.appendChild(buildSection(loc).svg); host.appendChild(box); }
   // tab-A sections: mid (+M) always; support (−M) added for continuous
@@ -2471,7 +2492,7 @@
       const s = buildSection(loc);
       const box = document.createElement('div'); box.style.maxWidth = '128px'; box.appendChild(s.svg); wrap.appendChild(box);
       const cap = document.createElement('div'); cap.className = 'mt-1 text-[11px] text-ink-muted text-center';
-      cap.innerHTML = `${label}<br><span class="mono text-ink">บน ${s.nTop} · ล่าง ${s.nBot} · ${stirText(sp)}</span>`;
+      cap.innerHTML = `${label}<br><span class="mono text-ink">บน ${s.topLbl} · ล่าง ${s.botLbl}</span><br><span class="mono text-ink-muted">${stirText(sp)}</span>`;
       wrap.appendChild(cap); host.appendChild(wrap);
     });
   }
@@ -2486,7 +2507,7 @@
       const box = document.createElement('div'); box.style.maxWidth = '120px'; box.style.width = '100%';
       box.appendChild(s.svg); wrap.appendChild(box);
       const cap = document.createElement('div'); cap.className = 'mt-1 text-[11px] text-ink-muted text-center';
-      cap.innerHTML = `${label}<br><span class="mono text-ink">บน ${s.nTop} · ล่าง ${s.nBot}</span><br><span class="mono text-ink-muted">${stirText(sp)}</span>`;
+      cap.innerHTML = `${label}<br><span class="mono text-ink">บน ${s.topLbl} · ล่าง ${s.botLbl}</span><br><span class="mono text-ink-muted">${stirText(sp)}</span>`;
       wrap.appendChild(cap); host.appendChild(wrap);
     });
   }
@@ -6324,19 +6345,22 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         A(`${lbl}: หน้าตัดป้าย b×h ตรง engine (drift probe)`,
           !res || !res.b || secTxt.indexOf(res.b + '×' + res.h) !== -1,
           'engine=' + (res ? res.b + '×' + res.h : '?') + ' · section="' + secTxt.replace(/\s+/g, '').slice(0, 24) + '"');
-        // §A drift guard: จำนวนเหล็กในหน้าตัด == engine detailBars (governing) — automated catch ปิด display cascade ถาวร
+        // §A drift guard: จำนวนเหล็กในหน้าตัด == engine detailBars (governing) — นับวงกลมใน SVG จริง
+        //   (robust ต่อ caption format · เดิม parse text "ล่าง N" พังเมื่อโชว์เบอร์เหล็ก mixed "2-DB16 + 1-DB12" · #3 pi 2026-06-11)
         const eb = TT().detailBars();
         if (eb) {
           const govN = arr => (arr || []).reduce((mx, x) => (x && x.n > mx) ? x.n : mx, 0);
+          const _face = (v, top) => { const vb = (v.getAttribute('viewBox') || '0 0 130 150').split(' ').map(Number); const cs = [...v.querySelectorAll('circle')].map(c => +c.getAttribute('cy')); return cs.filter(y => top ? y < vb[3] / 2 : y >= vb[3] / 2).length; };
+          const _ms = [...document.querySelectorAll('#sectionMain svg')];   // [0]='mid'(+M) · [1]='sup'(−M)
           const gBot = govN(eb.spanBot);   // governing +M span bottom (โชว์ใน section 'mid')
           A(`${lbl}: หน้าตัด เหล็กล่าง count == engine (§A · governing)`,
-            gBot === 0 || secTxt.indexOf('ล่าง ' + gBot) !== -1,
-            'engine ล่าง=' + gBot + ' · section="' + secTxt.replace(/\s+/g, ' ').slice(0, 40) + '"');
+            gBot === 0 || (_ms[0] && _face(_ms[0], false) === gBot),
+            'engine ล่าง=' + gBot + ' drawn=' + (_ms[0] ? _face(_ms[0], false) : '?'));
           if (mode === 'cont') {
             const gTop = govN(eb.supTop);   // governing −M support top (overview section 'sup')
             A(`${lbl}: หน้าตัด เหล็กบน count == engine (§A · governing)`,
-              gTop === 0 || secTxt.indexOf('บน ' + gTop) !== -1,
-              'engine บน=' + gTop + ' · section="' + secTxt.replace(/\s+/g, ' ').slice(0, 40) + '"');
+              gTop === 0 || (_ms[1] && _face(_ms[1], true) === gTop),
+              'engine บน=' + gTop + ' drawn=' + (_ms[1] ? _face(_ms[1], true) : '?'));
           }
         }
       });
@@ -6350,13 +6374,23 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       if (eb2 && eb2.supTop && eb2.spanBot) {
         let gi = -1, gn = -1; eb2.spanBot.forEach((x, i) => { if (x && x.n > gn) { gn = x.n; gi = i; } }); gi = Math.max(0, gi);
         const expTop = i => { const t = eb2.supTop[i]; return (t && t.n) ? t.n : 2; };   // เสาไม่มี −M → nominal 2
-        const capN = el => { const mm = ((el && el.textContent) || '').match(/บน\s*(\d+)/); return mm ? +mm[1] : null; };
+        // นับวงกลมบน (top face) ใน SVG จริง — robust ต่อ caption format ที่มีเบอร์เหล็ก (#3 pi 2026-06-11)
+        const topCirc = div => { const v = div && div.querySelector('svg'); if (!v) return null; const vb = (v.getAttribute('viewBox') || '0 0 130 150').split(' ').map(Number); return [...v.querySelectorAll('circle')].map(c => +c.getAttribute('cy')).filter(y => y < vb[3] / 2).length; };
         const secs = [...document.querySelectorAll('#sectionsRow > div')];
-        const leftN = secs[0] ? capN(secs[0]) : null, rightN = secs[2] ? capN(secs[2]) : null;
+        const leftN = secs[0] ? topCirc(secs[0]) : null, rightN = secs[2] ? topCirc(secs[2]) : null;
         A('§A หน้าตัด 3 ช่อง: หัวเสาซ้าย == engine supTop[gIdx] (position-accurate · Codex P2)',
           leftN === null || leftN === expTop(gi), 'left บน=' + leftN + ' exp=' + expTop(gi));
         A('§A หน้าตัด 3 ช่อง: หัวเสาขวา == engine supTop[gIdx+1] (position-accurate · Codex P2)',
           rightN === null || rightN === expTop(gi + 1), 'right บน=' + rightN + ' exp=' + expTop(gi + 1));
+        // #3: caption หน้าตัดต้องมีเบอร์เหล็ก (DBxx) — กัน regress กลับ "บน N" เลขเปล่า (pi 2026-06-11)
+        const cap0 = (secs[0] && secs[0].textContent) || '';
+        A('หน้าตัด: caption มีเบอร์เหล็ก (DBxx · ไม่ใช่เลขเปล่า) — #3',
+          /บน\s*\d+-[RD]B\d+/.test(cap0), 'cap="' + cap0.replace(/\s+/g, ' ').slice(0, 40) + '"');
+        // #2: caption แยก "หลัก + เสริม" เมื่อมีเหล็กเสริมพิเศษ (>2 เส้น) — ภาษาเดียวกับรูปด้านข้าง/BBS (pi 2026-06-11)
+        const govBot = (eb2.spanBot || []).reduce((mx, x) => (x && x.n > mx) ? x.n : mx, 0);
+        const midCap = (secs[1] && secs[1].textContent) || '';   // sectionsRow[1] = 'mid' (+M · spanBot วิกฤต)
+        A('หน้าตัด: แยก "หลัก + เสริม" เมื่อมีเหล็กเสริมพิเศษ (#2)',
+          govBot <= 2 || /เสริม/.test(midCap), 'govBot=' + govBot + ' cap="' + midCap.replace(/\s+/g, ' ').slice(0, 44) + '"');
       }
       const warnEl = document.getElementById('ccCurtailWarn');
       A('curtailment A2b: cont+จุดโหลด → banner ซ่อน (applicable=true · บน-ล่าง exact · ไม่มี ⚠️)',
