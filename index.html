@@ -2412,8 +2412,10 @@
     // เบอร์เหล็กต่อหน้า (#3 · pi 2026-06-11) — จาก engine list (mixed-size ครบ) · nominal → เบอร์หลักของคาน
     const _szNum = s => +(((s || 'DB16').match(/\d+/)) || [16])[0];
     const _maxSz = arr => { const f = (arr || []).filter(Boolean); return f.length ? f.reduce((a, b) => _szNum(b) > _szNum(a) ? b : a) : 'DB16'; };
-    const _mainTop = bars ? _maxSz(bars.supTop.filter(s => s.n > 0).map(s => s.size)) : 'DB16';
     const _mainBot = bars ? _maxSz((bars.spanBot || []).map(s => s.size)) : 'DB16';
+    // single-span: supTop เป็น n=0 ล้วน → filter ว่าง → fallback เบอร์ล่าง (mirror elevation `topSize||botSize` + BBS · กัน drift "บน 2-DB16" เมื่อเหล็กล่าง≠DB16 · P2 fix 2026-06-21)
+    const _topSz = bars ? bars.supTop.filter(s => s.n > 0).map(s => s.size) : [];
+    const _mainTop = _topSz.length ? _maxSz(_topSz) : _mainBot;
     const _fmtL = (list, n, fb) => (list && list.length) ? list.map(t => `${t[1]}-${t[0]}`).join(' + ') : `${n}-${fb}`;
     // #2 (pi 2026-06-11) — แยก "เหล็กหลัก (2 มุม วิ่งเต็ม) + เสริมพิเศษ (ตัด)" ด้วย extraBarGroups เดียวกับรูปด้านข้าง/BBS
     //   → ทุก surface พูดภาษาเดียวกัน (หน้าตัด ↔ รูปด้านข้าง ↔ BBS) · ไม่มี extra → โชว์ยอดหลักเฉยๆ
