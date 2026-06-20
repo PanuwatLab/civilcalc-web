@@ -2494,12 +2494,15 @@
       for (let L = 0; L < nL; L++) {
         const cnt = Math.min(Math.ceil(n / nL), n - placed);   // ชั้นนอกเต็มก่อน (เฉลี่ยปัดขึ้น)
         const y = y0 + dir * L * rowGap;
-        const pitch = cnt > 1 ? (x1 - x0) / (cnt - 1) : 0;     // กันวงกลมทับเมื่อแน่น → clamp r ≤ ครึ่ง pitch (คงลำดับใหญ่/เล็ก)
+        const pitch = cnt > 1 ? (x1 - x0) / (cnt - 1) : 0;
         const ord = [];                                        // ลำดับตำแหน่ง: มุมก่อน (0, cnt-1, 1, cnt-2 ...)
         for (let a = 0, z = cnt - 1; a <= z;) { ord.push(a); if (a !== z) ord.push(z); a++; z--; }
-        ord.forEach(pos => {
-          let r = _barR(sizes[idx++] || fb);
-          if (pitch > 0) r = Math.min(r, Math.max(1.4, pitch / 2 - 0.3));   // หน้าตัดแน่น (คานสูงแคบ) → ย่อกันทับ
+        const natR = ord.map(() => _barR(sizes[idx++] || fb));   // รัศมีจริงตาม db (ลำดับวาง · มุมก่อน=ใหญ่)
+        const maxNat = Math.max(...natR, 0.001);
+        // หน้าตัดแน่น (คานสูงแคบ) → ย่อทั้งแถว "ตามอัตราส่วน" คงสัดส่วนเบอร์ (เดิม cap เท่ากันทำให้เบอร์ต่างดูเท่ากัน · Codex P2)
+        const f = pitch > 0 ? Math.min(1, (pitch / 2 - 0.3) / maxNat) : 1;
+        ord.forEach((pos, kk) => {
+          const r = Math.max(1.3, natR[kk] * f);
           const cx = cnt === 1 ? (x0 + x1) / 2 : x0 + (pos / (cnt - 1)) * (x1 - x0);
           svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#1D4ED8', 'data-bar': tag }));
         });
