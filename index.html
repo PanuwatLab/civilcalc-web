@@ -2388,18 +2388,25 @@
   function buildSection(loc) {
     const m = liveData();   // Phase 4B fix · ป้าย b×h = engine จริง (เดิมแช่ MOCK → รูปหน้าตัดโชว์ขนาดผิด) · bar counts+layers = engine จริงผ่าน detailBars (§A · ปิด cascade)
 
-    const W = 130, Hh = 150, pad = 22;
-    const bw = W - pad * 2, bh = Hh - pad * 2;
-    const svg = svgEl('svg', { viewBox: `0 0 ${W} ${Hh}`, class: 'svg-fit', 'font-family': 'JetBrains Mono, monospace' });
-    // concrete
-    svg.appendChild(svgEl('rect', { x: pad, y: pad, width: bw, height: bh, fill: '#EEF2F6', stroke: '#94A3B8', 'stroke-width': 1.2 }));
-    // stirrup (outer closed tie)
-    const si = 7;
-    svg.appendChild(svgEl('rect', { x: pad + si, y: pad + si, width: bw - 2 * si, height: bh - 2 * si, fill: 'none', stroke: '#94A3B8', 'stroke-width': 1, rx: 3 }));
-    // 4-leg tie (2ป): add an inner tie around the middle bars
+    // ── หน้าตัด scale ตามสัดส่วน b×h จริง (เดิม fix 130×150 → คานสูง/แบนวาดรูปเดียวกัน · audit 2026-06-21 · ref rc-beam-section.js + DRMK ตาราง 3.3) ──
+    const VBW = 130, VBH = 162, capH = 17, mg = 11;       // viewBox คงที่ (svg-fit) · capH=ที่ป้าย b×h · mg=ขอบ
+    const mb = m.b || 30, mh = m.h || 50;
+    const cover_cm = (m && m.cover) || (typeof P !== 'undefined' && P.cover) || 4;   // cover จริงจาก engine result
+    const dstir_cm = 0.9;                                  // ปลอก RB9 (schematic)
+    const k = Math.min((VBW - 2 * mg) / mb, (VBH - capH - mg) / mh);   // px/ซม. · คงสัดส่วน (fit-box · ตัวเดียวทั้ง x,y)
+    const W = mb * k, Hh = mh * k;                         // ขนาดคอนกรีตที่วาด = สัดส่วนจริง
+    const ox = (VBW - W) / 2, oy = capH + (VBH - capH - mg - Hh) / 2;  // จัดกึ่งกลาง
+    const svg = svgEl('svg', { viewBox: `0 0 ${VBW} ${VBH}`, class: 'svg-fit', 'font-family': 'JetBrains Mono, monospace' });
+    // concrete (สัดส่วนจริง)
+    svg.appendChild(svgEl('rect', { x: ox, y: oy, width: W, height: Hh, fill: '#EEF2F6', stroke: '#94A3B8', 'stroke-width': 1.2 }));
+    // stirrup tie · inset = (cover + ปลอก) scale จริง (เดิม fix 7px ไม่ตาม cover → G3)
+    const insP = (cover_cm + dstir_cm) * k;
+    const sx = ox + insP, sy = oy + insP, sw = Math.max(4, W - 2 * insP), sh = Math.max(4, Hh - 2 * insP);
+    svg.appendChild(svgEl('rect', { x: sx, y: sy, width: sw, height: sh, fill: 'none', stroke: '#94A3B8', 'stroke-width': 1, rx: 3 }));
+    // 4-leg tie (2ป): inner tie รอบเหล็กกลาง
     if (state.legs === 2) {
-      const iw = (bw - 2 * si) * 0.42;
-      svg.appendChild(svgEl('rect', { x: W / 2 - iw / 2, y: pad + si + 2, width: iw, height: bh - 2 * si - 4, fill: 'none', stroke: '#94A3B8', 'stroke-width': 1, rx: 3 }));
+      const iw = sw * 0.42;
+      svg.appendChild(svgEl('rect', { x: ox + W / 2 - iw / 2, y: sy + 2, width: iw, height: sh - 4, fill: 'none', stroke: '#94A3B8', 'stroke-width': 1, rx: 3 }));
     }
     // bar counts + layers จาก engine จริง (detailBars · ปิด display cascade ถาวร · เลิก hardcode/recompute)
     //   ผูกกับ "ช่วงวิกฤต" (gIdx = เหล็กล่าง/+M มากสุด) แล้ว map ตำแหน่งจริง — ปิด Codex P2 asymmetric/cantilever:
@@ -2428,14 +2435,15 @@
     };
     let nTop = 2, nBot = 3, topLayers = 0, botLayers = (m && m.nLayers) || 0;   // fallback nominal เมื่อ engine ยังไม่ ready (bars=null)
     let topLbl = `2-${_mainTop}`, botLbl = `2-${_mainBot}`;
+    let topList = null, botList = null;   // เบอร์เหล็กผสมต่อหน้า → วาดวงกลมตามขนาดจริง (ใหญ่ไปมุม · audit 2026-06-21)
     if (loc === 'mid') {
       const b = bars && bars.spanBot[gIdx];
       nTop = 2;                                              // กลางช่วง: เหล็กบน = nominal hanger (engine ไม่คิด +M top)
       // doubly +M: เหล็กบน = เหล็กรับแรงอัด (As′) จาก engine · continuous → spanComp[gIdx] · single → comp (DRMK book p70)
       const cmpMid = bars && (bars.spanComp ? bars.spanComp[gIdx] : bars.comp);
-      if (bars && bars.isDoubly && cmpMid && cmpMid.n) { nTop = cmpMid.n; topLayers = cmpMid.n_layers || 0; topLbl = `${_fmtL(cmpMid.list, nTop, _mainTop)} (รับอัด)`; }
+      if (bars && bars.isDoubly && cmpMid && cmpMid.n) { nTop = cmpMid.n; topLayers = cmpMid.n_layers || 0; topLbl = `${_fmtL(cmpMid.list, nTop, _mainTop)} (รับอัด)`; topList = cmpMid.list; }
       else topLbl = `2-${_mainTop}`;
-      if (b && b.n) { nBot = b.n; botLayers = b.n_layers || 0; botLbl = _decompLbl(b.list) || _fmtL(b.list, nBot, _mainBot); }
+      if (b && b.n) { nBot = b.n; botLayers = b.n_layers || 0; botLbl = _decompLbl(b.list) || _fmtL(b.list, nBot, _mainBot); botList = b.list; }
       else { nBot = 3; botLbl = `3-${_mainBot}`; }
     } else {   // 'left' / 'right' / 'sup' = หน้าตัดหัวเสา (−M)
       nBot = 2; botLayers = 0; botLbl = `2-${_mainBot}`;    // หัวเสา: เหล็กล่าง = เส้นหลักวิ่งผ่าน (nominal 2 มุม)
@@ -2444,42 +2452,60 @@
         if (loc === 'sup') (bars.supTop || []).forEach((x, i) => { if (x && x.n > (t ? t.n : -1)) { t = x; sIdx = i; } });   // governing support (overview)
         else { sIdx = (loc === 'left' ? gIdx : gIdx + 1); t = bars.supTop && bars.supTop[sIdx]; }   // หัวเสาฝั่งจริงของช่วงวิกฤต (ตำแหน่ง · ซ้าย≠ขวา)
       }
-      if (t && t.n) { nTop = t.n; topLayers = t.n_layers || 0; topLbl = _decompLbl(t.list) || _fmtL(t.list, nTop, _mainTop); }
+      if (t && t.n) { nTop = t.n; topLayers = t.n_layers || 0; topLbl = _decompLbl(t.list) || _fmtL(t.list, nTop, _mainTop); topList = t.list; }
       else { nTop = 2; topLbl = `2-${_mainTop}`; }          // เสาไม่มี −M → nominal 2 (ไม่ overstate)
       // doubly −M: เหล็กรับแรงอัดอยู่ "ล่าง" (สลับด้านจากช่วง +M · DRMK book p70) → แทน nominal 2
       const cmpSup = (bars && bars.supComp && sIdx >= 0) ? bars.supComp[sIdx] : null;
-      if (cmpSup && cmpSup.n) { nBot = cmpSup.n; botLayers = cmpSup.n_layers || 0; botLbl = `${_fmtL(cmpSup.list, nBot, _mainBot)} (รับอัด)`; }
+      if (cmpSup && cmpSup.n) { nBot = cmpSup.n; botLayers = cmpSup.n_layers || 0; botLbl = `${_fmtL(cmpSup.list, nBot, _mainBot)} (รับอัด)`; botList = cmpSup.list; }
     }
-    // จำนวนชั้นจากความกว้างจริง (port สูตร engine: s_clear=max(db,2.5,1.33·d_agg) · cap 6 เส้น/ชั้น) → กันวาดเบียดแถวเดียว
+    // จำนวนชั้นจากความกว้างจริง (port สูตร engine: s_clear=max(db,2.5,1.33·d_agg) · cap 6 เส้น/ชั้น) → fallback เมื่อ engine ไม่ส่ง n_layers
     const _layers = (n, db_cm) => {
-      const cov = (m && m.cover) || (typeof P !== 'undefined' && P.cover) || 4;   // cover จาก engine result (snapshot · ตรงผลที่คำนวณ · Codex P2) → fallback live P.cover
-      const avail = (m.b || 30) - 2 * cov - 2 * 0.9;        // stirrup 0.9 (ซม.)
+      const avail = mb - 2 * cover_cm - 2 * dstir_cm;       // ช่องในระหว่างปลอก (ซม.)
       const s = Math.max(db_cm, 2.5, 1.33 * 2.0);           // MAX_AGGREGATE_CM = 2.0
       const per = Math.min(6, Math.max(1, Math.floor((avail + s) / (db_cm + s) + 1e-9)));
       return Math.max(1, Math.ceil(n / per));
     };
-    // วาดเหล็ก n เส้นเป็น nLayers ชั้น · ชั้นนอกสุด (ผิวรับแรง) เต็มก่อน · ชั้นถัดเข้าด้านใน(ทาง NA)
-    //   forced = ใช้ n_layers จาก engine result ตรงๆ (ถ้ามี · ตรงผลคำนวณเป๊ะ · Codex P2) · ไม่งั้น recompute
-    const dotsRows = (n, yOuter, r, dir, db_cm, forced) => {
-      const x0 = pad + si + 6, x1 = W - pad - si - 6;
-      const nL = (forced && forced >= 1) ? Math.min(forced, Math.max(1, n)) : _layers(n, db_cm), rowGap = 2 * r + 2.5;
-      let placed = 0;
+    // เบอร์เหล็ก → ซม. + รัศมีวงกลม ∝ db (เบอร์ใหญ่=วงใหญ่ · monotonic · floor ให้อ่านออก · เดิมคงที่ทุกเบอร์ → G2)
+    const _szCm = sz => _szNum(sz) / 10;
+    const _barR = sz => Math.max(2.0, Math.min(5.0, 1.7 + _szCm(sz) * 0.85));
+    // เรียงเบอร์ลงตำแหน่ง (ใหญ่สุดไปมุมก่อน ตาม convention) · list ว่าง → เติมด้วยเบอร์หลัก fb
+    const _orderSizes = (n, list, fb) => {
+      const exp = [];
+      (list || []).slice().sort((a, b) => _szNum(b[0]) - _szNum(a[0])).forEach(([s, c]) => { for (let i = 0; i < c; i++) exp.push(s); });
+      while (exp.length < n) exp.push(exp.length ? exp[exp.length - 1] : (fb || 'DB16'));
+      return exp.slice(0, n);
+    };
+    // วาดเหล็ก n เส้น nL ชั้น · ชั้นนอก(ผิวรับแรง)ก่อน · เบอร์ใหญ่ไปมุม · cx/cy/r เรขาคณิตจริง · tag data-bar ให้ audit นับแม่น
+    //   forced = n_layers จาก engine result ตรงๆ (ถ้ามี · Codex P2) · ไม่งั้น recompute จากความกว้าง
+    const dotsRows = (n, yEdge, dir, fb, forced, list, tag) => {
+      if (n <= 0) return 0;
+      const sizes = _orderSizes(n, list, fb);              // index 0 = ใหญ่สุด
+      const big = sizes.reduce((mx, s) => Math.max(mx, _szCm(s)), _szCm(fb));
+      const rMax = Math.max(2.0, Math.min(5.0, 1.7 + big * 0.85));
+      const x0 = sx + rMax + 1, x1 = sx + sw - rMax - 1;
+      const nL = (forced && forced >= 1) ? Math.min(forced, Math.max(1, n)) : _layers(n, big);
+      const rowGap = Math.max(2 * rMax + 1.5, (big + 2.5) * k);   // ระยะดิ่งระหว่างชั้น ≥ db+2.5 ซม. (scale) หรือไม่ทับ
+      const y0 = yEdge + dir * (rMax + 1);
+      let placed = 0, idx = 0;
       for (let L = 0; L < nL; L++) {
-        const cnt = Math.min(Math.ceil(n / nL), n - placed);  // ชั้นนอกเต็มก่อน (เฉลี่ยปัดขึ้น)
-        const y = yOuter + dir * L * rowGap;
-        for (let i = 0; i < cnt; i++) {
-          const cx = cnt === 1 ? (x0 + x1) / 2 : x0 + (i / (cnt - 1)) * (x1 - x0);
-          svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#1D4ED8' }));
-        }
+        const cnt = Math.min(Math.ceil(n / nL), n - placed);   // ชั้นนอกเต็มก่อน (เฉลี่ยปัดขึ้น)
+        const y = y0 + dir * L * rowGap;
+        const ord = [];                                        // ลำดับตำแหน่ง: มุมก่อน (0, cnt-1, 1, cnt-2 ...)
+        for (let a = 0, z = cnt - 1; a <= z;) { ord.push(a); if (a !== z) ord.push(z); a++; z--; }
+        ord.forEach(pos => {
+          const r = _barR(sizes[idx++] || fb);
+          const cx = cnt === 1 ? (x0 + x1) / 2 : x0 + (pos / (cnt - 1)) * (x1 - x0);
+          svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#1D4ED8', 'data-bar': tag }));
+        });
         placed += cnt;
         if (placed >= n) break;
       }
       return nL;
     };
-    const nlTop = dotsRows(nTop, pad + si + 8, 3.4, +1, 2.0, topLayers);   // เหล็กบน (−M หัวเสา) · ใช้ n_layers จาก engine support top · 0 → recompute fallback
-    const nlBot = dotsRows(nBot, Hh - pad - si - 8, 3.6, -1, 2.0, botLayers);  // เหล็กล่าง (+M) · ใช้ n_layers จาก engine span bottom · 0 → recompute fallback
+    dotsRows(nTop, sy, +1, _mainTop, topLayers, topList, 'top');           // เหล็กบน (−M หัวเสา · ชั้นจาก engine)
+    dotsRows(nBot, sy + sh, -1, _mainBot, botLayers, botList, 'bot');      // เหล็กล่าง (+M · ชั้นจาก engine)
     // labels
-    const tl = svgEl('text', { x: W / 2, y: 13, 'font-size': 9, fill: '#64748B', 'text-anchor': 'middle' }); tl.textContent = `${m.b}×${m.h}`; svg.appendChild(tl);
+    const tl = svgEl('text', { x: VBW / 2, y: 12, 'font-size': 9, fill: '#64748B', 'text-anchor': 'middle' }); tl.textContent = `${m.b}×${m.h}`; svg.appendChild(tl);
     return { svg, nTop, nBot, topLbl, botLbl };
   }
   function drawSection(sel, loc) { const host = $(sel); if (!host) return; host.innerHTML = ''; const box = document.createElement('div'); box.style.maxWidth = '150px'; box.style.margin = '0 auto'; box.appendChild(buildSection(loc).svg); host.appendChild(box); }
@@ -6352,7 +6378,8 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         const eb = TT().detailBars();
         if (eb) {
           const govN = arr => (arr || []).reduce((mx, x) => (x && x.n > mx) ? x.n : mx, 0);
-          const _face = (v, top) => { const vb = (v.getAttribute('viewBox') || '0 0 130 150').split(' ').map(Number); const cs = [...v.querySelectorAll('circle')].map(c => +c.getAttribute('cy')); return cs.filter(y => top ? y < vb[3] / 2 : y >= vb[3] / 2).length; };
+          // นับเหล็กตาม data-bar attribute (robust · ไม่พึ่ง geometry · รองรับหน้าตัด scale ตามสัดส่วนจริง · audit 2026-06-21)
+          const _face = (v, top) => v.querySelectorAll('circle[data-bar="' + (top ? 'top' : 'bot') + '"]').length;
           const _ms = [...document.querySelectorAll('#sectionMain svg')];   // [0]='mid'(+M) · [1]='sup'(−M)
           const gBot = govN(eb.spanBot);   // governing +M span bottom (โชว์ใน section 'mid')
           A(`${lbl}: หน้าตัด เหล็กล่าง count == engine (§A · governing)`,
@@ -6364,6 +6391,21 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
               gTop === 0 || (_ms[1] && _face(_ms[1], true) === gTop),
               'engine บน=' + gTop + ' drawn=' + (_ms[1] ? _face(_ms[1], true) : '?'));
           }
+          // G1 (audit 2026-06-21): หน้าตัด scale ตามสัดส่วน b×h จริง (เดิม fix 130×150 → คานสูง/แบนรูปเดียวกัน)
+          const _aspect = v => { const r = v && v.querySelector('rect'); return r ? (+r.getAttribute('width')) / (+r.getAttribute('height')) : null; };
+          if (_ms[0] && res && res.b && res.h) {
+            const drawn = _aspect(_ms[0]), real = res.b / res.h;
+            A(`${lbl}: หน้าตัด สัดส่วน rect ≈ b/h จริง (G1 · scale)`,
+              drawn != null && Math.abs(drawn - real) / real < 0.06,
+              'real=' + real.toFixed(2) + ' drawn=' + (drawn != null ? drawn.toFixed(2) : '?'));
+          }
+          // G2 (audit 2026-06-21): เบอร์เหล็กผสม → วงกลมหลายขนาด (เดิมทุกเบอร์รัศมีเท่ากัน → แยกไม่ออก)
+          let _gi = -1, _gn = -1; (eb.spanBot || []).forEach((x, i) => { if (x && x.n > _gn) { _gn = x.n; _gi = i; } }); _gi = Math.max(0, _gi);
+          const _midSizes = new Set(((eb.spanBot[_gi] || {}).list || []).map(t => t[0])).size;
+          const _drawnR = _ms[0] ? new Set([..._ms[0].querySelectorAll('circle[data-bar="bot"]')].map(c => c.getAttribute('r'))).size : 0;
+          A(`${lbl}: หน้าตัด เบอร์ผสม → วงกลมหลายขนาด (G2 · bar-size)`,
+            _midSizes < 2 || _drawnR >= 2,
+            'engineSizes=' + _midSizes + ' drawnRadii=' + _drawnR);
         }
       });
 
@@ -6377,7 +6419,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         let gi = -1, gn = -1; eb2.spanBot.forEach((x, i) => { if (x && x.n > gn) { gn = x.n; gi = i; } }); gi = Math.max(0, gi);
         const expTop = i => { const t = eb2.supTop[i]; return (t && t.n) ? t.n : 2; };   // เสาไม่มี −M → nominal 2
         // นับวงกลมบน (top face) ใน SVG จริง — robust ต่อ caption format ที่มีเบอร์เหล็ก (#3 pi 2026-06-11)
-        const topCirc = div => { const v = div && div.querySelector('svg'); if (!v) return null; const vb = (v.getAttribute('viewBox') || '0 0 130 150').split(' ').map(Number); return [...v.querySelectorAll('circle')].map(c => +c.getAttribute('cy')).filter(y => y < vb[3] / 2).length; };
+        const topCirc = div => { const v = div && div.querySelector('svg'); return v ? v.querySelectorAll('circle[data-bar="top"]').length : null; };   // นับตาม data-bar (robust · geometry scale 2026-06-21)
         const secs = [...document.querySelectorAll('#sectionsRow > div')];
         const leftN = secs[0] ? topCirc(secs[0]) : null, rightN = secs[2] ? topCirc(secs[2]) : null;
         A('§A หน้าตัด 3 ช่อง: หัวเสาซ้าย == engine supTop[gIdx] (position-accurate · Codex P2)',
@@ -6440,7 +6482,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         !!(_dr && _dr.isDoubly && _dr.pass), 'isDoubly=' + (_dr && _dr.isDoubly) + ' pass=' + (_dr && _dr.pass));
       const _dsvg = document.querySelector('#sectionMain svg');
       let _dtop = 0;
-      if (_dsvg) { const vb = _dsvg.getAttribute('viewBox').split(' ').map(Number); _dtop = [..._dsvg.querySelectorAll('circle')].map(c => +c.getAttribute('cy')).filter(y => y < vb[3] / 2).length; }
+      if (_dsvg) { _dtop = _dsvg.querySelectorAll('circle[data-bar="top"]').length; }   // เหล็กอัด midspan = บน (data-bar robust)
       A('doubly: หน้าตัด เหล็กบน(midspan) = As′ engine count (เหล็กรับแรงอัด · ไม่ใช่ nominal)',
         !!(_deb && _deb.isDoubly) && _deb.comp.n > 0 && _dtop === _deb.comp.n,
         'engComp=' + (_deb && _deb.comp && _deb.comp.n) + ' drawnTop=' + _dtop);
@@ -6476,7 +6518,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       TT().drawMainSections();
       const _scNs = (_cdb && _cdb.supComp || []).filter(c => c && c.n > 2).map(c => c.n);   // เหล็กอัดหัวเสา doubly (>nominal)
       const _hasBotComp = [...document.querySelectorAll('#sectionMain svg')]
-        .some(v => { const vb = (v.getAttribute('viewBox') || '0 0 130 150').split(' ').map(Number); const bot = [...v.querySelectorAll('circle')].map(c => +c.getAttribute('cy')).filter(y => y >= vb[3] / 2).length; return _scNs.includes(bot); });
+        .some(v => { const bot = v.querySelectorAll('circle[data-bar="bot"]').length; return _scNs.includes(bot); });   // เหล็กอัดหัวเสา = ล่าง (data-bar robust)
       A('doubly-cont: หน้าตัดหัวเสา −M เหล็กรับแรงอัดวาด "ล่าง" = engine As′ (face ถูก · ไม่ใช่ nominal)',
         _csi < 0 || _hasBotComp, 'compNs=[' + _scNs.join(',') + '] drawnBottomMatch=' + _hasBotComp);
       // BBS (ตารางตัดเหล็ก) ต้องมีแถวเหล็กรับแรงอัดเมื่อ doubly — sibling-surface · takeoff ครบ (บทเรียน #20/#21)
