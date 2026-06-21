@@ -146,6 +146,32 @@ chk_true("continuous: flexure ช่วง 0 As เท่าเดิม (torsio
          abs(oc1["spans"][0]["bottom"].get("As_required", 0) - oc0["spans"][0]["bottom"].get("As_required", 0)) < 1e-6)
 
 print("=" * 64)
+print(" H · robustness · A0h≤0 guard + continuous torsion_warnings (Codex P2/P3)")
+print("=" * 64)
+# A0h≤0 (b − 2·cover ≤ 0) → ต้อง raise SectionTooSmallForShearError ไม่ใช่ ZeroDivisionError
+threw_guard, threw_zde = False, False
+try:
+    calc.compute_torsion(Tu_tonm=2.0, Vu_ton=3.0, b_cm=8, h_cm=40, fc_ksc=240, cover_cm=4.0)
+except calc.SectionTooSmallForShearError:
+    threw_guard = True
+except ZeroDivisionError:
+    threw_zde = True
+chk_true("A0h≤0 (b−2cover≤0) → raise SectionTooSmallForShearError", threw_guard)
+chk_true("A0h≤0 → ไม่ใช่ ZeroDivisionError (guard กันแล้ว)", not threw_zde)
+# continuous section-too-small → emit torsion_warnings (symmetric กับ single out.warnings)
+ocw = calc.design_continuous_beam_exact(CBI(b=20, h=30, fc=240, fy=4000,
+    spans=[SI(5.0, 8.0, 3.0, []), SI(5.0, 8.0, 3.0, [])],
+    Tu_tonm_per_span=[15.0, 0.0]))
+chk_true("continuous section-too-small → torsion_warnings ไม่ว่าง (Codex P2)",
+         bool(ocw.get("torsion_warnings")))
+chk_true("continuous section-too-small → warning อ้างชื่อช่วง (A-B)",
+         any("A-B" in w for w in ocw.get("torsion_warnings", [])))
+chk_true("continuous section-too-small → passes=False (FAIL ถูก)", ocw["passes"] is False)
+# zero-reg: ไม่มีบิด → torsion_warnings ว่าง
+chk_true("continuous Tu ว่าง → torsion_warnings ว่าง (zero-reg)",
+         oc0.get("torsion_warnings") == [])
+
+print("=" * 64)
 n_pass, n_fail = len(PASS), len(FAIL)
 print(f" RESULT: {n_pass}/{n_pass + n_fail} passed" + (f" · FAILED: {FAIL}" if FAIL else " · ALL PASS ✓"))
 print("=" * 64)

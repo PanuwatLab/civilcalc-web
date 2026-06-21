@@ -4780,6 +4780,12 @@ def compute_torsion(
     # 3. เรขาคณิตเหล็กปลอกปิด
     x0 = b_cm - 2.0 * cover_cm
     y0 = h_cm - 2.0 * cover_cm
+    # guard: หน้าตัดเล็กเกินจน b/h − 2·cover ≤ 0 → A0h ≤ 0 → หาร 0 ใน tau_t/At_s
+    #   raise เป็น SectionTooSmallForShearError (จับได้เหมือนเคสหน้าตัดเล็กอื่น · Codex P3 defense-in-depth)
+    if x0 <= 0.0 or y0 <= 0.0:
+        raise SectionTooSmallForShearError(
+            f"หน้าตัดเล็กเกินสำหรับเหล็กปลอกปิดรับบิด (x0={x0:.1f}, y0={y0:.1f} ซม · "
+            f"b/h − 2·cover ≤ 0) · ต้องเพิ่ม b/h หรือลด cover · DRMK Ch.9")
     A0h = x0 * y0
     A0 = 0.85 * A0h
     ph = 2.0 * (x0 + y0)
@@ -6207,6 +6213,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
     cant_L, cant_R = az["cant_L"], az["cant_R"]
 
     spans_out = []
+    _tor_warnings = []   # แรงบิด: per-span section-too-small (symmetric กับ single-span out.warnings · Codex P2)
     for i in range(n):
         M_pos = vm[i]["M_pos"]
         Vu = vm[i]["V_absmax"]
@@ -6239,6 +6246,8 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
                     is_compatibility=inp.torsion_compatibility)
             except SectionTooSmallForShearError as exc:
                 _tor_i = {"applicable": True, "section_ok": False, "error": str(exc)}
+                _tor_warnings.append(
+                    f"🔴 ช่วง {_grid_label(i)}-{_grid_label(i+1)} แรงเฉือน+บิดร่วมกัน: {exc}")
         spans_out.append({
             "label": f"{_grid_label(i)}-{_grid_label(i+1)}", "L": Ls[i], "wu_kNm": ws[i],
             "M_pos_kNm": M_pos, "M_pos_tonm": M_pos * KNM_TO_TONM,
@@ -6420,6 +6429,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         "diagram": {"x": diag_x, "V_ton": diag_V, "M_tonm": diag_M},
         "cantilevers": cantilevers_out, "cantilever_geo": cantilever_geo,
         "cantilever_warnings": cant_warnings, "has_cantilever": bool(cant_L or cant_R),
+        "torsion_warnings": _tor_warnings,   # แรงบิด section-too-small ต่อช่วง (symmetric กับ single · Codex P2)
         "citations": [
             "วิเคราะห์แม่นยำ: สมการสามโมเมนต์ (Clapeyron) · EI คงที่ · ปลายเป็นจุดรองรับธรรมดา",
             "รองรับ UDL + จุดโหลด + คานยื่น (overhang · โมเมนต์ปลายรู้ค่า) · ช่วงไม่เท่ากันได้",
