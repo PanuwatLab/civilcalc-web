@@ -263,6 +263,10 @@ class BeamOutput:
     phi_Mn: float = 0.0             # design moment capacity (kg·cm)
     safety_margin_pct: float = 0.0  # (φMn − Mu) / Mu × 100
 
+    # serviceability · ความลึกน้อยที่สุด (DRMK ตาราง 3.1 · ไม่ผ่าน = ต้องคำนวณการแอ่น · ไม่ใช่ fail กำลัง)
+    min_depth_ok: bool = True       # h ≥ h_min (L/16 ช่วงเดียว) ?
+    h_min_cm: float = 0.0           # ความลึกน้อยที่สุดที่ต้องการ (ซม.)
+
     # status
     passes: bool = False
     warnings: list[str] = field(default_factory=list)
@@ -389,6 +393,24 @@ def validate_input(inp: BeamInput) -> list[str]:
 def compute_effective_depth(h: float, cover: float, d_stirrup: float, db: float) -> float:
     """d = h − cover − d_stirrup − db/2 (single layer · c.g. ของเหล็กชั้นเดียว)"""
     return h - cover - d_stirrup - db / 2.0
+
+
+# kind → อัตราส่วนความลึกน้อยที่สุด (DRMK ตารางที่ 3.1 · p55 · ACI Table 9.5(a) / ว.ส.ท.)
+_MIN_DEPTH_RATIO = {"simple": 16.0, "one_end": 18.5, "both_ends": 21.0, "cantilever": 8.0}
+
+
+def min_beam_depth(L_m: float, kind: str, fy: float) -> float:
+    """ความลึกน้อยที่สุดของคาน h (ซม.) เพื่อ "ไม่ต้องคำนวณการแอ่น" (serviceability).
+
+    DRMK ตารางที่ 3.1 (p55 · อ้าง ACI Table 9.5(a) + ว.ส.ท.) · คอนกรีตธรรมดา:
+      simple (ช่วงเดียว) L/16 · one_end (ต่อเนื่องปลายเดียว) L/18.5 ·
+      both_ends (ต่อเนื่องสองด้าน) L/21 · cantilever (ยื่น) L/8.
+    Footnote: fy ≠ 4,000 ก.ก./ซม.² → คูณด้วย (0.4 + fy/7,000).
+    หมายเหตุ: ไม่ผ่าน ≠ fail กำลัง — เป็นเกณฑ์ "ข้ามการคำนวณแอ่นได้" · ถ้าบางกว่านี้
+    ต้องคำนวณระยะแอ่นจริงตามตารางที่ 10.3 (advisory · ตัวเลือก ก)."""
+    md = (0.4 + fy / 7000.0) if abs(fy - 4000.0) > FLOAT_TOL else 1.0
+    ratio = _MIN_DEPTH_RATIO.get(kind, 16.0)
+    return L_m * 100.0 / ratio * md
 
 
 def min_clear_spacing(db_cm: float) -> float:
@@ -1798,6 +1820,18 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     # Overall pass = flexure AND shear
     out.passes = bool(out.passes_flexure and out.passes_shear)
 
+    # Serviceability · ความลึกน้อยที่สุด (DRMK ตาราง 3.1 · advisory · ไม่เปลี่ยน passes กำลัง · ตัวเลือก ก)
+    #   คานช่วงเดียว L/16 · (คานยื่นผ่าน design_beam → L/8 · ปกติคานยื่นใช้ทาง continuous อยู่แล้ว)
+    _md_kind = "cantilever" if inp.support == SupportType.CANTILEVER else "simple"
+    out.h_min_cm = min_beam_depth(inp.L, _md_kind, inp.fy)
+    out.min_depth_ok = inp.h >= out.h_min_cm - FLOAT_TOL
+    if not out.min_depth_ok:
+        _r = "L/8" if _md_kind == "cantilever" else "L/16"
+        out.warnings.append(
+            f"🟡 ตื้นเกิน: h={inp.h:.0f} ซม. < ความลึกขั้นต่ำ {_r} = {out.h_min_cm:.1f} ซม. "
+            f"(DRMK ตาราง 3.1 · {'คานยื่น' if _md_kind == 'cantilever' else 'คานช่วงเดียว'}) — "
+            f"เสี่ยงแอ่นตัวเกิน · ต้องคำนวณระยะแอ่นจริง (ตาราง 10.3) หรือเพิ่มความลึก ก่อนใช้งานจริง")
+
     # Citations (Step 12 metadata · verified Hr 7)
     # PREPEND flexure citations (preserve shear citations already extended above)
     flex_citations = [
@@ -2864,6 +2898,9 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         except SectionTooSmallForShearError as exc:
             sd = {"branch": "FAIL", "passes": False, "error": str(exc),
                   "shop_drawing_notation": "หน้าตัดไม่พอ · ต้องขยาย"}
+        # Serviceability · ความลึกน้อยที่สุดต่อช่วง (DRMK ตาราง 3.1): ช่วงริม=ต่อเนื่องปลายเดียว L/18.5 · ช่วงใน=สองด้าน L/21
+        _md_kind_i = "one_end" if (i == 0 or i == n - 1) else "both_ends"
+        _h_min_i = min_beam_depth(Ls[i], _md_kind_i, inp.fy)
         spans_out.append({
             "label": f"{_grid_label(i)}-{_grid_label(i+1)}", "L": Ls[i], "wu_kNm": ws[i],
             "M_pos_kNm": M_pos, "M_pos_tonm": M_pos * KNM_TO_TONM,
@@ -2874,6 +2911,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
             "is_doubly": bool(bottom.get("is_doubly")),
             "comp_bars": _fmt_main_bars(bottom.get("rebar_compression")) if bottom.get("is_doubly") else "—",
             "shear": sd,
+            "h_min_cm": round(_h_min_i, 1), "md_ok": inp.h >= _h_min_i - FLOAT_TOL, "md_kind": _md_kind_i,
         })
 
     supports_out = []
@@ -3015,8 +3053,20 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
                     "⚠️ เหล็กบน (−M) ยังใช้มาตรฐาน รูปที่ 8.32 (ค่าประมาณเมื่อมีจุดโหลด) · ควรตรวจ moment envelope",
                 ]
 
+    # Serviceability · รวมช่วงที่ตื้นกว่าความลึกขั้นต่ำ (DRMK ตาราง 3.1 · advisory · ไม่เปลี่ยน passes)
+    _md_fail = [s for s in spans_out if not s.get("md_ok", True)]
+    min_depth_warnings = [
+        (f"🟡 ตื้นเกิน: ช่วง {s['label']} h={inp.h:.0f} ซม. < ความลึกขั้นต่ำ "
+         f"{'L/18.5' if s.get('md_kind') == 'one_end' else 'L/21'} = {s['h_min_cm']:.1f} ซม. "
+         f"(DRMK ตาราง 3.1 · {'ช่วงริม·ต่อเนื่องปลายเดียว' if s.get('md_kind') == 'one_end' else 'ช่วงใน·ต่อเนื่องสองด้าน'}) "
+         f"— เสี่ยงแอ่นตัวเกิน · ต้องคำนวณระยะแอ่นจริง (ตาราง 10.3) หรือเพิ่มความลึก")
+        for s in _md_fail
+    ]
+    min_depth_ok_all = not _md_fail
+
     return {
         "method": "Three-Moment Equation (วิเคราะห์แม่นยำ)",
+        "min_depth_ok": min_depth_ok_all, "min_depth_warnings": min_depth_warnings,
         "n_spans": n, "b": inp.b, "h": inp.h, "fc": inp.fc, "fy": inp.fy,
         "end_left": inp.end_left, "end_right": inp.end_right,
         "spans": spans_out, "supports": supports_out, "reactions": reactions,
