@@ -187,6 +187,9 @@ class BeamInput:
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
     stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
     partial_udls: list = field(default_factory=list)   # list[PartialUDL] · simply-supported
+    Tu_tonm: float = 0.0              # APPENDED · โมเมนต์บิดออกแบบ "สำเร็จรูป" ที่หน้าตัดวิกฤต (ตัน·ม · fallback/UAT/expert · 0 = ไม่ใช้)
+    Tu_dist_tonm_per_m: float = 0.0   # APPENDED · แรงบิดกระจาย t (ตัน·ม/ม) → engine คิด Tu=t·(L/2−d_actual) ด้วย d จริงหลังเลือกเหล็ก (Codex P2 · กัน understate กรณีหลายชั้น)
+    torsion_compatibility: bool = False   # APPENDED · True → compatibility torsion (ลด Tu เหลือ φTcr · Eq 9.27)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -275,6 +278,9 @@ class BeamOutput:
 
     # detailing · ระยะหยุดเหล็กล่าง คานช่วงเดียว (Phase detailing · bottom-only)
     curtailment: Optional[dict] = None
+
+    # torsion · การบิด (DRMK Ch.9 · None ถ้าไม่มี Tu input · applicable=False ถ้า Tu<φTcr/4)
+    torsion: Optional[dict] = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -1563,6 +1569,183 @@ def select_rebar(
 
 
 # ----------------------------------------------------------------------------
+# Torsion (การบิด) — New Module · DRMK Ch.9 · ว.ส.ท./ACI space-truss + thin-tube
+#   knowledge-first source: vault "Formula - RC Beam Torsion Design (RC-SDM)"
+#   pure function · ไม่แตะ design_beam (zero-reg by construction) · per-section
+#   units IN: Tu = ton·m · Vu = ton · dims = cm · f'c,fy = ksc
+#   verified: Ex 9.1 (threshold) · Ex 9.2 web-section (adequacy/At-s/combine/Al)
+# ----------------------------------------------------------------------------
+
+
+def compute_torsion(
+    Tu_tonm: float,
+    Vu_ton: float,
+    b_cm: float, h_cm: float, fc_ksc: float,
+    d_cm: float | None = None,
+    cover_cm: float = 4.0,            # cover ถึงศูนย์กลางเหล็กปลอก (DRMK Ex 9.2 ใช้ 4)
+    fyt_ksc: float = 4000.0,          # กำลังครากเหล็กปลอก (ทางขวาง)
+    fyl_ksc: float = 4000.0,          # กำลังครากเหล็กยืน (ทางยาว)
+    is_compatibility: bool = False,   # True → compatibility torsion · ลด Tu เหลือ φTcr (Eq 9.27)
+    phi: float = PHI_SHEAR,           # φ = 0.85 (torsion · Eq 9.19)
+) -> dict:
+    """ออกแบบเหล็กรับแรงบิด (closed stirrup At/s + longitudinal Al) · DRMK Ch.9.
+
+    คืน dict:
+      applicable   : bool — False ถ้า Tu < φTcr/4 (ไม่ต้องคิดบิด · Eq 9.20)
+      Tcr_tonm, threshold_tonm, Tu_design_tonm (ลดแล้วถ้า compat)
+      Acp, pcp, A0h, A0, ph, x0, y0
+      section_ok   : bool — section-adequacy Eq 9.17 (False = หน้าตัดเล็กไป)
+      tau_combined_ksc, tau_limit_ksc
+      At_s         : เหล็กปลอกบิด ต่อ "หนึ่งขา" (cm²/cm · Eq 9.21)
+      Av_s_shear   : เหล็กปลอกเฉือน ต่อ "สองขา" (cm²/cm)
+      Avt_s        : ปลอกปิดรวม (Av + 2At)/s (cm²/cm · Eq 9.23) + min (Eq 9.24)
+      s_max_cm     : ระยะเรียงมากสุด = min(ph/8, 30) · เหล็กบิด
+      Al_cm2, Al_min_cm2, Al_final_cm2 : เหล็กยืน (Eq 9.25-9.26)
+      citations, notes
+    Raise SectionTooSmallForShearError ถ้า section-adequacy ไม่ผ่าน (Eq 9.17).
+    """
+    notes: list[str] = []
+    citations: list[str] = []
+    sq = math.sqrt(fc_ksc)
+    if d_cm is None:
+        d_cm = h_cm - 6.0   # ประมาณ (cover+ปลอก+db/2) · caller ส่ง d จริงได้
+
+    # หน่วยภายใน: kg·cm (โมเมนต์บิด) · kg (แรง)
+    Tu_kgcm = Tu_tonm * 100000.0
+    Vu_kg = Vu_ton * 1000.0
+
+    # 1. โมเมนต์บิดแตกร้าว Tcr + threshold (Eq 9.20 · รูปสี่เหลี่ยม Acp = b·h)
+    Acp = b_cm * h_cm
+    pcp = 2.0 * (b_cm + h_cm)
+    Tcr_kgcm = 1.1 * sq * (Acp ** 2) / pcp
+    threshold_kgcm = phi * Tcr_kgcm / 4.0          # = φ·0.275·√f'c·Acp²/pcp
+    Tcr_tonm = Tcr_kgcm / 100000.0
+    threshold_tonm = threshold_kgcm / 100000.0
+    citations.append(
+        f"Tcr = 1.1·√f'c·Acp²/pcp = 1.1·√{fc_ksc:.0f}·{Acp:,.0f}²/{pcp:.0f} "
+        f"= {Tcr_tonm:.2f} ตัน·ม · ขีดจำกัด φTcr/4 = {threshold_tonm:.2f} ตัน·ม · DRMK Eq 9.20"
+    )
+
+    base = {
+        "applicable": False, "Tcr_tonm": round(Tcr_tonm, 3),
+        "threshold_tonm": round(threshold_tonm, 3), "Tu_input_tonm": round(Tu_tonm, 3),
+        "Acp": round(Acp, 1), "pcp": round(pcp, 1), "d_cm": round(d_cm, 2),   # d ที่ใช้คิด (parity check · Codex P2)
+        "citations": citations, "notes": notes,
+    }
+    if Tu_kgcm < threshold_kgcm + FLOAT_TOL:
+        notes.append(
+            f"Tu = {Tu_tonm:.2f} ตัน·ม < φTcr/4 = {threshold_tonm:.2f} ตัน·ม → "
+            f"ไม่ต้องคิดผลของแรงบิด (DRMK Eq 9.20 · Ex 9.1)"
+        )
+        return base
+
+    # 2. compatibility torsion → ลด Tu เหลือ φTcr (Eq 9.27) · equilibrium → รับเต็ม
+    Tu_design_kgcm = Tu_kgcm
+    if is_compatibility:
+        cap = phi * Tcr_kgcm
+        if Tu_kgcm > cap:
+            Tu_design_kgcm = cap
+            notes.append(
+                f"Compatibility torsion → ลด Tu จาก {Tu_tonm:.2f} เหลือ φTcr = "
+                f"{cap/100000.0:.2f} ตัน·ม (DRMK Eq 9.27 · ACI redistribution)"
+            )
+    Tu_design_tonm = Tu_design_kgcm / 100000.0
+
+    # 3. เรขาคณิตเหล็กปลอกปิด
+    x0 = b_cm - 2.0 * cover_cm
+    y0 = h_cm - 2.0 * cover_cm
+    # guard: หน้าตัดเล็กเกินจน b/h − 2·cover ≤ 0 → A0h ≤ 0 → หาร 0 ใน tau_t/At_s
+    #   raise เป็น SectionTooSmallForShearError (จับได้เหมือนเคสหน้าตัดเล็กอื่น · Codex P3 defense-in-depth)
+    if x0 <= 0.0 or y0 <= 0.0:
+        raise SectionTooSmallForShearError(
+            f"หน้าตัดเล็กเกินสำหรับเหล็กปลอกปิดรับบิด (x0={x0:.1f}, y0={y0:.1f} ซม · "
+            f"b/h − 2·cover ≤ 0) · ต้องเพิ่ม b/h หรือลด cover · DRMK Ch.9")
+    A0h = x0 * y0
+    A0 = 0.85 * A0h
+    ph = 2.0 * (x0 + y0)
+
+    # 4. section-adequacy (กันคอนกรีตอัดแตก · Eq 9.17) · หน่วยแรง ksc
+    tau_v = Vu_kg / (b_cm * d_cm)
+    tau_t = (Tu_design_kgcm * ph) / (1.7 * A0h ** 2)
+    tau_combined = math.sqrt(tau_v ** 2 + tau_t ** 2)
+    tau_limit = phi * (0.53 * sq + 2.1 * sq)        # φ(Vc/bd + 2.1√f'c) · Vc/bd = 0.53√f'c
+    section_ok = tau_combined <= tau_limit + FLOAT_TOL
+    citations.append(
+        f"√[(Vu/bd)²+(Tu·ph/1.7A0h²)²] = {tau_combined:.4f} ≤ φ(0.53+2.1)√f'c = "
+        f"{tau_limit:.4f} ksc · DRMK Eq 9.17 ({'OK' if section_ok else 'หน้าตัดเล็กไป'})"
+    )
+    if not section_ok:
+        raise SectionTooSmallForShearError(
+            f"แรงเฉือน+บิดร่วมกัน {tau_combined:.4f} ksc > limit {tau_limit:.4f} ksc · "
+            f"หน้าตัดไม่พอ (อัดแตก/crushing · DRMK Eq 9.17) · ต้องเพิ่ม b/h หรือ f'c"
+        )
+
+    # 5. เหล็กปลอกปิดรับบิด At/s (ต่อหนึ่งขา · Eq 9.21 · θ=45°)
+    At_s = Tu_design_kgcm / (phi * 2.0 * A0 * fyt_ksc)
+    citations.append(
+        f"At/s = Tu/(φ·2·A0·fyv) = {Tu_design_kgcm:,.0f}/({phi}·2·{A0:.0f}·{fyt_ksc:.0f}) "
+        f"= {At_s:.4f} ซม²/ซม · DRMK Eq 9.21"
+    )
+
+    # 6. เหล็กปลอกเฉือน Av/s (สองขา) → รวม (Av + 2At)/s (Eq 9.23) + min (Eq 9.24)
+    Vc_kg = 0.53 * sq * b_cm * d_cm
+    Vs_kg = max(Vu_kg / phi - Vc_kg, 0.0)
+    Av_s_shear = Vs_kg / (fyt_ksc * d_cm)
+    Avt_s = Av_s_shear + 2.0 * At_s
+    Avt_s_min = 3.5 * b_cm / fyt_ksc
+    if Avt_s < Avt_s_min:
+        Avt_s = Avt_s_min
+        notes.append(f"ใช้เหล็กปลอกน้อยสุด (Av+2At)/s = 3.5·b/fyv = {Avt_s_min:.4f} ซม²/ซม · Eq 9.24")
+    s_max_cm = min(ph / 8.0, 30.0)
+    citations.append(
+        f"(Av+2At)/s = {Av_s_shear:.4f} + 2·{At_s:.4f} = {Avt_s:.4f} ซม²/ซม · "
+        f"s ≤ ph/8={ph/8.0:.1f} หรือ 30 → {s_max_cm:.1f} ซม · DRMK Eq 9.23-9.24"
+    )
+
+    # 7. เหล็กยืน Al (Eq 9.25) + min (Eq 9.26)
+    Al = At_s * ph * (fyt_ksc / fyl_ksc)
+    Al_min = 1.3 * sq * Acp / fyl_ksc - At_s * ph * (fyt_ksc / fyl_ksc)
+    Al_final = max(Al, Al_min)
+    citations.append(
+        f"Al = (At/s)·ph·(fyv/fyl) = {At_s:.4f}·{ph:.0f} = {Al:.2f} ซม² · "
+        f"min = {Al_min:.2f} → ใช้ {Al_final:.2f} ซม² · กระจายรอบรูป ≥1 เส้น/มุม · DRMK Eq 9.25-9.26"
+    )
+
+    base.update({
+        "applicable": True,
+        "is_compatibility": bool(is_compatibility),
+        "Tu_design_tonm": round(Tu_design_tonm, 3),
+        "x0": round(x0, 1), "y0": round(y0, 1),
+        "A0h": round(A0h, 1), "A0": round(A0, 1), "ph": round(ph, 1),
+        "section_ok": True,
+        "tau_combined_ksc": round(tau_combined, 4), "tau_limit_ksc": round(tau_limit, 4),
+        "At_s": round(At_s, 4),
+        "Av_s_shear": round(Av_s_shear, 4),
+        "Avt_s": round(Avt_s, 4), "Avt_s_min": round(Avt_s_min, 4),
+        "s_max_cm": round(s_max_cm, 1),
+        "Al_cm2": round(Al, 2), "Al_min_cm2": round(Al_min, 2), "Al_final_cm2": round(Al_final, 2),
+    })
+    return base
+
+
+def compute_torsion_tmd(t_tonm_per_m: float, L_m: float, d_cm: float) -> dict:
+    """แผนภูมิโมเมนต์บิด TMD (สามเหลี่ยม · ปลายยึดบิด · DRMK รูป 9.21).
+    distributed torque t = w·e (ตัน·ม/ม) → Tu สูงสุดที่ผิวเสา = t·L/2 · ศูนย์กลาง = 0.
+    คืน Tu_support (ผิวเสา), Tu_at_d (วิกฤตออกแบบ · ลดที่ระยะ d เหมือนเฉือน).
+    """
+    Tu_support = t_tonm_per_m * L_m / 2.0
+    d_m = d_cm / 100.0
+    # ลดเชิงเส้นจากผิวเสา (x=0, Tu=t·L/2) ถึงกลาง (x=L/2, Tu=0)
+    Tu_at_d = max(t_tonm_per_m * (L_m / 2.0 - d_m), 0.0)
+    return {
+        "t_tonm_per_m": round(t_tonm_per_m, 4),
+        "Tu_support_tonm": round(Tu_support, 3),
+        "Tu_at_d_tonm": round(Tu_at_d, 3),
+        "shape": "triangular",   # max ที่ปลาย · 0 กลางคาน
+    }
+
+
+# ----------------------------------------------------------------------------
 # Main orchestrator
 # ----------------------------------------------------------------------------
 
@@ -1874,6 +2057,31 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     else:
         out.curtailment = None
 
+    # torsion · การบิด (DRMK Ch.9 · New Module) — เฉพาะเมื่อมี Tu input · default 0 → ข้าม (zero-reg)
+    #   แรงบิดกระจาย t (Tu_dist) มาก่อน → Tu=t·(L/2−d_actual) ใช้ d จริงหลังเลือกเหล็ก (Codex P2 · กัน understate)
+    #   ไม่งั้น Tu_tonm สำเร็จรูป (fallback/UAT/expert)
+    _d_tor = out.d_actual or out.d_assumed
+    _tu_design = inp.Tu_tonm
+    if inp.Tu_dist_tonm_per_m and inp.Tu_dist_tonm_per_m > 0:
+        _tu_design = max(0.0, inp.Tu_dist_tonm_per_m * (inp.L / 2.0 - _d_tor / 100.0))
+    if _tu_design and _tu_design > 0:
+        try:
+            out.torsion = compute_torsion(
+                Tu_tonm=_tu_design, Vu_ton=out.Vu * KN_TO_TON,
+                b_cm=inp.b, h_cm=inp.h, fc_ksc=inp.fc, d_cm=_d_tor,
+                cover_cm=inp.cover + inp.d_stirrup / 2.0,   # ถึงศูนย์กลางเหล็กปลอก
+                fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC, fyl_ksc=inp.fy,
+                is_compatibility=inp.torsion_compatibility)
+            out.citations.extend(out.torsion.get("citations", []))
+            out.notes.extend(out.torsion.get("notes", []))
+        except SectionTooSmallForShearError as exc:
+            # เฉือน+บิดร่วมกันเกินกำลังหน้าตัด (อัดแตก · Eq 9.17) → fail
+            out.torsion = {"applicable": True, "section_ok": False, "error": str(exc)}
+            out.passes = False
+            out.warnings.append(f"🔴 แรงเฉือน+บิดร่วมกัน: {exc}")
+    else:
+        out.torsion = None
+
     return out
 
 
@@ -1925,6 +2133,9 @@ class ContinuousBeamInput:
     #   {"L":m, "DL":kN/m, "LL":kN/m, "point_loads":[{"kind":"DL"/"LL","P":kN,"x":m_from_support}]}
     left_cantilever: dict | None = None
     right_cantilever: dict | None = None
+    Tu_tonm_per_span: list = field(default_factory=list)   # APPENDED · โมเมนต์บิดสำเร็จรูปต่อช่วง (ตัน·ม · fallback/UAT · ว่าง/0 = ไม่ใช้)
+    Tu_dist_tonm_per_span: list = field(default_factory=list)  # APPENDED · แรงบิดกระจาย t ต่อช่วง → Tu=t·(L/2−d_actual) ใช้ d จริง (Codex P2)
+    torsion_compatibility: bool = False                    # APPENDED · compatibility torsion (ลด Tu เหลือ φTcr · Eq 9.27)
 
 
 def _grid_label(i: int) -> str:
@@ -2882,6 +3093,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
     cant_L, cant_R = az["cant_L"], az["cant_R"]
 
     spans_out = []
+    _tor_warnings = []   # แรงบิด: per-span section-too-small (symmetric กับ single-span out.warnings · Codex P2)
     for i in range(n):
         M_pos = vm[i]["M_pos"]
         Vu = vm[i]["V_absmax"]
@@ -2901,6 +3113,25 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         # Serviceability · ความลึกน้อยที่สุดต่อช่วง (DRMK ตาราง 3.1): ช่วงริม=ต่อเนื่องปลายเดียว L/18.5 · ช่วงใน=สองด้าน L/21
         _md_kind_i = "one_end" if (i == 0 or i == n - 1) else "both_ends"
         _h_min_i = min_beam_depth(Ls[i], _md_kind_i, inp.fy)
+        # torsion ต่อช่วง (DRMK Ch.9) · Tu ของช่วง i (default 0 → ข้าม · zero-reg)
+        #   แรงบิดกระจาย t_dist มาก่อน → Tu=t·(L/2−d_actual) ใช้ d จริงของช่วง (Codex P2) · ไม่งั้น Tu สำเร็จรูป
+        _tu_i = inp.Tu_tonm_per_span[i] if (inp.Tu_tonm_per_span and i < len(inp.Tu_tonm_per_span)) else 0.0
+        _tdist_i = inp.Tu_dist_tonm_per_span[i] if (inp.Tu_dist_tonm_per_span and i < len(inp.Tu_dist_tonm_per_span)) else 0.0
+        if _tdist_i and _tdist_i > 0:
+            _tu_i = max(0.0, _tdist_i * (Ls[i] / 2.0 - d_act / 100.0))
+        _tor_i = None
+        if _tu_i and _tu_i > 0:
+            try:
+                _tor_i = compute_torsion(
+                    Tu_tonm=_tu_i, Vu_ton=Vu * KN_TO_TON,
+                    b_cm=inp.b, h_cm=inp.h, fc_ksc=inp.fc, d_cm=d_act,
+                    cover_cm=inp.cover + inp.d_stirrup / 2.0,
+                    fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC, fyl_ksc=inp.fy,
+                    is_compatibility=inp.torsion_compatibility)
+            except SectionTooSmallForShearError as exc:
+                _tor_i = {"applicable": True, "section_ok": False, "error": str(exc)}
+                _tor_warnings.append(
+                    f"🔴 ช่วง {_grid_label(i)}-{_grid_label(i+1)} แรงเฉือน+บิดร่วมกัน: {exc}")
         spans_out.append({
             "label": f"{_grid_label(i)}-{_grid_label(i+1)}", "L": Ls[i], "wu_kNm": ws[i],
             "M_pos_kNm": M_pos, "M_pos_tonm": M_pos * KNM_TO_TONM,
@@ -2910,7 +3141,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
             "bottom": bottom, "bottom_bars": _fmt_main_bars(bottom.get("rebar")),
             "is_doubly": bool(bottom.get("is_doubly")),
             "comp_bars": _fmt_main_bars(bottom.get("rebar_compression")) if bottom.get("is_doubly") else "—",
-            "shear": sd,
+            "shear": sd, "torsion": _tor_i,
             "h_min_cm": round(_h_min_i, 1), "md_ok": inp.h >= _h_min_i - FLOAT_TOL, "md_kind": _md_kind_i,
         })
 
@@ -2959,6 +3190,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
     all_pass = (all(s["bottom"].get("passes") for s in spans_out)
                 and all((s["top"] is None or s["top"].get("passes")) for s in supports_out)
                 and all(s["shear"].get("passes") for s in spans_out)
+                and all((s.get("torsion") is None) or s["torsion"].get("section_ok", True) for s in spans_out)
                 and all(c["passes"] for c in cantilevers_out)
                 and not uplift)
 
@@ -3081,6 +3313,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         "diagram": {"x": diag_x, "V_ton": diag_V, "M_tonm": diag_M},
         "cantilevers": cantilevers_out, "cantilever_geo": cantilever_geo,
         "cantilever_warnings": cant_warnings, "has_cantilever": bool(cant_L or cant_R),
+        "torsion_warnings": _tor_warnings,   # แรงบิด section-too-small ต่อช่วง (symmetric กับ single · Codex P2)
         "citations": [
             "วิเคราะห์แม่นยำ: สมการสามโมเมนต์ (Clapeyron) · EI คงที่ · ปลายเป็นจุดรองรับธรรมดา",
             "รองรับ UDL + จุดโหลด + คานยื่น (overhang · โมเมนต์ปลายรู้ค่า) · ช่วงไม่เท่ากันได้",
