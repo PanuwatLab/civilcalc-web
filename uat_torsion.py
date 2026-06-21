@@ -123,6 +123,29 @@ chk_true("design_beam Tu=0.3 → ยังผ่าน (บิดน้อย)",
 chk_true("design_beam to_dict() มี key torsion (serialize ไป JS)", "torsion" in oT.to_dict())
 
 print("=" * 64)
+print(" G · integration · continuous per-span torsion (zero-reg + per-span)")
+print("=" * 64)
+SI, CBI = calc.SpanInput, calc.ContinuousBeamInput
+# 2 ช่วง · ไม่มี Tu → ทุก span torsion None (zero-reg)
+oc0 = calc.design_continuous_beam_exact(CBI(b=30, h=60, fc=280, fy=4000,
+    spans=[SI(5.0, 8.0, 3.0, []), SI(5.0, 8.0, 3.0, [])]))
+chk_true("continuous Tu ว่าง → ทุก span torsion None (zero-reg)",
+         all(s.get("torsion") is None for s in oc0["spans"]))
+chk_true("continuous Tu ว่าง → passes ปกติ", oc0["passes"] is True, f"(passes={oc0['passes']})")
+# per-span: ช่วง 0 มีบิด (3.3) · ช่วง 1 ไม่มี (0)
+oc1 = calc.design_continuous_beam_exact(CBI(b=30, h=60, fc=280, fy=4000,
+    spans=[SI(5.0, 8.0, 3.0, []), SI(5.0, 8.0, 3.0, [])],
+    Tu_tonm_per_span=[3.3, 0.0]))
+chk_true("continuous per-span: ช่วง 0 มี torsion applicable",
+         bool(oc1["spans"][0].get("torsion") and oc1["spans"][0]["torsion"].get("applicable")))
+chk_true("continuous per-span: ช่วง 1 ไม่มีบิด (torsion None · per-span ทำงาน)",
+         oc1["spans"][1].get("torsion") is None)
+chk_true("continuous per-span: ช่วง 0 At/s > 0",
+         bool(oc1["spans"][0]["torsion"].get("At_s", 0) > 0))
+chk_true("continuous: flexure ช่วง 0 As เท่าเดิม (torsion ไม่แตะดัด · zero-reg)",
+         abs(oc1["spans"][0]["bottom"].get("As_required", 0) - oc0["spans"][0]["bottom"].get("As_required", 0)) < 1e-6)
+
+print("=" * 64)
 n_pass, n_fail = len(PASS), len(FAIL)
 print(f" RESULT: {n_pass}/{n_pass + n_fail} passed" + (f" · FAILED: {FAIL}" if FAIL else " · ALL PASS ✓"))
 print("=" * 64)

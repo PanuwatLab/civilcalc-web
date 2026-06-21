@@ -5051,6 +5051,8 @@ class ContinuousBeamInput:
     #   {"L":m, "DL":kN/m, "LL":kN/m, "point_loads":[{"kind":"DL"/"LL","P":kN,"x":m_from_support}]}
     left_cantilever: dict | None = None
     right_cantilever: dict | None = None
+    Tu_tonm_per_span: list = field(default_factory=list)   # APPENDED · โมเมนต์บิดต่อช่วง (ตัน·ม · index ตาม span · ว่าง/0 = ช่วงนั้นไม่มีบิด · DRMK Ch.9)
+    torsion_compatibility: bool = False                    # APPENDED · compatibility torsion (ลด Tu เหลือ φTcr · Eq 9.27)
 
 
 def _grid_label(i: int) -> str:
@@ -6027,6 +6029,19 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         # Serviceability · ความลึกน้อยที่สุดต่อช่วง (DRMK ตาราง 3.1): ช่วงริม=ต่อเนื่องปลายเดียว L/18.5 · ช่วงใน=สองด้าน L/21
         _md_kind_i = "one_end" if (i == 0 or i == n - 1) else "both_ends"
         _h_min_i = min_beam_depth(Ls[i], _md_kind_i, inp.fy)
+        # torsion ต่อช่วง (DRMK Ch.9) · Tu ของช่วง i (default 0 → ข้าม · zero-reg)
+        _tu_i = inp.Tu_tonm_per_span[i] if (inp.Tu_tonm_per_span and i < len(inp.Tu_tonm_per_span)) else 0.0
+        _tor_i = None
+        if _tu_i and _tu_i > 0:
+            try:
+                _tor_i = compute_torsion(
+                    Tu_tonm=_tu_i, Vu_ton=Vu * KN_TO_TON,
+                    b_cm=inp.b, h_cm=inp.h, fc_ksc=inp.fc, d_cm=d_act,
+                    cover_cm=inp.cover + inp.d_stirrup / 2.0,
+                    fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC, fyl_ksc=inp.fy,
+                    is_compatibility=inp.torsion_compatibility)
+            except SectionTooSmallForShearError as exc:
+                _tor_i = {"applicable": True, "section_ok": False, "error": str(exc)}
         spans_out.append({
             "label": f"{_grid_label(i)}-{_grid_label(i+1)}", "L": Ls[i], "wu_kNm": ws[i],
             "M_pos_kNm": M_pos, "M_pos_tonm": M_pos * KNM_TO_TONM,
@@ -6036,7 +6051,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
             "bottom": bottom, "bottom_bars": _fmt_main_bars(bottom.get("rebar")),
             "is_doubly": bool(bottom.get("is_doubly")),
             "comp_bars": _fmt_main_bars(bottom.get("rebar_compression")) if bottom.get("is_doubly") else "—",
-            "shear": sd,
+            "shear": sd, "torsion": _tor_i,
             "h_min_cm": round(_h_min_i, 1), "md_ok": inp.h >= _h_min_i - FLOAT_TOL, "md_kind": _md_kind_i,
         })
 
@@ -6085,6 +6100,7 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
     all_pass = (all(s["bottom"].get("passes") for s in spans_out)
                 and all((s["top"] is None or s["top"].get("passes")) for s in supports_out)
                 and all(s["shear"].get("passes") for s in spans_out)
+                and all((s.get("torsion") is None) or s["torsion"].get("section_ok", True) for s in spans_out)
                 and all(c["passes"] for c in cantilevers_out)
                 and not uplift)
 
