@@ -3062,7 +3062,11 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
          f"— เสี่ยงแอ่นตัวเกิน · ต้องคำนวณระยะแอ่นจริง (ตาราง 10.3) หรือเพิ่มความลึก")
         for s in _md_fail
     ]
-    min_depth_ok_all = not _md_fail
+    # คานยื่น (overhang) ที่ตื้นกว่า Lc/8 → รวมเข้า headline ด้วย (consistency กับช่วงเดียว · P3 self-review)
+    _cant_md_fail = [c for c in cantilevers_out if not c.get("min_depth_ok", True)]
+    for c in _cant_md_fail:
+        min_depth_warnings += [w for w in c.get("warnings", []) if "Lc/8" in w or "ขั้นต่ำคานยื่น" in w]
+    min_depth_ok_all = (not _md_fail) and (not _cant_md_fail)
 
     return {
         "method": "Three-Moment Equation (วิเคราะห์แม่นยำ)",

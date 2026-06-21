@@ -12,7 +12,8 @@
 - **หน้าตัดคาน scale ตามสัดส่วน b×h จริง + วงกลมเหล็กสะท้อนขนาดเบอร์** (audit ความถูกต้องเชิงเรขาคณิต) — เดิม fix viewBox 130×150 → คานสูง/แบนวาดรูปเดียวกัน · เดิมทุกเบอร์รัศมีเท่ากัน (DB10 = DB28). แก้: กล่องคอนกรีต scale `W=b·k, H=h·k` (fit-box คงสัดส่วน) · ปลอก/เหล็ก inset = (cover+ปลอกขนาดจริง) scale จริง · รัศมีวงกลม ∝ db (เบอร์ใหญ่=วงใหญ่ · เบอร์ผสมวาดตามจริง ใหญ่ไปมุม) · เหล็ก tangent กับเส้นปลอก + clamp กันวงกลมทับ/x-span กลับด้าน/ชั้นข้ามกึ่งกลาง (คานสูงแคบ/ตื้น) · ใช้ logic จาก reference `rc-beam-section.js` + vault (verified vs DRMK ตาราง 3.3) · n_layers ยังมาจาก engine · index-only ไม่แตะ engine
 - **เส้นปลอกในรูปด้านข้างใช้โซน S1-S2-S1 + ระยะจริงจาก engine** — เดิม hardcode โซน 25%/75% ของช่วง · แก้ให้ดึง `L_S1/L_S2` (ความยาวโซน) + `S1/S2` (ระยะเรียง) จาก engine shear (surface เข้า `spanStir` ทั้ง 2 โหมด) → ความหนาแน่นเส้นปลอกตรงโซนหุ้มจริง · floor เป็น px กันเส้นเบลอตอน fit-width · uniform/schematic fallback ถ้าไม่มีข้อมูล · รองรับ tiled view (คาน 5+ ช่วง · thread `spanStir` เข้าแต่ละ tile) · index-only
 ### ภายใน
-- `runDesignAudit` 50→…→**59** (guard เบอร์เหล็ก + แยกหลัก/เสริม + สัดส่วนหน้าตัด ≈ b/h (G1) + เบอร์ผสม→วงหลายขนาด ล่าง+บน (G2) + เส้นปลอกใช้ zone engine `data-stirzone` · นับเหล็กหน้าตัดตาม `data-bar` robust) · index-only
+- `runDesignAudit` 50→…→**62** (guard เบอร์เหล็ก + แยกหลัก/เสริม + สัดส่วนหน้าตัด ≈ b/h (G1) + เบอร์ผสม→วงหลายขนาด ล่าง+บน (G2) + เส้นปลอกใช้ zone engine `data-stirzone` + **min-depth banner/ธง (คานตื้น→#ccServiceWarn)** · นับเหล็กหน้าตัดตาม `data-bar` robust) · index-only
+- min-depth (จาก adversarial self-review): คานยื่น (overhang) ในคานต่อเนื่องที่ตื้นกว่า Lc/8 รวมเข้า `min_depth_ok`/headline ด้วย (consistency กับช่วงเดียว)
 - ทนทานหน้าตัด (จาก adversarial self-review): `_szNum` กัน numeric-input crash · ปลอกอ่านขนาดจริงจาก `dsVal(P.dstir)` (เลิก hardcode 0.9)
 
 ## [0.7.0] — 2026-06-11

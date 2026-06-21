@@ -5871,7 +5871,11 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
          f"— เสี่ยงแอ่นตัวเกิน · ต้องคำนวณระยะแอ่นจริง (ตาราง 10.3) หรือเพิ่มความลึก")
         for s in _md_fail
     ]
-    min_depth_ok_all = not _md_fail
+    # คานยื่น (overhang) ที่ตื้นกว่า Lc/8 → รวมเข้า headline ด้วย (consistency กับช่วงเดียว · P3 self-review)
+    _cant_md_fail = [c for c in cantilevers_out if not c.get("min_depth_ok", True)]
+    for c in _cant_md_fail:
+        min_depth_warnings += [w for w in c.get("warnings", []) if "Lc/8" in w or "ขั้นต่ำคานยื่น" in w]
+    min_depth_ok_all = (not _md_fail) and (not _cant_md_fail)
 
     return {
         "method": "Three-Moment Equation (วิเคราะห์แม่นยำ)",
@@ -6652,6 +6656,21 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         !contEl || !contEl.classList.contains('step-hidden'));
       A('mode-switch: cont → data-mode-single hidden',
         !singEl || singEl.classList.contains('step-hidden'));
+
+      // ── E · serviceability min-depth display (DRMK ตาราง 3.1 · banner + downgrade · pi 2026-06-21) ──
+      //   คานตื้น (40×24 ต่อเนื่อง · default L4.5 · end h_min=24.3>24) → ธง + banner · ไม่แตะ in_L (section restore โดย snap)
+      TT().setMode('cont'); TT().setSection(40, 24, 240, 'SD40'); TT().setPoints([]); TT().recompute(); TT().render();
+      const _mdRes = TT().res() || {}, _mdSw = document.querySelector('#ccServiceWarn');
+      A('min-depth: คานตื้น (40×24 ต่อเนื่อง) → engine ธง min_depth_ok=false (DRMK ตาราง 3.1)',
+        _mdRes.minDepthOk === false, 'minDepthOk=' + _mdRes.minDepthOk);
+      A('min-depth: ตื้น → banner #ccServiceWarn แสดง + มีข้อความเตือน',
+        !!_mdSw && !_mdSw.classList.contains('step-hidden') && (_mdRes.minDepthWarn || []).length > 0,
+        'hidden=' + (_mdSw && _mdSw.classList.contains('step-hidden')) + ' warns=' + (_mdRes.minDepthWarn || []).length);
+      TT().setSection(40, 60, 240, 'SD40'); TT().recompute(); TT().render();
+      const _mdOk = TT().res() || {}, _mdSw2 = document.querySelector('#ccServiceWarn');
+      A('min-depth: คานลึกพอ (40×60) → min_depth_ok=true + banner ซ่อน',
+        _mdOk.minDepthOk !== false && (!_mdSw2 || _mdSw2.classList.contains('step-hidden')),
+        'minDepthOk=' + _mdOk.minDepthOk + ' hidden=' + (_mdSw2 && _mdSw2.classList.contains('step-hidden')));
     } finally {
       if (snap && TT()) { TT().restore(snap); TT().render(); TT().selectCtab(origCtab); }   // restore state+แท็บเดิม ผ่าน DOM-updating path
     }
