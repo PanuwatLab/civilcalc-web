@@ -172,6 +172,37 @@ chk_true("continuous Tu ว่าง → torsion_warnings ว่าง (zero-reg
          oc0.get("torsion_warnings") == [])
 
 print("=" * 64)
+print(" I · distributed-torque path · Tu=t·(L/2−d_actual) ใช้ d จริง (Codex P2)")
+print("=" * 64)
+# t กระจาย → engine คิด Tu เองด้วย d_actual (ไม่ใช่ d สมมติ)
+oTd = calc.design_beam(BI(b=30, h=60, L=6, fc=280, fy=4000, DL=2, LL=1, Tu_dist_tonm_per_m=1.5))
+chk_true("Tu_dist → torsion applicable", bool(oTd.torsion and oTd.torsion.get("applicable")))
+_d = oTd.d_actual
+chk("Tu_dist → Tu_design = t·(L/2−d_actual)", oTd.torsion["Tu_design_tonm"],
+    round(max(0.0, 1.5 * (6 / 2 - _d / 100)), 3), abs_tol=0.01)
+chk("Tu_dist → torsion dict มี d_cm = d_actual", oTd.torsion["d_cm"], _d, abs_tol=0.1)
+# เหล็กใหญ่กว่าที่สมมติ: d_actual < d_assumed → Tu(actual) ≥ Tu(assumed) = conservative (ไม่ understate · Codex P2)
+oML = calc.design_beam(BI(b=40, h=80, L=9, fc=240, fy=4000, DL=25, LL=15, Tu_dist_tonm_per_m=0.8))
+chk_true("เหล็กใหญ่: d_actual < d_assumed (เลือกเหล็กใหญ่กว่า DB16 สมมติ)", oML.d_actual < oML.d_assumed,
+         f"(d_act={oML.d_actual:.1f} d_ass={oML.d_assumed:.1f})")
+_Tu_act = oML.torsion["Tu_design_tonm"]
+_Tu_ass = max(0.0, 0.8 * (9 / 2 - oML.d_assumed / 100))
+chk_true("เหล็กใหญ่: Tu(d_actual) ≥ Tu(d_assumed) — conservative ไม่ understate (Codex P2)",
+         _Tu_act >= _Tu_ass - 1e-6,
+         f"(actual={_Tu_act:.4f} assumed={_Tu_ass:.4f})")
+# zero-reg: Tu_dist=0 → torsion None
+o0d = calc.design_beam(BI(b=30, h=60, L=6, fc=280, fy=4000, DL=2, LL=1, Tu_dist_tonm_per_m=0.0))
+chk_true("Tu_dist=0 → torsion None (zero-reg)", o0d.torsion is None)
+# continuous Tu_dist_per_span · ใช้ d จริงต่อช่วง
+ocd = calc.design_continuous_beam_exact(CBI(b=30, h=60, fc=280, fy=4000,
+    spans=[SI(5.0, 8.0, 3.0, []), SI(5.0, 8.0, 3.0, [])], Tu_dist_tonm_per_span=[1.5, 0.0]))
+chk_true("continuous Tu_dist: ช่วง 0 applicable", bool(ocd["spans"][0].get("torsion") and ocd["spans"][0]["torsion"].get("applicable")))
+chk_true("continuous Tu_dist: ช่วง 1 ไม่มี (per-span)", ocd["spans"][1].get("torsion") is None)
+_dc = ocd["spans"][0]["torsion"]["d_cm"]
+chk("continuous Tu_dist: Tu_design = t·(L/2−d_actual)", ocd["spans"][0]["torsion"]["Tu_design_tonm"],
+    round(max(0.0, 1.5 * (5 / 2 - _dc / 100)), 3), abs_tol=0.01)
+
+print("=" * 64)
 n_pass, n_fail = len(PASS), len(FAIL)
 print(f" RESULT: {n_pass}/{n_pass + n_fail} passed" + (f" · FAILED: {FAIL}" if FAIL else " · ALL PASS ✓"))
 print("=" * 64)

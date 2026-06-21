@@ -187,7 +187,8 @@ class BeamInput:
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
     stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
     partial_udls: list = field(default_factory=list)   # list[PartialUDL] · simply-supported
-    Tu_tonm: float = 0.0              # APPENDED · โมเมนต์บิดออกแบบที่หน้าตัดวิกฤต (ตัน·ม · 0 = ไม่มีบิด · DRMK Ch.9)
+    Tu_tonm: float = 0.0              # APPENDED · โมเมนต์บิดออกแบบ "สำเร็จรูป" ที่หน้าตัดวิกฤต (ตัน·ม · fallback/UAT/expert · 0 = ไม่ใช้)
+    Tu_dist_tonm_per_m: float = 0.0   # APPENDED · แรงบิดกระจาย t (ตัน·ม/ม) → engine คิด Tu=t·(L/2−d_actual) ด้วย d จริงหลังเลือกเหล็ก (Codex P2 · กัน understate กรณีหลายชั้น)
     torsion_compatibility: bool = False   # APPENDED · True → compatibility torsion (ลด Tu เหลือ φTcr · Eq 9.27)
 
     def to_dict(self) -> dict:
@@ -1628,7 +1629,7 @@ def compute_torsion(
     base = {
         "applicable": False, "Tcr_tonm": round(Tcr_tonm, 3),
         "threshold_tonm": round(threshold_tonm, 3), "Tu_input_tonm": round(Tu_tonm, 3),
-        "Acp": round(Acp, 1), "pcp": round(pcp, 1),
+        "Acp": round(Acp, 1), "pcp": round(pcp, 1), "d_cm": round(d_cm, 2),   # d ที่ใช้คิด (parity check · Codex P2)
         "citations": citations, "notes": notes,
     }
     if Tu_kgcm < threshold_kgcm + FLOAT_TOL:
@@ -2057,11 +2058,16 @@ def design_beam(inp: BeamInput) -> BeamOutput:
         out.curtailment = None
 
     # torsion · การบิด (DRMK Ch.9 · New Module) — เฉพาะเมื่อมี Tu input · default 0 → ข้าม (zero-reg)
-    if inp.Tu_tonm and inp.Tu_tonm > 0:
-        _d_tor = out.d_actual or out.d_assumed
+    #   แรงบิดกระจาย t (Tu_dist) มาก่อน → Tu=t·(L/2−d_actual) ใช้ d จริงหลังเลือกเหล็ก (Codex P2 · กัน understate)
+    #   ไม่งั้น Tu_tonm สำเร็จรูป (fallback/UAT/expert)
+    _d_tor = out.d_actual or out.d_assumed
+    _tu_design = inp.Tu_tonm
+    if inp.Tu_dist_tonm_per_m and inp.Tu_dist_tonm_per_m > 0:
+        _tu_design = max(0.0, inp.Tu_dist_tonm_per_m * (inp.L / 2.0 - _d_tor / 100.0))
+    if _tu_design and _tu_design > 0:
         try:
             out.torsion = compute_torsion(
-                Tu_tonm=inp.Tu_tonm, Vu_ton=out.Vu * KN_TO_TON,
+                Tu_tonm=_tu_design, Vu_ton=out.Vu * KN_TO_TON,
                 b_cm=inp.b, h_cm=inp.h, fc_ksc=inp.fc, d_cm=_d_tor,
                 cover_cm=inp.cover + inp.d_stirrup / 2.0,   # ถึงศูนย์กลางเหล็กปลอก
                 fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC, fyl_ksc=inp.fy,
@@ -2127,7 +2133,8 @@ class ContinuousBeamInput:
     #   {"L":m, "DL":kN/m, "LL":kN/m, "point_loads":[{"kind":"DL"/"LL","P":kN,"x":m_from_support}]}
     left_cantilever: dict | None = None
     right_cantilever: dict | None = None
-    Tu_tonm_per_span: list = field(default_factory=list)   # APPENDED · โมเมนต์บิดต่อช่วง (ตัน·ม · index ตาม span · ว่าง/0 = ช่วงนั้นไม่มีบิด · DRMK Ch.9)
+    Tu_tonm_per_span: list = field(default_factory=list)   # APPENDED · โมเมนต์บิดสำเร็จรูปต่อช่วง (ตัน·ม · fallback/UAT · ว่าง/0 = ไม่ใช้)
+    Tu_dist_tonm_per_span: list = field(default_factory=list)  # APPENDED · แรงบิดกระจาย t ต่อช่วง → Tu=t·(L/2−d_actual) ใช้ d จริง (Codex P2)
     torsion_compatibility: bool = False                    # APPENDED · compatibility torsion (ลด Tu เหลือ φTcr · Eq 9.27)
 
 
@@ -3107,7 +3114,11 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         _md_kind_i = "one_end" if (i == 0 or i == n - 1) else "both_ends"
         _h_min_i = min_beam_depth(Ls[i], _md_kind_i, inp.fy)
         # torsion ต่อช่วง (DRMK Ch.9) · Tu ของช่วง i (default 0 → ข้าม · zero-reg)
+        #   แรงบิดกระจาย t_dist มาก่อน → Tu=t·(L/2−d_actual) ใช้ d จริงของช่วง (Codex P2) · ไม่งั้น Tu สำเร็จรูป
         _tu_i = inp.Tu_tonm_per_span[i] if (inp.Tu_tonm_per_span and i < len(inp.Tu_tonm_per_span)) else 0.0
+        _tdist_i = inp.Tu_dist_tonm_per_span[i] if (inp.Tu_dist_tonm_per_span and i < len(inp.Tu_dist_tonm_per_span)) else 0.0
+        if _tdist_i and _tdist_i > 0:
+            _tu_i = max(0.0, _tdist_i * (Ls[i] / 2.0 - d_act / 100.0))
         _tor_i = None
         if _tu_i and _tu_i > 0:
             try:
