@@ -118,6 +118,12 @@
     #cc-print-doc .pd-sec{ margin-top:9px; }   /* ไม่ avoid-break → เนื้อหาไหลเต็มหน้า ไม่เหลือช่องว่างล่าง (UAT pi) */
     #cc-print-doc .pd-st{ font-size:11px; font-weight:600; color:#0f2742; border-bottom:1.2px solid #0f2742; padding-bottom:2px; margin-bottom:5px; }
     #cc-print-doc .pd-sub{ font-size:10px; font-weight:600; color:#334155; margin:7px 0 3px; }   /* หัวข้อย่อย §2: ดัด / เฉือน */
+    #cc-print-doc .pd-sum{ width:100%; border-collapse:collapse; margin-top:6px; font-size:10px; }   /* §3 ตารางสรุปเหล็ก (clone #summaryRows · รวมเหล็กบนหัวเสา) */
+    #cc-print-doc .pd-sum th{ border:0.5px solid #cbd5e1; padding:4px 8px; background:#f1f5f9; color:#475569; font-weight:600; text-align:right; }
+    #cc-print-doc .pd-sum th:first-child{ text-align:left; }
+    #cc-print-doc .pd-sum td{ border:0.5px solid #cbd5e1; padding:4px 8px; text-align:right; }
+    #cc-print-doc .pd-sum td:first-child{ text-align:left; }
+    #cc-print-doc .pd-pending{ font-size:11px; color:#b45309; background:#fffbeb; border:0.5px solid #fde68a; padding:9px 11px; border-radius:4px; margin-top:6px; }   /* P2-B: engine ไม่พร้อม → ไม่พิมพ์ค่า mock */
     #cc-print-doc .pd-diag{ margin:3px 0; break-inside:avoid; }   /* แต่ละกราฟไม่ฉีกข้ามหน้า */
     #cc-print-doc .pd-diag svg{ width:100%; height:auto; max-height:74mm; }
     #cc-print-doc .pd-verdict{ font-size:13px; font-weight:600; padding:6px 10px; border-radius:4px; }
@@ -2848,21 +2854,31 @@
     else if (!mdOk) { vClass = 'pd-warn'; vText = '⚠ ผ่านกำลัง · ตื้นเกิน (ต้องตรวจการแอ่น)'; }
     const mdWarn = (r.minDepthWarn || []).map(w => `<div class="pd-md">${esc(w)}</div>`).join('');
     const rebar = r.rebarMain ? ('เหล็กล่าง ' + esc(r.rebarMain) + (r.isDoubly && r.rebarComp ? (' · เหล็กอัด ' + esc(r.rebarComp)) : '')) : '';
+    // §3 ตารางสรุปเหล็ก = clone #summaryRows (ราย span/หัวเสา · รวม "เหล็กบน" หัวเสาโหมดต่อเนื่อง · parity กับจอ · Codex P2-A #35)
+    const summaryRowsHTML = ($('#summaryRows') && $('#summaryRows').innerHTML) || '';
+    const summaryTable = summaryRowsHTML
+      ? `<table class="pd-sum"><thead><tr><th>ตำแหน่ง</th><th>+M / −M</th><th>เหล็กหลัก</th><th>Vu</th><th>ปลอก</th></tr></thead><tbody>${summaryRowsHTML}</tbody></table>`
+      : '';
+    const sec1 = `<div class="pd-sec"><div class="pd-st">§1 รูปวิเคราะห์ — กริดไลน์ · แรงเฉือน · โมเมนต์</div><div class="pd-diag">${planHTML}</div><div class="pd-diag">${diagHTML}</div></div>`;
+    const sec2 = `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>`
+      + `<div class="pd-sub" data-pd="flex">ออกแบบรับดัด · ว.ส.ท. 1008/1009</div>${workHTML}`
+      + (shearHTML ? `<div class="pd-sub" data-pd="shear">ออกแบบรับเฉือน · ว.ส.ท. 1007</div>${shearHTML}` : '')
+      + `</div>`;
+    const verdictBlock = `<div class="pd-verdict ${vClass}">${vText}${rebar ? (' · <span class="mono">' + rebar + '</span>') : ''}</div>`;
+    // P2-B (#35): engine ไม่พร้อม (boot/offline/_err) → §1+§2+ตาราง เป็นค่า MOCK → แทนด้วย placeholder · ห้ามพิมพ์ตัวเลขปลอมในเอกสาร ก.ว.
+    const calcBody = ready
+      ? (sec1 + sec2 + `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div>${verdictBlock}${summaryTable}${mdWarn}</div>`)
+      : (`<div class="pd-sec"><div class="pd-st">§ สรุปผล</div>${verdictBlock}<div class="pd-pending">ยังไม่มีผลคำนวณจริง — กด “คำนวณ” บนหน้าจอก่อนพิมพ์ · เอกสารนี้ยังไม่พร้อมใช้งาน</div></div>`);
     doc.innerHTML =
       '<div class="pd-head"><div><div class="pd-h1">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก</div>' +
       '<div class="pd-h2">วิธีกำลัง (SDM) · มาตรฐาน ว.ส.ท. 1008/1009</div></div><div class="pd-hr">Civil Calc · Panuwat Lab</div></div>' +
       '<table class="pd-tb"><tbody>' +
       `<tr><td class="k">โครงการ</td><td>${esc(proj)}</td><td class="k">มาตรฐาน</td><td>ว.ส.ท. (SDM/USD)</td></tr>` +
-      `<tr><td class="k">องค์อาคาร</td><td>${esc(member)}</td><td class="k">b × h</td><td class="mono">${m.b}×${m.h} ซม.</td></tr>` +
+      `<tr><td class="k">องค์อาคาร</td><td>${esc(member)}</td><td class="k">b × h</td><td class="mono">${P.b}×${P.h} ซม.</td></tr>` +
       `<tr><td class="k">ตำแหน่ง/กริด</td><td>${esc(grid || '—')}</td><td class="k">วัสดุ</td><td class="mono">f'c ${P.fc} · fy ${fy} ksc</td></tr>` +
       `<tr><td class="k">วันที่</td><td>${esc(dstr)}</td><td class="k">D/C</td><td class="mono">${dc}%</td></tr>` +
       '</tbody></table>' +
-      `<div class="pd-sec"><div class="pd-st">§1 รูปวิเคราะห์ — กริดไลน์ · แรงเฉือน · โมเมนต์</div><div class="pd-diag">${planHTML}</div><div class="pd-diag">${diagHTML}</div></div>` +
-      `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>` +
-        `<div class="pd-sub" data-pd="flex">ออกแบบรับดัด · ว.ส.ท. 1008/1009</div>${workHTML}` +
-        (shearHTML ? `<div class="pd-sub" data-pd="shear">ออกแบบรับเฉือน · ว.ส.ท. 1007</div>${shearHTML}` : '') +
-      `</div>` +
-      `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div><div class="pd-verdict ${vClass}">${vText}${rebar ? (' · <span class="mono">' + rebar + '</span>') : ''}</div>${mdWarn}</div>` +
+      calcBody +
       '<div class="pd-sign"><div class="s"><div class="l">ผู้คำนวณ</div></div><div class="s"><div class="l">วิศวกรผู้ออกแบบ (ก.ว.)</div><div class="r">เลขทะเบียน ภย. __________</div></div></div>' +
       `<div class="pd-foot">ผลคำนวณเบื้องต้น · ต้องตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง · Civil Calc · พิมพ์ ${esc(dstr)}</div>`;
   }
@@ -6776,6 +6792,16 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         _ph.indexOf('pd-tb') >= 0 && _ph.indexOf('pd-tb') < _ph.indexOf('pd-diag') &&
         _ph.indexOf('pd-diag') < _ph.indexOf('pd-verdict') && _ph.indexOf('pd-verdict') < _ph.indexOf('pd-sign'),
         'order-ok');
+      // P2-A/B (#35): §3 มีตารางสรุปเหล็ก (clone #summaryRows) + ready-state ไม่มี placeholder ค้าง
+      A('print: §3 มีตารางสรุปเหล็ก (.pd-sum) + ไม่มี placeholder ตอน ready (Codex P2-B #35)',
+        !!_pd && !!_pd.querySelector('.pd-sum') && _pd.querySelectorAll('.pd-sum tbody tr').length >= 1 && !_pd.querySelector('.pd-pending'),
+        _pd && _pd.querySelector('.pd-sum') ? ('rows=' + _pd.querySelectorAll('.pd-sum tbody tr').length + ' pending=' + !!_pd.querySelector('.pd-pending')) : 'no-sum');
+      // P2-A (#35): ต่อเนื่อง §3 ตารางสรุปต้องมี "เหล็กบน" หัวเสา (เดิมตก · โชว์แค่ rebarMain ล่าง)
+      TT().setMode('cont'); TT().recompute(); TT().render();
+      const _pdc = document.querySelector('#cc-print-doc'), _sum = _pdc && _pdc.querySelector('.pd-sum');
+      A('print·ต่อเนื่อง: §3 ตารางสรุปมีเหล็กบนหัวเสา (Codex P2-A #35)',
+        !!_sum && /\(บน\)/.test(_sum.textContent || '') && _pdc.querySelectorAll('.pd-sum tbody tr').length >= 3,
+        _sum ? ('top=' + /\(บน\)/.test(_sum.textContent) + ' rows=' + _pdc.querySelectorAll('.pd-sum tbody tr').length) : 'no-sum');
     } finally {
       if (snap && TT()) { TT().restore(snap); TT().render(); TT().selectCtab(origCtab); }   // restore state+แท็บเดิม ผ่าน DOM-updating path
     }
