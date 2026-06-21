@@ -1870,13 +1870,18 @@
       const g = geom(), total = g.total, X = m => Xat(m, total);
       const cont = state.mode === 'cont';
 
-      // ── layout: roomy vertical separation so V & M bands never collide ──
+      // ── layout: ทุกแถบ (V/M/T) มี "ช่องไฟ ชื่อแถบ→เส้นกราฟ" เท่ากัน = HEAD (pi 2026-06-22) ──
+      //   V/T zero line ไม่ centered แต่วางต่ำ มี headroom ว่างด้านบนเท่า M (ที่เผื่อโมเมนต์ลบ)
       const W = CV.W;
-      const vTop = 30, vH = 100, vMid = vTop + vH * 0.5;         // shear plot (zero line centered) · +headroom กันชื่อแถบชนค่ายอดปลายซ้าย (pi 2026-06-22)
-      const momUp = 86, momDown = 96, gap = 62;                  // hogging / sagging allowances + clear gap (กว้างขึ้น)
-      const mAxis = vTop + vH + gap + momUp;                     // moment zero line
+      const HEAD = 84;                                           // ช่องไฟ ชื่อแถบ→ยอดเส้นกราฟ (เท่ากันทุกแถบ)
+      const vTitleY = 24, vAmp = 48;                            // V: ชื่อแถบ + amplitude (บน/ล่าง)
+      const vMid = vTitleY + HEAD + vAmp, vBot = vMid + vAmp;    // V zero line (ต่ำ · headroom บน = HEAD) + ก้นแถบ
+      const momUp = 62, momDown = 88, gap = 54;                  // M: headroom ลบ/บวก (momUp+22 = HEAD ให้ช่องไฟเท่า V/T)
+      const mAxis = vBot + gap + momUp;                          // M zero line · ชื่อแถบ = mAxis−momUp−22 = HEAD เหนือ zero
       const torOn = torActive();                                 // แรงบิด band (TMD) — เฉพาะเมื่อ toggle on + มี t > 0
-      const tGap = 54, tH = 88, tTop = mAxis + momDown + tGap, tMid = tTop + tH * 0.5, tBot = tTop + tH;  // T band · เว้นจากแถบ M ชัดเจน + headroom ชื่อแถบ (pi 2026-06-22)
+      const tGap = 40, tAmp = 44;                               // T band
+      const tTitleY = mAxis + momDown + tGap;                   // T: ชื่อแถบ
+      const tMid = tTitleY + HEAD + tAmp, tBot = tMid + tAmp;    // T zero line (headroom บน = HEAD เท่า V/M) + ก้นแถบ
       const baseBottom = torOn ? tBot : mAxis + momDown;
       const H = baseBottom + 30;                                 // total incl. tick labels
       const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'svg-fit', 'font-family': 'JetBrains Mono, monospace' });
@@ -1889,7 +1894,7 @@
         let Mmin = 0, xMmin = 0;
         a.M.forEach((mm, i) => { if (mm < Mmin) { Mmin = mm; xMmin = a.xs[i]; } });
         const Mpk = Math.max(Mmax, -Mmin) || 1;
-        const vsc = (vH * 0.42) / Vmax, msc = (Mmin < -1 ? momUp : momDown) / Mpk;
+        const vsc = vAmp / Vmax, msc = (Mmin < -1 ? momUp : momDown) / Mpk;
         vLine = a.xs.map((x, i) => `${X(x)},${(vMid - a.V[i] * vsc).toFixed(1)}`).join(' ');
         vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
         vMarks = vPeaks(a.xs, a.V, vsc);
@@ -1907,7 +1912,7 @@
           let maxPos = 1, maxNeg = 1;
           ac.M.forEach(mm => { if (mm > maxPos) maxPos = mm; if (-mm > maxNeg) maxNeg = -mm; });
           Mmax = Math.max(maxPos, maxNeg);
-          const vsc = (vH * 0.42) / Vmax, msc = Math.min(momDown / maxPos, momUp / maxNeg);
+          const vsc = vAmp / Vmax, msc = Math.min(momDown / maxPos, momUp / maxNeg);
           vLine = ac.xs.map((x, i) => `${X(x)},${(vMid - ac.V[i] * vsc).toFixed(1)}`).join(' ');
           vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
           vMarks = vPeaks(ac.xs, ac.V, vsc);
@@ -1934,19 +1939,19 @@
               lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`);
             }
             marks.push({ x: X((g.nodes[si] + g.nodes[si + 1]) / 2), y: mAxis + Pp * msc, val: Pp, type: 'pos' });
-            vpts.push([X(x0), vMid - vH * 0.34], [X(g.nodes[si + 1]), vMid + vH * 0.34]);
+            vpts.push([X(x0), vMid - vAmp * 0.7], [X(g.nodes[si + 1]), vMid + vAmp * 0.7]);
           });
           g.nodes.forEach((nx, i) => { if (nodeHog[i] > 0) marks.push({ x: X(nx), y: mAxis - nodeHog[i] * msc, val: nodeHog[i], type: 'neg' }); });
           mLine = lp.join(' ');
           mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
           vLine = vpts.map(([x, y]) => `${x},${y}`).join(' ');
           vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
-          vMarks = [{ x: X(g.nodes[0]), y: vMid - vH * 0.34, val: Vmax, sign: '+' }];   // schematic peak
+          vMarks = [{ x: X(g.nodes[0]), y: vMid - vAmp * 0.7, val: Vmax, sign: '+' }];   // schematic peak
         }
       }
 
       // ── V band ──
-      lbl(svg, 'แรงเฉือน  V (' + ccUnits.uP() + ')', vTop - 16);
+      lbl(svg, 'แรงเฉือน  V (' + ccUnits.uP() + ')', vTitleY);
       ax(svg, X(0), X(total), vMid);
       svg.appendChild(svgEl('polyline', { points: vArea, fill: 'rgba(8,145,178,.10)', stroke: 'none' }));
       svg.appendChild(svgEl('polyline', { points: vLine, fill: 'none', stroke: '#0891b2', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
@@ -1972,8 +1977,8 @@
         const spans = g.spans, nodes = g.nodes;
         let Tmax = 0; spans.forEach((L, i) => { Tmax = Math.max(Tmax, torTuSupport(torTat(i), L)); });
         Tmax = Tmax || 1;
-        const tsc = (tH * 0.42) / Tmax;
-        lbl(svg, 'แรงบิด  T (ตัน·ม)  — TMD (พล็อตจาก t·L/2 ปลายช่วง · ออกแบบที่ d)', tTop - 16);
+        const tsc = tAmp / Tmax;
+        lbl(svg, 'แรงบิด  T (ตัน·ม)  — TMD (พล็อตจาก t·L/2 ปลายช่วง · ออกแบบที่ d)', tTitleY);
         ax(svg, X(0), X(total), tMid);
         spans.forEach((L, i) => {
           const t = torTat(i); if (t <= 0) return;
