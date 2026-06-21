@@ -1755,7 +1755,7 @@
       const H = mAxis + momDown + 30;                            // total incl. tick labels
       const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'svg-fit', 'font-family': 'JetBrains Mono, monospace' });
 
-      let Vmax, Mmax, vLine, vArea, mLine, mFill, marks = [];
+      let Vmax, Mmax, vLine, vArea, mLine, mFill, marks = [], vMarks = [];
 
       if (!cont) {
         const a = analyzeSingle(total, ccModel.Wu, ccModel.points, ccModel.partials);
@@ -1766,6 +1766,7 @@
         const vsc = (vH * 0.42) / Vmax, msc = (Mmin < -1 ? momUp : momDown) / Mpk;
         vLine = a.xs.map((x, i) => `${X(x)},${(vMid - a.V[i] * vsc).toFixed(1)}`).join(' ');
         vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+        vMarks = vPeaks(a.xs, a.V, vsc);
         const lp = [], fp = [];
         a.xs.forEach((x, i) => { const py = mAxis + a.M[i] * msc; lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`); });
         mLine = lp.join(' ');
@@ -1783,6 +1784,7 @@
           const vsc = (vH * 0.42) / Vmax, msc = Math.min(momDown / maxPos, momUp / maxNeg);
           vLine = ac.xs.map((x, i) => `${X(x)},${(vMid - ac.V[i] * vsc).toFixed(1)}`).join(' ');
           vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+          vMarks = vPeaks(ac.xs, ac.V, vsc);
           const lp = [], fp = [];
           ac.xs.forEach((x, i) => { const py = mAxis + ac.M[i] * msc; lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`); });
           mLine = lp.join(' ');
@@ -1813,6 +1815,7 @@
           mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
           vLine = vpts.map(([x, y]) => `${x},${y}`).join(' ');
           vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+          vMarks = [{ x: X(g.nodes[0]), y: vMid - vH * 0.34, val: Vmax, sign: '+' }];   // schematic peak
         }
       }
 
@@ -1821,6 +1824,11 @@
       ax(svg, X(0), X(total), vMid);
       svg.appendChild(svgEl('polyline', { points: vArea, fill: 'rgba(8,145,178,.10)', stroke: 'none' }));
       svg.appendChild(svgEl('polyline', { points: vLine, fill: 'none', stroke: '#0891b2', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+      // peak V labels (จุด + ค่า max · เดิม shear ไม่โชว์ค่า/สเกล · pi 2026-06-21)
+      vMarks.forEach(mk => {
+        svg.appendChild(svgEl('circle', { cx: mk.x, cy: mk.y, r: 3, fill: '#0891b2', stroke: '#fff', 'stroke-width': 1 }));
+        momLabel(svg, mk.x, mk.y + (mk.sign === '+' ? -9 : 15), mk.sign + ccUnits.P(mk.val), '#0891b2');
+      });
       // ── M band ──
       lbl(svg, 'โมเมนต์  M (' + ccUnits.uM() + ')  — พล็อตคว่ำ', mAxis - momUp - 12);
       ax(svg, X(0), X(total), mAxis);
@@ -1843,6 +1851,14 @@
       $('#mmaxLbl').textContent = ccUnits.M(Mmax);
       function lbl(s, txt, y) { const t = svgEl('text', { x: CV.mx, y, 'font-size': 11, fill: '#64748B', 'font-family': 'IBM Plex Sans Thai, sans-serif' }); t.textContent = txt; s.appendChild(t); }
       function ax(s, x0, x1, y) { s.appendChild(svgEl('line', { x1: x0, y1: y, x2: x1, y2: y, stroke: '#cbd5e1', 'stroke-width': 1, 'stroke-dasharray': '2 3' })); }
+      function vPeaks(xs, V, vsc) {   // จุดค่าสูงสุด V (บวก/ลบ) + ตำแหน่ง → ป้ายบน SFD
+        let iMx = -1, vMx = 0, iMn = -1, vMn = 0;
+        (V || []).forEach((v, i) => { if (v > vMx) { vMx = v; iMx = i; } if (v < vMn) { vMn = v; iMn = i; } });
+        const out = [];
+        if (iMx >= 0 && vMx > 0.01) out.push({ x: X(xs[iMx]), y: vMid - vMx * vsc, val: vMx, sign: '+' });
+        if (iMn >= 0 && vMn < -0.01) out.push({ x: X(xs[iMn]), y: vMid - vMn * vsc, val: -vMn, sign: '−' });
+        return out;
+      }
     }
   };
 
@@ -2809,7 +2825,8 @@
     const m = liveData(), r = state.res || {}, cont = state.mode === 'cont';
     const proj = ($('#projName') && $('#projName').value) || '—';
     const member = ($('#pt_member') && $('#pt_member').textContent) || ('คาน (' + (cont ? 'ต่อเนื่อง' : 'ช่วงเดียว') + ')');
-    const grid = (window.BeamWorkspace && BeamWorkspace.headerStr) ? BeamWorkspace.headerStr() : '';
+    let grid = '';   // ดึงค่ากริดจากในรูป (ccModel.grid ที่วาดในผัง/กราฟ · pi 2026-06-21) → A–B / A–B–C–D
+    try { const _gn = geom().nodes; grid = _gn.map((_, i) => ccModel.grid(i)).join('–'); } catch (e) { grid = ''; }
     const fy = fyOf(P.grade);
     let dstr = ''; try { dstr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { dstr = ''; }
     const planSvg = $('#ccCanvasHost svg'), diagSvg = $('#ccDiagHost svg');
