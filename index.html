@@ -2848,9 +2848,9 @@
     //   จอ preview fallback mock = "ผ่าน" เพื่อ UX สด — แต่เอกสาร ก.ว. ห้ามเคลม "ผ่าน/ไม่ผ่าน" บนค่าจำลอง → โชว์ "รอผลคำนวณ"
     const pending = !state.res, errored = !!(state.res && state.res._err), ready = !pending && !errored;
     const pass = ready && !!r.pass, mdOk = r.minDepthOk !== false, dc = (r.dc != null ? r.dc : '—');
+    // verdict นี้ใช้เฉพาะตอน ready (pass = ready && r.pass) · not-ready (pending/_err) จัดการแยกใน calcBody (กัน ✕ คู่ placeholder · Codex P2-C #35)
     let vClass = 'pd-pass', vText = '✓ ผ่าน';
-    if (pending) { vClass = 'pd-warn'; vText = '⏳ ยังไม่ได้คำนวณ — กดคำนวณก่อนพิมพ์'; }
-    else if (errored || !pass) { vClass = 'pd-fail'; vText = '✕ ไม่ผ่าน'; }
+    if (!pass) { vClass = 'pd-fail'; vText = '✕ ไม่ผ่าน'; }
     else if (!mdOk) { vClass = 'pd-warn'; vText = '⚠ ผ่านกำลัง · ตื้นเกิน (ต้องตรวจการแอ่น)'; }
     const mdWarn = (r.minDepthWarn || []).map(w => `<div class="pd-md">${esc(w)}</div>`).join('');
     const rebar = r.rebarMain ? ('เหล็กล่าง ' + esc(r.rebarMain) + (r.isDoubly && r.rebarComp ? (' · เหล็กอัด ' + esc(r.rebarComp)) : '')) : '';
@@ -2865,10 +2865,12 @@
       + (shearHTML ? `<div class="pd-sub" data-pd="shear">ออกแบบรับเฉือน · ว.ส.ท. 1007</div>${shearHTML}` : '')
       + `</div>`;
     const verdictBlock = `<div class="pd-verdict ${vClass}">${vText}${rebar ? (' · <span class="mono">' + rebar + '</span>') : ''}</div>`;
+    // ไม่ ready → verdict กลาง (⏳ pending / ⚠ error) ไม่ใช่ ✓/✕ — กันเอกสารโชว์ "ไม่ผ่าน" คู่ placeholder "ยังไม่มีผล" (Codex P2-C #35)
+    const notReadyVerdict = `<div class="pd-verdict pd-warn">${pending ? '⏳ ยังไม่ได้คำนวณ' : '⚠ เกิดข้อผิดพลาดในการคำนวณ'}</div>`;
     // P2-B (#35): engine ไม่พร้อม (boot/offline/_err) → §1+§2+ตาราง เป็นค่า MOCK → แทนด้วย placeholder · ห้ามพิมพ์ตัวเลขปลอมในเอกสาร ก.ว.
     const calcBody = ready
       ? (sec1 + sec2 + `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div>${verdictBlock}${summaryTable}${mdWarn}</div>`)
-      : (`<div class="pd-sec"><div class="pd-st">§ สรุปผล</div>${verdictBlock}<div class="pd-pending">ยังไม่มีผลคำนวณจริง — กด “คำนวณ” บนหน้าจอก่อนพิมพ์ · เอกสารนี้ยังไม่พร้อมใช้งาน</div></div>`);
+      : (`<div class="pd-sec"><div class="pd-st">§ สรุปผล</div>${notReadyVerdict}<div class="pd-pending">ยังไม่มีผลคำนวณจริง — กด “คำนวณ” บนหน้าจอก่อนพิมพ์ · เอกสารนี้ยังไม่พร้อมใช้งาน</div></div>`);
     doc.innerHTML =
       '<div class="pd-head"><div><div class="pd-h1">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก</div>' +
       '<div class="pd-h2">วิธีกำลัง (SDM) · มาตรฐาน ว.ส.ท. 1008/1009</div></div><div class="pd-hr">Civil Calc · Panuwat Lab</div></div>' +
@@ -2876,7 +2878,7 @@
       `<tr><td class="k">โครงการ</td><td>${esc(proj)}</td><td class="k">มาตรฐาน</td><td>ว.ส.ท. (SDM/USD)</td></tr>` +
       `<tr><td class="k">องค์อาคาร</td><td>${esc(member)}</td><td class="k">b × h</td><td class="mono">${P.b}×${P.h} ซม.</td></tr>` +
       `<tr><td class="k">ตำแหน่ง/กริด</td><td>${esc(grid || '—')}</td><td class="k">วัสดุ</td><td class="mono">f'c ${P.fc} · fy ${fy} ksc</td></tr>` +
-      `<tr><td class="k">วันที่</td><td>${esc(dstr)}</td><td class="k">D/C</td><td class="mono">${dc}%</td></tr>` +
+      `<tr><td class="k">วันที่</td><td>${esc(dstr)}</td><td class="k">D/C</td><td class="mono">${dc === '—' ? '—' : dc + '%'}</td></tr>` +
       '</tbody></table>' +
       calcBody +
       '<div class="pd-sign"><div class="s"><div class="l">ผู้คำนวณ</div></div><div class="s"><div class="l">วิศวกรผู้ออกแบบ (ก.ว.)</div><div class="r">เลขทะเบียน ภย. __________</div></div></div>' +
