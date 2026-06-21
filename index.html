@@ -489,6 +489,32 @@
         </div>
       </div>
 
+      <!-- TORSION (แรงบิด · DRMK บท 9 · B1 distributed torque) — display-only · default off → zero-reg -->
+      <div class="card mt-6 p-5 sm:p-6" id="torsionCard">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <h3 class="text-[15px] font-semibold flex items-center gap-2">แรงบิด (Torsion) <span class="badge-code mono">DRMK บท 9</span></h3>
+          <label class="flex items-center gap-2 text-[13px] cursor-pointer select-none" for="torEnable">
+            <input type="checkbox" id="torEnable" class="cc-checkbox"> คานรับแรงบิด
+          </label>
+        </div>
+        <div id="torBody" class="step-hidden mt-4 space-y-4">
+          <p class="text-[12px] text-ink-muted leading-relaxed">แรงบิดกระจาย <b>t = w · e</b> (โหลดเยื้องศูนย์ w × ระยะเยื้องศูนย์ e · ตัน·ม/ม) → โมเมนต์บิดสูงสุดที่ผิวเสา = t·L/2 ลดลงเป็นศูนย์กลางช่วง (DRMK รูป 9.21) · ออกแบบที่ระยะ d</p>
+          <div class="flex items-center gap-4 text-[13px] flex-wrap">
+            <span class="text-ink-muted">ชนิด:</span>
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="torKind" value="eq" checked> สมดุล (equilibrium · รับเต็ม)</label>
+            <label class="flex items-center gap-1.5 cursor-pointer"><input type="radio" name="torKind" value="compat"> ความเข้ากันได้ (compatibility · ลดเหลือ φTcr)</label>
+          </div>
+          <div class="rounded-ctrl bg-bg px-4 py-3 flex flex-wrap items-end gap-x-3 gap-y-2">
+            <div><label class="text-[11px] text-ink-muted block mb-1" for="torW">w (ตัน/ม)</label><input id="torW" type="number" step="0.1" min="0" class="num-field !w-[88px]" placeholder="0"></div>
+            <span class="pb-2 text-ink-muted">×</span>
+            <div><label class="text-[11px] text-ink-muted block mb-1" for="torE">e เยื้องศูนย์ (ม.)</label><input id="torE" type="number" step="0.05" min="0" class="num-field !w-[88px]" placeholder="0"></div>
+            <span class="pb-2 text-[13px] text-ink-muted">= <b id="torWeOut" class="mono text-ink">0.00</b> ตัน·ม/ม</span>
+            <button id="torWeApply" class="ml-auto text-[13px] text-accent font-medium hover:underline">เติม t = w·e ทุกช่วง</button>
+          </div>
+          <div id="torSpans" class="space-y-2.5"></div>
+        </div>
+      </div>
+
       <!-- FULL-WIDTH interactive canvas (ccCanvas) + diagrams (ccDiagram) -->
       <div class="card mt-6 p-4 sm:p-6">
         <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
@@ -504,6 +530,7 @@
           <span class="flex items-center gap-1.5"><span class="w-3 h-2 inline-block" style="background:#CBD5E1"></span> เสา/กริด</span>
           <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 inline-block" style="background:#0891b2"></span> แรงเฉือน V</span>
           <span class="flex items-center gap-1.5"><span class="w-3 h-0.5 inline-block" style="background:#7c3aed"></span> โมเมนต์ M (คว่ำ)</span>
+          <span id="torLegend" class="flex items-center gap-1.5 step-hidden"><span class="w-3 h-0.5 inline-block" style="background:#D97706"></span> แรงบิด T (TMD)</span>
           <span class="flex items-center gap-1.5"><span class="w-2 h-2 inline-block rounded-full" style="background:#1F2937"></span> จุดโหลด (ลากได้)</span>
         </div>
       </div>
@@ -589,6 +616,12 @@
           <!-- ออกแบบรับเฉือน -->
           <h3 class="text-[15px] font-semibold mt-7 mb-3 flex items-center gap-2">ออกแบบรับเฉือน <span class="badge-code mono">วสท. 1007</span></h3>
           <div id="shearSteps" class="space-y-2.5"></div>
+
+          <!-- ออกแบบรับแรงบิด (Torsion · เฉพาะเมื่อมีแรงบิด · display-only) -->
+          <div id="torsionSection" class="step-hidden">
+            <h3 class="text-[15px] font-semibold mt-7 mb-3 flex items-center gap-2">ออกแบบรับแรงบิด <span class="badge-code mono">DRMK บท 9</span><span id="torTypeBadge" class="badge-type"></span></h3>
+            <div id="torsionSteps" class="space-y-2.5"></div>
+          </div>
 
           <!-- หน้าตัด + ตารางสรุป -->
           <div class="grid lg:grid-cols-[300px_1fr] gap-6 mt-7 items-start">
@@ -889,6 +922,7 @@
     get Wu() { const L = sumLoads(); return 1.4 * L.DL + 1.7 * L.LL; },   // kg/m (factored · 1.4D+1.7L · จาก load list จริง)
     points: [{ id: 1, x: 2.0, P: 5000, kind: 'LL' }],   // P in kg
     partials: [],                                       // { id, x0, x1, w(kg/m) }
+    torsion: { on: false, compat: false, t: [] },       // แรงบิด B1 · t[i]=แรงบิดกระจาย ตัน·ม/ม ต่อช่วง (0=ไม่มี) · compat=compatibility torsion (DRMK บท 9)
     setSpanLen(i, len) { len = Math.max(0.5, Math.round(len * 10) / 10); if (state.mode === 'cont') state.spanLens[i] = len; else P.L = len; },
     addPoint() { if (this.points.length >= 5) return; this.points.push({ id: ++_lid, x: Math.min(2.5, this.total / 2), P: 3000, kind: 'LL' }); },
     addPartial() { const t = this.total; this.partials.push({ id: ++_lid, x0: Math.max(0, t * 0.2), x1: Math.min(t, t * 0.2 + 2), w: 1500 }); },
@@ -1235,11 +1269,77 @@
     }));
   }
 
+  /* ════════════════ แรงบิด (Torsion · DRMK บท 9 · B1 distributed torque) ════════════════
+     ผู้ใช้กรอก t = แรงบิดกระจาย (ตัน·ม/ม · มาจาก w·e) ต่อช่วง → derive Tu ออกแบบที่ระยะ d
+     = t·(L/2 − d) ส่งเข้า engine (Tu_tonm) · honest TMD วาดจาก t (รูปสามเหลี่ยม · ปลายยึดบิด)
+     default off → ไม่ส่ง Tu เข้า engine เลย (zero-reg) · index-only · ไม่แตะ calc.py */
+  function dApprox() { return Math.max(1, P.h - P.cover - dsVal(P.dstir) - dbVal(P.db) / 2); }   // ซม. = compute_effective_depth (parity กับ engine สำหรับเหล็กชั้นเดียว)
+  function torTat(i) { const t = ccModel.torsion.t; return (t && t[i] > 0) ? t[i] : 0; }          // แรงบิดกระจายช่วง i (ตัน·ม/ม)
+  function torTuSupport(t, L) { return Math.max(0, t * L / 2); }                                  // โมเมนต์บิดผิวเสา = t·L/2 (TMD max · รูป 9.21)
+  function torTuDesign(t, L) { return Math.max(0, t * (L / 2 - dApprox() / 100)); }               // โมเมนต์บิดออกแบบที่ระยะ d (ส่งเข้า engine · เหมือนเฉือน)
+  function torActive() { return ccModel.torsion.on && ccModel.spans.some((L, i) => torTat(i) > 0); }  // มีแรงบิดจริงที่ต้องคำนวณ
+
+  // full rebuild ของช่องกรอก t (เรียกตอน mode/nspan/toggle เปลี่ยน · ไม่เรียกตอนพิมพ์ → กัน focus หลุด)
+  function renderTorsionInputs() {
+    const card = $('#torsionCard'); if (!card) return;
+    const T = ccModel.torsion;
+    const enb = $('#torEnable'); if (enb) enb.checked = !!T.on;
+    const body = $('#torBody'); if (body) body.classList.toggle('step-hidden', !T.on);
+    $$('input[name="torKind"]').forEach(r => { r.checked = (r.value === 'compat') === !!T.compat; });
+    const host = $('#torSpans'); if (!host) return;
+    const spans = ccModel.spans;
+    T.t = spans.map((_, i) => (T.t && T.t[i] > 0) ? T.t[i] : 0);   // resize ตามจำนวนช่วง (กัน index หลุดตอน mode-switch)
+    host.innerHTML = spans.map((L, i) => {
+      const label = state.mode === 'cont' ? `ช่วง ${ccModel.grid(i)}–${ccModel.grid(i + 1)}` : 'คานช่วงเดียว';
+      return `<div class="grid grid-cols-[1fr_auto] items-center gap-3" data-torrow="${i}">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-[13px] text-ink-muted w-[150px]">${label} <span class="mono">(L=${L} ม)</span></span>
+          <input type="number" step="0.1" min="0" class="num-field !w-[110px] tor-t" data-i="${i}" value="${T.t[i] || ''}" placeholder="0" aria-label="แรงบิดกระจาย t ${label} ตัน·ม/ม">
+          <span class="text-[12px] text-ink-muted">ตัน·ม/ม</span>
+        </div>
+        <span class="text-[12px] mono text-ink-muted whitespace-nowrap" data-tudisp="${i}">Tu(d) = ${torTuDesign(T.t[i], L).toFixed(2)} ตัน·ม</span>
+      </div>`;
+    }).join('');
+  }
+
+  // อัป readout Tu(d) ข้างช่อง (ตอนพิมพ์ · ไม่ rebuild input → focus คงอยู่)
+  function updateTorReadouts() {
+    const spans = ccModel.spans;
+    spans.forEach((L, i) => {
+      const el = document.querySelector(`#torSpans [data-tudisp="${i}"]`);
+      if (el) el.textContent = `Tu(d) = ${torTuDesign(torTat(i), L).toFixed(2)} ตัน·ม`;
+    });
+  }
+
+  function initTorsion() {
+    renderTorsionInputs();
+    const enb = $('#torEnable');
+    if (enb) enb.addEventListener('change', e => { ccModel.torsion.on = e.target.checked; renderTorsionInputs(); render(); });
+    $$('input[name="torKind"]').forEach(r => r.addEventListener('change', e => {
+      if (e.target.checked) { ccModel.torsion.compat = (e.target.value === 'compat'); refreshResults(); }
+    }));
+    const we = () => { const w = parseFloat($('#torW').value) || 0, e = parseFloat($('#torE').value) || 0; const t = Math.max(0, w * e); const o = $('#torWeOut'); if (o) o.textContent = t.toFixed(2); return t; };
+    if ($('#torW')) $('#torW').addEventListener('input', we);
+    if ($('#torE')) $('#torE').addEventListener('input', we);
+    const apply = $('#torWeApply');
+    if (apply) apply.addEventListener('click', () => {
+      const t = we(); ccModel.torsion.t = ccModel.spans.map(() => t); renderTorsionInputs(); render();
+    });
+    // พิมพ์ t ต่อช่วง (delegation · refreshResults ไม่ rebuild → กัน focus หลุด)
+    const host = $('#torSpans');
+    if (host) host.addEventListener('input', e => {
+      const inp = e.target.closest('.tor-t'); if (!inp) return;
+      const i = +inp.dataset.i; ccModel.torsion.t[i] = Math.max(0, parseFloat(inp.value) || 0);
+      updateTorReadouts(); refreshResults();
+    });
+  }
+
   function initStep2() {
     renderPointLoads(); renderPartialLoads();
     $('#addPL').addEventListener('click', () => { ccModel.addPoint(); renderPointLoads(); render(); });
     $('#addPart').addEventListener('click', () => { if (ccModel.partials.length >= 3) return; ccModel.addPartial(); renderPartialLoads(); render(); });
     initLoadList();
+    initTorsion();
     drawStep2();
   }
 
@@ -1320,7 +1420,7 @@
     const g = geom();
     const _L = sumLoads(), dl = _L.DL / KGF_PER_KN, ll = _L.LL / KGF_PER_KN;  // kg/m → kN/m (จาก load list จริง · Phase 2c)
     // signature cache (Phase 2c) — recompute()+ccDiagram.render() เรียกซ้ำในสถานะเดิม → engine call เดียว
-    const sig = JSON.stringify([g.spans, P.b, P.h, P.fc, P.grade, P.cover, P.db, P.dstir, dl, ll, ccModel.points, ccModel.partials]);
+    const sig = JSON.stringify([g.spans, P.b, P.h, P.fc, P.grade, P.cover, P.db, P.dstir, dl, ll, ccModel.points, ccModel.partials, ccModel.torsion]);
     if (_acCache.sig === sig) return _acCache.val;
     const spans = g.spans.map(L => ({ L, DL: dl, LL: ll, point_loads: [] }));
     // helper: วางจุดโหลด (global x ม. · P kN) ลงช่วงที่ถูกต้อง
@@ -1345,7 +1445,9 @@
     });
     let res;
     // section/material = ค่า live จาก Step 1 (P) เหมือนช่วงเดียว · UDL ยัง mock (Phase 2c)
-    const cInp = { b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir), spans, load_combo: '1.4D+1.7L' };
+    const cInp = { b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir), spans, load_combo: '1.4D+1.7L',
+      // แรงบิดต่อช่วง (B1) · ส่งเฉพาะเมื่อ active → ไม่งั้นไม่ใส่คีย์ (Tu_tonm_per_span default [] = zero-reg)
+      ...(torActive() ? { Tu_tonm_per_span: spans.map((s, i) => torTuDesign(torTat(i), s.L)), torsion_compatibility: ccModel.torsion.compat } : {}) };
     try { res = window.__civilCalc.designContinuous(cInp); }
     catch (e) { console.warn('[civilcalc] continuous engine call failed', e); return null; }
     if (!res || !res.ok || !res.out || !res.out.diagram) return null;
@@ -1402,6 +1504,8 @@
         stirrup_legs: state.legs === 2 ? 4 : 2,
         point_loads: ccModel.points.map(p => ({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: p.P / K, x: Math.min(ccModel.total, p.x) })),
         partial_udls: ccModel.partials.map(q => ({ kind: 'LL', w: q.w / K, x1: q.x0, x2: Math.min(ccModel.total, q.x1) })),
+        // แรงบิด (B1) · ส่งเฉพาะเมื่อ toggle on + มี t > 0 → ไม่งั้นไม่ใส่คีย์เลย (Tu_tonm default 0 = zero-reg)
+        ...(torActive() ? { Tu_tonm: torTuDesign(torTat(0), ccModel.total), torsion_compatibility: ccModel.torsion.compat } : {}),
       };
       let r; try { r = window.__civilCalc.design(inp); } catch (e) { return; }
       if (!r || !r.ok) { state.res = { _err: r && r.msg }; state._lastInp = { mode: 'single', inp, out: null, err: r && r.error_type }; return; }
@@ -1422,6 +1526,8 @@
         AsPrime: o.As_prime_required || 0, AsPrimeProv: (o.is_doubly && o.rebar_compression) ? o.rebar_compression.As_provided : 0,
         fsPrime: o.fs_prime_ksc || 0, compYields: !!o.comp_steel_yields,
         pass: !!o.passes, citations: o.citations || [],
+        // แรงบิด (B1) · surface engine torsion dict ตรงๆ (display-only · parity-safe) · null = ไม่มีแรงบิด
+        torsion: o.torsion || null,
         // serviceability · ความลึกขั้นต่ำ (DRMK ตาราง 3.1 · advisory · downgrade headline ไม่ fail กำลัง)
         minDepthOk: o.min_depth_ok !== false, hMinCm: o.h_min_cm || 0,
         minDepthWarn: (o.warnings || []).filter(w => /ตื้นเกิน|ความลึกขั้นต่ำ/.test(w)),
@@ -1502,6 +1608,9 @@
     },
     setPoints(arr) { ccModel.points = (arr || []).map((p, i) => ({ id: 900 + i, x: p.x, P: p.P, kind: p.kind === 'DL' ? 'DL' : 'LL' })); },
     setPartials(arr) { ccModel.partials = (arr || []).map((q, i) => ({ id: 950 + i, x0: q.x0, x1: q.x1, w: q.w })); },
+    // แรงบิด (B1) · ขับจาก audit/test (ccModel อยู่คนละ scope กับ runDesignAudit)
+    setTorsion(on, t, compat) { ccModel.torsion.on = !!on; ccModel.torsion.compat = !!compat; ccModel.torsion.t = Array.isArray(t) ? t.slice() : ccModel.spans.map(() => +t || 0); renderTorsionInputs(); },
+    torExpect(t) { return torTuDesign(+t || 0, ccModel.spans[0]); },   // parity helper · Tu ออกแบบที่คาดหวัง (ช่วงแรก)
     recompute, render, renderWork,
     drawMainSections, drawDetailing,
     detailBars: () => detailBars(),   // §A · ให้ audit เทียบจำนวนเหล็กหน้าตัด == engine ต่อ location
@@ -1521,8 +1630,8 @@
     lastInp: () => state._lastInp,
     engine: () => window.__civilCalc,
     MOCK: () => MOCK,
-    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)), partials: JSON.parse(JSON.stringify(ccModel.partials)) }; },
-    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; if (s.partials) ccModel.partials = s.partials; applyMode(); recompute(); },
+    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)), partials: JSON.parse(JSON.stringify(ccModel.partials)), torsion: JSON.parse(JSON.stringify(ccModel.torsion)) }; },
+    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; if (s.partials) ccModel.partials = s.partials; if (s.torsion) ccModel.torsion = s.torsion; applyMode(); recompute(); },
   };
 
   /* sync verdict (pass/fail) + D/C จากผล engine จริง (Phase 2b · override mock toggle เมื่อ engine พร้อม) */
@@ -1763,10 +1872,13 @@
 
       // ── layout: roomy vertical separation so V & M bands never collide ──
       const W = CV.W;
-      const vTop = 24, vH = 100, vMid = vTop + vH * 0.5;         // shear plot (zero line centered)
-      const momUp = 86, momDown = 96, gap = 58;                  // hogging / sagging allowances + clear gap
+      const vTop = 30, vH = 100, vMid = vTop + vH * 0.5;         // shear plot (zero line centered) · +headroom กันชื่อแถบชนค่ายอดปลายซ้าย (pi 2026-06-22)
+      const momUp = 86, momDown = 96, gap = 62;                  // hogging / sagging allowances + clear gap (กว้างขึ้น)
       const mAxis = vTop + vH + gap + momUp;                     // moment zero line
-      const H = mAxis + momDown + 30;                            // total incl. tick labels
+      const torOn = torActive();                                 // แรงบิด band (TMD) — เฉพาะเมื่อ toggle on + มี t > 0
+      const tGap = 54, tH = 88, tTop = mAxis + momDown + tGap, tMid = tTop + tH * 0.5, tBot = tTop + tH;  // T band · เว้นจากแถบ M ชัดเจน + headroom ชื่อแถบ (pi 2026-06-22)
+      const baseBottom = torOn ? tBot : mAxis + momDown;
+      const H = baseBottom + 30;                                 // total incl. tick labels
       const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'svg-fit', 'font-family': 'JetBrains Mono, monospace' });
 
       let Vmax, Mmax, vLine, vArea, mLine, mFill, marks = [], vMarks = [];
@@ -1834,7 +1946,7 @@
       }
 
       // ── V band ──
-      lbl(svg, 'แรงเฉือน  V (' + ccUnits.uP() + ')', vTop - 9);
+      lbl(svg, 'แรงเฉือน  V (' + ccUnits.uP() + ')', vTop - 16);
       ax(svg, X(0), X(total), vMid);
       svg.appendChild(svgEl('polyline', { points: vArea, fill: 'rgba(8,145,178,.10)', stroke: 'none' }));
       svg.appendChild(svgEl('polyline', { points: vLine, fill: 'none', stroke: '#0891b2', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
@@ -1844,7 +1956,7 @@
         momLabel(svg, mk.x, mk.y + (mk.sign === '+' ? -9 : 15), mk.sign + ccUnits.P(mk.val), '#0891b2');
       });
       // ── M band ──
-      lbl(svg, 'โมเมนต์  M (' + ccUnits.uM() + ')  — พล็อตคว่ำ', mAxis - momUp - 12);
+      lbl(svg, 'โมเมนต์  M (' + ccUnits.uM() + ')  — พล็อตคว่ำ', mAxis - momUp - 22);
       ax(svg, X(0), X(total), mAxis);
       svg.appendChild(svgEl('polygon', { points: mFill, fill: 'rgba(124,58,237,.10)', stroke: 'none' }));
       svg.appendChild(svgEl('polyline', { points: mLine, fill: 'none', stroke: '#7c3aed', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
@@ -1855,12 +1967,36 @@
         momLabel(svg, mk.x, mk.y + (mk.type === 'neg' ? -10 : -9), (mk.type === 'neg' ? '−' : '+') + ccUnits.Mn(mk.val), col);
       });
 
+      // ── T band (แรงบิด · TMD · DRMK รูป 9.21) — เฉพาะเมื่อมีแรงบิด · honest จาก t (ไม่ใช่ Tu สำเร็จรูป) ──
+      if (torOn) {
+        const spans = g.spans, nodes = g.nodes;
+        let Tmax = 0; spans.forEach((L, i) => { Tmax = Math.max(Tmax, torTuSupport(torTat(i), L)); });
+        Tmax = Tmax || 1;
+        const tsc = (tH * 0.42) / Tmax;
+        lbl(svg, 'แรงบิด  T (ตัน·ม)  — TMD (พล็อตจาก t·L/2 ปลายช่วง · ออกแบบที่ d)', tTop - 16);
+        ax(svg, X(0), X(total), tMid);
+        spans.forEach((L, i) => {
+          const t = torTat(i); if (t <= 0) return;
+          const x0 = nodes[i], x1 = nodes[i + 1], xMid = (x0 + x1) / 2, peak = torTuSupport(t, L);
+          // T(x) = t·(L/2 − xlocal): +peak ที่ปลายซ้าย → 0 กลางช่วง → −peak ที่ปลายขวา (antisymmetric)
+          const yL = tMid - peak * tsc, yR = tMid + peak * tsc;
+          // เติมสามเหลี่ยม 2 ฝั่งอ่อนๆ (บวกบน · ลบล่าง) ให้เห็นรูป TMD ชัด
+          svg.appendChild(svgEl('polygon', { points: `${X(x0)},${tMid} ${X(x0)},${yL} ${X(xMid)},${tMid}`, fill: 'rgba(217,119,6,.10)', stroke: 'none' }));
+          svg.appendChild(svgEl('polygon', { points: `${X(xMid)},${tMid} ${X(x1)},${yR} ${X(x1)},${tMid}`, fill: 'rgba(217,119,6,.10)', stroke: 'none' }));
+          svg.appendChild(svgEl('polyline', { points: `${X(x0)},${yL} ${X(xMid)},${tMid} ${X(x1)},${yR}`, fill: 'none', stroke: '#D97706', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+          // ค่ายอด Tu ที่ผิวเสา (ปลายซ้าย) + จุด
+          svg.appendChild(svgEl('circle', { cx: X(x0), cy: yL, r: 3, fill: '#D97706', stroke: '#fff', 'stroke-width': 1 }));
+          momLabel(svg, X(x0), yL - 8, '±' + peak.toFixed(2), '#D97706');
+        });
+      }
+
       // shared x ticks
-      const tickY = mAxis + momDown + 4;
+      const tickY = baseBottom + 4;
       const ticks = cont ? g.nodes : [0, total / 4, total / 2, 3 * total / 4, total];
       ticks.forEach(m => { const xx = X(m); svg.appendChild(svgEl('line', { x1: xx, y1: tickY, x2: xx, y2: tickY + 5, stroke: '#cbd5e1', 'stroke-width': 1 })); const t = svgEl('text', { x: xx, y: tickY + 16, 'font-size': 9, fill: '#94A3B8', 'text-anchor': 'middle' }); t.textContent = m.toFixed(1); svg.appendChild(t); });
 
       host.appendChild(svg);
+      { const tl = $('#torLegend'); if (tl) tl.classList.toggle('step-hidden', !torOn); }   // legend แรงบิดโชว์เฉพาะมี TMD
       $('#vmaxLbl').textContent = ccUnits.P(Vmax);
       $('#mmaxLbl').textContent = ccUnits.M(Mmax);
       function lbl(s, txt, y) { const t = svgEl('text', { x: CV.mx, y, 'font-size': 11, fill: '#64748B', 'font-family': 'IBM Plex Sans Thai, sans-serif' }); t.textContent = txt; s.appendChild(t); }
@@ -2072,6 +2208,60 @@
         ? (state.mode === 'cont' ? 'เหล็กคู่บางตำแหน่ง · Doubly' : 'เหล็กคู่ · Doubly (รับแรงอัด)')
         : (state.mode === 'cont' ? 'เหล็กเดี่ยวทั้งหมด · Singly' : 'เหล็กเดี่ยว · Singly');
     }
+    renderTorsion();   // ออกแบบรับแรงบิด (display-only · เฉพาะเมื่อมีแรงบิด)
+  }
+
+  /* ── ออกแบบรับแรงบิด (Torsion · DRMK บท 9) — display-only · surface engine torsion dict ──
+     single: state.res.torsion · continuous: per-span o.spans[].torsion · honest-flag (applicable/section_ok) */
+  function torBlock(label, T) {
+    const f = (v, n) => (v == null || isNaN(v)) ? '—' : (+v).toFixed(n);
+    if (T.section_ok === false) {
+      return wstep('✗', `แรงบิด · ${label}`, 'DRMK Eq 9.17', [
+        { t: 'res', v: `เฉือน+บิดร่วมกันเกินกำลังหน้าตัด (อัดแตก) → ต้องเพิ่ม b/h หรือ f'c` }],
+        T.error || 'หน้าตัดไม่พอรับแรงเฉือน+บิดร่วมกัน — ออกแบบไม่ผ่าน');
+    }
+    if (T.applicable === false) {
+      return wstep('—', `แรงบิด · ${label}`, 'DRMK Eq 9.20', [
+        { t: 'f', v: `Tcr = ${f(T.Tcr_tonm, 2)} ตัน·ม · ขีดจำกัด φTcr/4 = ${f(T.threshold_tonm, 2)} ตัน·ม` },
+        { t: 'res', v: `Tu(ออกแบบ) < φTcr/4 → ไม่ต้องคิดแรงบิด` }], 'แรงบิดต่ำกว่าขีดจำกัด — ไม่ต้องเสริมเหล็กรับบิด');
+    }
+    return [
+      wstep('บ1', `แรงบิด · ${label} — Tu ออกแบบ ${f(T.Tu_design_tonm, 2)} ตัน·ม`, 'DRMK Eq 9.20', [
+        { t: 'f', v: `Tcr = 1.1√f'c·Acp²/pcp = ${f(T.Tcr_tonm, 2)} ตัน·ม · φTcr/4 = ${f(T.threshold_tonm, 2)} ตัน·ม` },
+        { t: 'res', v: `Tu = ${f(T.Tu_design_tonm, 2)} > φTcr/4 → ต้องเสริมเหล็กรับบิด${T.is_compatibility ? ' · ลดเหลือ φTcr (compatibility)' : ''}` }], null),
+      wstep('บ2', 'ตรวจกำลังหน้าตัด (เฉือน+บิดร่วมกัน)', 'DRMK Eq 9.17', [
+        { t: 'f', v: `√[(Vu/bd)²+(Tu·ph/1.7A0h²)²] = ${f(T.tau_combined_ksc, 2)} ksc` },
+        { t: 'res', v: `≤ φ(0.53+2.1)√f'c = ${f(T.tau_limit_ksc, 2)} ksc ✓` }], 'หน้าตัดพอรับแรงอัดทแยง (ไม่อัดแตก)'),
+      wstep('บ3', 'เหล็กปลอกปิดรับบิด (At/s) + รวมเฉือน', 'DRMK Eq 9.21-9.24', [
+        { t: 'f', v: `At/s = Tu/(φ·2·A0·fyv) = ${f(T.At_s, 4)} ซม²/ซม (ต่อหนึ่งขา)` },
+        { t: 'res', v: `(Av+2At)/s = ${f(T.Avt_s, 4)} ซม²/ซม · ระยะเรียง s ≤ ${f(T.s_max_cm, 1)} ซม` }], 'ใช้ปลอกปิด ตะขอ 135° ทั้งสองมุม ตลอดช่วงวิกฤต'),
+      wstep('บ4', 'เหล็กยืนเสริมรับบิด (Al)', 'DRMK Eq 9.25-9.26', [
+        { t: 'f', v: `Al = (At/s)·ph·(fyv/fyl)` },
+        { t: 'res', v: `Al = ${f(T.Al_final_cm2, 2)} ซม² · กระจายรอบรูป ≥1 เส้น/มุม` }], 'เพิ่มเหล็กยืนรอบหน้าตัด (มุม + กลางด้านยาว)'),
+    ].join('');
+  }
+
+  function renderTorsion() {
+    const sec = $('#torsionSection'), host = $('#torsionSteps'); if (!sec || !host) return;
+    let items = [];   // [label, torsionDict]
+    if (state.mode === 'cont') {
+      const ac = analyzeContinuous(), o = ac && ac.out;
+      if (o && o.spans) o.spans.forEach((sp, i) => { if (sp.torsion) items.push([`ช่วง ${ccModel.grid(i)}–${ccModel.grid(i + 1)}`, sp.torsion]); });
+    } else {
+      const T = (state.res && state.res.torsion) || null;
+      if (T) items.push(['คานช่วงเดียว', T]);
+    }
+    if (!torActive() || !items.length) { sec.classList.add('step-hidden'); host.innerHTML = ''; return; }
+    sec.classList.remove('step-hidden');
+    const anyFail = items.some(([, T]) => T.section_ok === false);
+    const anyApplic = items.some(([, T]) => T.applicable);
+    const tb = $('#torTypeBadge');
+    if (tb) {
+      tb.className = 'badge-type ' + (anyFail ? 'doubly' : 'singly');
+      tb.textContent = anyFail ? 'หน้าตัดไม่พอ (เฉือน+บิด)'
+        : (anyApplic ? (ccModel.torsion.compat ? 'compatibility · ลดเหลือ φTcr' : 'equilibrium · รับเต็ม') : 'ต่ำกว่าขีดจำกัด');
+    }
+    host.innerHTML = items.map(([label, T]) => torBlock(label, T)).join('');
   }
 
   /* ╔══════════════ ⭐ ccDraw — elevation to scale ══════════════╗ */
@@ -2858,6 +3048,7 @@
     const diagHTML = diagSvg ? diagSvg.outerHTML : '';
     const workHTML = ($('#workSteps') && $('#workSteps').innerHTML) || '';
     const shearHTML = ($('#shearSteps') && $('#shearSteps').innerHTML) || '';   // วิธีทำเฉือน/ปลอก (Codex P2 #35 — เดิมพิมพ์แค่ดัด)
+    const torHTML = ($('#torsionSteps') && $('#torsionSteps').innerHTML) || '';   // วิธีทำแรงบิด (B1 · ว่างถ้าไม่มีแรงบิด → ไม่พิมพ์ section)
     // สถานะผลก่อนพิมพ์ (Codex P2 #35): pending = ยังไม่ได้คำนวณ (boot ก่อน Pyodide) · err = ผลผิดพลาด · ready = ผลจริง
     //   จอ preview fallback mock = "ผ่าน" เพื่อ UX สด — แต่เอกสาร ก.ว. ห้ามเคลม "ผ่าน/ไม่ผ่าน" บนค่าจำลอง → โชว์ "รอผลคำนวณ"
     const pending = !state.res, errored = !!(state.res && state.res._err), ready = !pending && !errored;
@@ -2878,6 +3069,7 @@
     const sec2 = `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>`
       + `<div class="pd-sub" data-pd="flex">ออกแบบรับดัด · ว.ส.ท. 1008/1009</div>${workHTML}`
       + (shearHTML ? `<div class="pd-sub" data-pd="shear">ออกแบบรับเฉือน · ว.ส.ท. 1007</div>${shearHTML}` : '')
+      + (torHTML ? `<div class="pd-sub" data-pd="torsion">ออกแบบรับแรงบิด · DRMK บท 9</div>${torHTML}` : '')
       + `</div>`;
     const verdictBlock = `<div class="pd-verdict ${vClass}">${vText}${rebar ? (' · <span class="mono">' + rebar + '</span>') : ''}</div>`;
     // ไม่ ready → verdict กลาง (⏳ pending / ⚠ error) ไม่ใช่ ✓/✕ — กันเอกสารโชว์ "ไม่ผ่าน" คู่ placeholder "ยังไม่มีผล" (Codex P2-C #35)
@@ -2905,7 +3097,7 @@
     updateSelfWeightRow();  // อัป self-weight ตาม b/h ก่อน recompute อ่าน sumLoads (Codex P2 · กันผลค้าง 1 render)
     recompute();          // Phase 2b · engine จริง → state.res (ก่อน render ที่อ่าน liveData)
     recalcBase();
-    renderPointLoads(); renderPartialLoads();
+    renderPointLoads(); renderPartialLoads(); renderTorsionInputs();
     drawStep2();
     renderWork();
     syncVerdict();
@@ -6768,6 +6960,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
     const origCtab = TT() && TT().ctab ? TT().ctab() : 'work';   // restore แท็บเดิม (Codex P3)
     try {
       if (!TT()) { console.warn('[design-audit] __civilTest ยังไม่พร้อม'); return null; }
+      if (TT().setTorsion) TT().setTorsion(false, 0, false);   // isolate แรงบิด (global state ใหม่ · กัน user-state รั่วเข้า test อื่น) · guard แรงบิดเปิดเองภายหลัง
 
       // ── A · design tokens (drift guard) ──
       ['--ink', '--accent', '--pass', '--fail', '--rebar', '--concrete'].forEach(v =>
@@ -7041,6 +7234,35 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('print·ต่อเนื่อง: §3 ตารางสรุปมีเหล็กบนหัวเสา (Codex P2-A #35)',
         !!_sum && /\(บน\)/.test(_sum.textContent || '') && _pdc.querySelectorAll('.pd-sum tbody tr').length >= 3,
         _sum ? ('top=' + /\(บน\)/.test(_sum.textContent) + ' rows=' + _pdc.querySelectorAll('.pd-sum tbody tr').length) : 'no-sum');
+
+      // ── T · แรงบิด (Torsion · B1) · present-when-on / absent-when-off (zero-reg) / TMD / parity ──
+      ['single', 'cont'].forEach(mode => {
+        const lbl = mode === 'cont' ? 'ต่อเนื่อง' : 'ช่วงเดียว';
+        TT().setMode(mode); TT().setSection(mode === 'cont' ? 40 : 35, mode === 'cont' ? 70 : 60, 280, 'SD40');
+        TT().setPoints([]); TT().setPartials([]);
+        // เปิดแรงบิด t=1.0 ทุกช่วง · equilibrium
+        TT().setTorsion(true, 1.0, false); TT().render(); TT().renderWork();
+        A(`แรงบิด·${lbl}: section แสดงเมื่อเปิด`, !document.querySelector('#torsionSection').classList.contains('step-hidden'));
+        A(`แรงบิด·${lbl}: show-work มี block`, document.querySelectorAll('#torsionSteps .wstep').length >= 1,
+          document.querySelectorAll('#torsionSteps .wstep').length + ' blocks');
+        A(`แรงบิด·${lbl}: TMD line ในกราฟ (#D97706)`,
+          [...document.querySelectorAll('#ccDiagHost svg polyline')].some(p => (p.getAttribute('stroke') || '') === '#D97706'));
+        A(`แรงบิด·${lbl}: legend TMD แสดง`, !document.querySelector('#torLegend').classList.contains('step-hidden'));
+        // engine คืน torsion จริง + parity Tu_design = t·(L/2−d) (UI ส่งถูก)
+        const _i = TT().lastInp();
+        const _T = mode === 'cont'
+          ? (() => { const sp = _i && _i.out && _i.out.spans && _i.out.spans.find(s => s.torsion); return sp ? sp.torsion : null; })()
+          : (TT().res() && TT().res().torsion);
+        A(`แรงบิด·${lbl}: engine คืน torsion (applicable)`, !!(_T && _T.applicable), _T ? ('Tu=' + _T.Tu_design_tonm) : 'no-torsion');
+        const _exp = TT().torExpect(1.0);
+        A(`แรงบิด·${lbl}: Tu_design parity (UI=t·(L/2−d))`,
+          !!_T && Math.abs((_T.Tu_design_tonm || 0) - _exp) < 0.02, _T ? ('eng=' + _T.Tu_design_tonm + ' ui=' + _exp.toFixed(3)) : 'n/a');
+        // ปิดแรงบิด → zero-reg (section ซ่อน + ไม่ส่ง Tu เข้า engine)
+        TT().setTorsion(false, 0, false); TT().render(); TT().renderWork();
+        A(`แรงบิด·${lbl}: ปิด → section ซ่อน (zero-reg)`, document.querySelector('#torsionSection').classList.contains('step-hidden'));
+        const _i2 = TT().lastInp(), _key = mode === 'cont' ? 'Tu_tonm_per_span' : 'Tu_tonm';
+        A(`แรงบิด·${lbl}: ปิด → ไม่ส่ง Tu เข้า engine (zero-reg)`, !!_i2 && !(_key in _i2.inp), 'key ' + _key + ' absent');
+      });
     } finally {
       if (snap && TT()) { TT().restore(snap); TT().render(); TT().selectCtab(origCtab); }   // restore state+แท็บเดิม ผ่าน DOM-updating path
     }
