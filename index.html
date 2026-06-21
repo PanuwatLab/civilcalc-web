@@ -117,6 +117,7 @@
     #cc-print-doc .pd-tb td.k{ color:#64748b; width:13%; background:#f8fafc; }
     #cc-print-doc .pd-sec{ margin-top:9px; }   /* ไม่ avoid-break → เนื้อหาไหลเต็มหน้า ไม่เหลือช่องว่างล่าง (UAT pi) */
     #cc-print-doc .pd-st{ font-size:11px; font-weight:600; color:#0f2742; border-bottom:1.2px solid #0f2742; padding-bottom:2px; margin-bottom:5px; }
+    #cc-print-doc .pd-sub{ font-size:10px; font-weight:600; color:#334155; margin:7px 0 3px; }   /* หัวข้อย่อย §2: ดัด / เฉือน */
     #cc-print-doc .pd-diag{ margin:3px 0; break-inside:avoid; }   /* แต่ละกราฟไม่ฉีกข้ามหน้า */
     #cc-print-doc .pd-diag svg{ width:100%; height:auto; max-height:74mm; }
     #cc-print-doc .pd-verdict{ font-size:13px; font-weight:600; padding:6px 10px; border-radius:4px; }
@@ -2836,9 +2837,14 @@
     const planHTML = planSvg ? planSvg.outerHTML : '';
     const diagHTML = diagSvg ? diagSvg.outerHTML : '';
     const workHTML = ($('#workSteps') && $('#workSteps').innerHTML) || '';
-    const pass = !!r.pass, mdOk = r.minDepthOk !== false, dc = (r.dc != null ? r.dc : '—');
+    const shearHTML = ($('#shearSteps') && $('#shearSteps').innerHTML) || '';   // วิธีทำเฉือน/ปลอก (Codex P2 #35 — เดิมพิมพ์แค่ดัด)
+    // สถานะผลก่อนพิมพ์ (Codex P2 #35): pending = ยังไม่ได้คำนวณ (boot ก่อน Pyodide) · err = ผลผิดพลาด · ready = ผลจริง
+    //   จอ preview fallback mock = "ผ่าน" เพื่อ UX สด — แต่เอกสาร ก.ว. ห้ามเคลม "ผ่าน/ไม่ผ่าน" บนค่าจำลอง → โชว์ "รอผลคำนวณ"
+    const pending = !state.res, errored = !!(state.res && state.res._err), ready = !pending && !errored;
+    const pass = ready && !!r.pass, mdOk = r.minDepthOk !== false, dc = (r.dc != null ? r.dc : '—');
     let vClass = 'pd-pass', vText = '✓ ผ่าน';
-    if (!pass) { vClass = 'pd-fail'; vText = '✕ ไม่ผ่าน'; }
+    if (pending) { vClass = 'pd-warn'; vText = '⏳ ยังไม่ได้คำนวณ — กดคำนวณก่อนพิมพ์'; }
+    else if (errored || !pass) { vClass = 'pd-fail'; vText = '✕ ไม่ผ่าน'; }
     else if (!mdOk) { vClass = 'pd-warn'; vText = '⚠ ผ่านกำลัง · ตื้นเกิน (ต้องตรวจการแอ่น)'; }
     const mdWarn = (r.minDepthWarn || []).map(w => `<div class="pd-md">${esc(w)}</div>`).join('');
     const rebar = r.rebarMain ? ('เหล็กล่าง ' + esc(r.rebarMain) + (r.isDoubly && r.rebarComp ? (' · เหล็กอัด ' + esc(r.rebarComp)) : '')) : '';
@@ -2852,7 +2858,10 @@
       `<tr><td class="k">วันที่</td><td>${esc(dstr)}</td><td class="k">D/C</td><td class="mono">${dc}%</td></tr>` +
       '</tbody></table>' +
       `<div class="pd-sec"><div class="pd-st">§1 รูปวิเคราะห์ — กริดไลน์ · แรงเฉือน · โมเมนต์</div><div class="pd-diag">${planHTML}</div><div class="pd-diag">${diagHTML}</div></div>` +
-      `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>${workHTML}</div>` +
+      `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>` +
+        `<div class="pd-sub" data-pd="flex">ออกแบบรับดัด · ว.ส.ท. 1008/1009</div>${workHTML}` +
+        (shearHTML ? `<div class="pd-sub" data-pd="shear">ออกแบบรับเฉือน · ว.ส.ท. 1007</div>${shearHTML}` : '') +
+      `</div>` +
       `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div><div class="pd-verdict ${vClass}">${vText}${rebar ? (' · <span class="mono">' + rebar + '</span>') : ''}</div>${mdWarn}</div>` +
       '<div class="pd-sign"><div class="s"><div class="l">ผู้คำนวณ</div></div><div class="s"><div class="l">วิศวกรผู้ออกแบบ (ก.ว.)</div><div class="r">เลขทะเบียน ภย. __________</div></div></div>' +
       `<div class="pd-foot">ผลคำนวณเบื้องต้น · ต้องตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง · Civil Calc · พิมพ์ ${esc(dstr)}</div>`;
@@ -6758,6 +6767,10 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         !!_pd && !!_pd.querySelector('.pd-head') && _pd.querySelectorAll('.pd-diag svg').length >= 1 &&
         _pd.querySelectorAll('.wstep').length >= 1 && !!_pd.querySelector('.pd-verdict') && !!_pd.querySelector('.pd-sign'),
         _pd ? ('diag=' + _pd.querySelectorAll('.pd-diag svg').length + ' work=' + _pd.querySelectorAll('.wstep').length) : 'no-doc');
+      A('print: §2 มีวิธีทำทั้งดัด+เฉือน (parity กับจอ · Codex P2 #35)',
+        !!_pd && !!_pd.querySelector('[data-pd="flex"]') && !!_pd.querySelector('[data-pd="shear"]') &&
+        _pd.querySelectorAll('.wstep').length >= (document.querySelectorAll('#workSteps .wstep').length + document.querySelectorAll('#shearSteps .wstep').length),
+        _pd ? ('flex=' + !!_pd.querySelector('[data-pd="flex"]') + ' shear=' + !!_pd.querySelector('[data-pd="shear"]') + ' pdWstep=' + _pd.querySelectorAll('.wstep').length) : 'no-doc');
       const _ph = _pd ? _pd.innerHTML : '';
       A('print: ลำดับเอกสาร = title → กราฟ → สรุปผล → เซ็น (ตามที่ออกแบบ)',
         _ph.indexOf('pd-tb') >= 0 && _ph.indexOf('pd-tb') < _ph.indexOf('pd-diag') &&
