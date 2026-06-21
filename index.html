@@ -101,7 +101,10 @@
 
   /* ── PRINT (A4 · เอกสารรายการคำนวณเฉพาะ #cc-print-doc · pi 2026-06-21) ── */
   @media print{
-    @page{ size:A4 portrait; margin:12mm 11mm; }
+    @page{ size:A4 portrait; margin:12mm 11mm 16mm;
+      @bottom-right{ content:"แผ่นที่ " counter(page) " / " counter(pages); font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; font-size:9px; color:#94a3b8; }
+      @bottom-left{ content:"Civil Calc · รายการคำนวณ ก.ว."; font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; font-size:9px; color:#cbd5e1; }
+    }
     body{ background:#fff !important; }
     body > *:not(#cc-print-doc){ display:none !important; }   /* ซ่อนแอปบนจอ · โชว์เฉพาะเอกสารพิมพ์ */
     #cc-print-doc{ display:block !important; font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; color:#1e293b; font-size:11px; line-height:1.45; }
@@ -112,9 +115,9 @@
     #cc-print-doc .pd-tb{ width:100%; border-collapse:collapse; margin:8px 0; font-size:10px; }
     #cc-print-doc .pd-tb td{ border:0.5px solid #cbd5e1; padding:4px 8px; }
     #cc-print-doc .pd-tb td.k{ color:#64748b; width:13%; background:#f8fafc; }
-    #cc-print-doc .pd-sec{ break-inside:avoid; margin-top:9px; }
+    #cc-print-doc .pd-sec{ margin-top:9px; }   /* ไม่ avoid-break → เนื้อหาไหลเต็มหน้า ไม่เหลือช่องว่างล่าง (UAT pi) */
     #cc-print-doc .pd-st{ font-size:11px; font-weight:600; color:#0f2742; border-bottom:1.2px solid #0f2742; padding-bottom:2px; margin-bottom:5px; }
-    #cc-print-doc .pd-diag{ margin:3px 0; }
+    #cc-print-doc .pd-diag{ margin:3px 0; break-inside:avoid; }   /* แต่ละกราฟไม่ฉีกข้ามหน้า */
     #cc-print-doc .pd-diag svg{ width:100%; height:auto; max-height:74mm; }
     #cc-print-doc .pd-verdict{ font-size:13px; font-weight:600; padding:6px 10px; border-radius:4px; }
     #cc-print-doc .pd-pass{ background:#f0fdf4; color:#15803d; border:0.5px solid #bbf7d0; }
