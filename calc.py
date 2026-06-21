@@ -189,6 +189,7 @@ class BeamInput:
     partial_udls: list = field(default_factory=list)   # list[PartialUDL] · simply-supported
     Tu_tonm: float = 0.0              # APPENDED · โมเมนต์บิดออกแบบ "สำเร็จรูป" ที่หน้าตัดวิกฤต (ตัน·ม · fallback/UAT/expert · 0 = ไม่ใช้)
     Tu_dist_tonm_per_m: float = 0.0   # APPENDED · แรงบิดกระจาย t (ตัน·ม/ม) → engine คิด Tu=t·(L/2−d_actual) ด้วย d จริงหลังเลือกเหล็ก (Codex P2 · กัน understate กรณีหลายชั้น)
+    torsion_loads: list = field(default_factory=list)   # APPENDED · B2 · แรงบิดมีตำแหน่ง: point {kind,x,T} / dist {kind,x1,x2,t} → TMD จริง + Tu วิกฤต (มาก่อน Tu_dist/Tu_tonm)
     torsion_compatibility: bool = False   # APPENDED · True → compatibility torsion (ลด Tu เหลือ φTcr · Eq 9.27)
 
     def to_dict(self) -> dict:
@@ -1745,6 +1746,94 @@ def compute_torsion_tmd(t_tonm_per_m: float, L_m: float, d_cm: float) -> dict:
     }
 
 
+def compute_torsion_demand(loads: list, L_m: float, d_cm: float) -> dict:
+    """แผนภูมิโมเมนต์บิด TMD จาก "แรงบิดมีตำแหน่ง" (B2 · DRMK Ch.9 · analogy SFD · p250).
+
+    ตำรา (p250): "โมเมนต์บิดเขียนเป็นแผนภูมิเช่นเดียวกับแผนภูมิแรงเฉือน" → คานรับบิด
+    = analogy คานช่วงเดียว (simply-supported) · ปลาย 2 ข้างเป็นจุดรองรับบิด (เสา).
+
+    loads: list[dict] ·
+      point torque  {"kind":"point", "x":ระยะจากปลายซ้าย ม., "T":ตัน·ม}
+      dist torque   {"kind":"dist", "x1":ม., "x2":ม., "t":ตัน·ม/ม}
+    reaction (โมเมนต์รอบปลายขวา): T_A = Σ τ_i·(L−x̄_i)/L · T_B = Στ − T_A
+    internal torque T(x) = T_A − Σ(แรงบิดที่อยู่ซ้ายของ x) — ขั้นบันได(จุด) / ลาด(กระจาย)
+    Tu ออกแบบ = max|T(x)| ในช่วง [d, L−d] (วิกฤตที่ระยะ d จากเสา เหมือนเฉือน · B1 เป็นกรณีพิเศษ)
+
+    คืน: {applicable, Tu_design_tonm, T_A_tonm, T_B_tonm, x_grid[], T_grid[], n_point, n_dist}
+    """
+    pts, dists = [], []
+    for ld in (loads or []):
+        k = (ld.get("kind") or "").lower()
+        if k == "point":
+            T = float(ld.get("T", 0.0) or 0.0)
+            x = min(max(float(ld.get("x", 0.0) or 0.0), 0.0), L_m)
+            if abs(T) > FLOAT_TOL:
+                pts.append((T, x))
+        elif k == "dist":
+            t = float(ld.get("t", 0.0) or 0.0)
+            x1 = min(max(float(ld.get("x1", 0.0) or 0.0), 0.0), L_m)
+            x2 = min(max(float(ld.get("x2", L_m) or L_m), 0.0), L_m)
+            if x2 < x1:
+                x1, x2 = x2, x1
+            if abs(t) > FLOAT_TOL and (x2 - x1) > FLOAT_TOL:
+                dists.append((t, x1, x2))
+
+    empty = {"applicable": False, "Tu_design_tonm": 0.0, "T_A_tonm": 0.0, "T_B_tonm": 0.0,
+             "x_grid": [], "T_grid": [], "n_point": 0, "n_dist": 0}
+    if (not pts and not dists) or L_m <= 0:
+        return empty
+
+    d_m = max(0.0, d_cm / 100.0)
+    # reactions (simply-supported analogy · โมเมนต์รอบปลายขวา)
+    T_A, tot_all = 0.0, 0.0
+    for (T, x) in pts:
+        T_A += T * (L_m - x) / L_m
+        tot_all += T
+    for (t, x1, x2) in dists:
+        tot = t * (x2 - x1)
+        xc = (x1 + x2) / 2.0
+        T_A += tot * (L_m - xc) / L_m
+        tot_all += tot
+    T_B = tot_all - T_A
+
+    def Tx(x: float) -> float:
+        v = T_A
+        for (T, a) in pts:
+            if x >= a - FLOAT_TOL:
+                v -= T
+        for (t, x1, x2) in dists:
+            if x > x1:
+                v -= t * (min(x, x2) - x1)
+        return v
+
+    # sample grid: ปลาย · d · L−d · breakpoint จุด/ช่วง (±) · uniform 60 จุด → TMD วาดได้
+    xs = {0.0, L_m, min(d_m, L_m), max(0.0, L_m - d_m)}
+    for (T, a) in pts:
+        xs.update({max(0.0, a - 1e-6), a, min(L_m, a + 1e-6)})
+    for (t, x1, x2) in dists:
+        xs.update({x1, x2})
+    for i in range(61):
+        xs.add(i * L_m / 60.0)
+    xs = sorted(x for x in xs if -FLOAT_TOL <= x <= L_m + FLOAT_TOL)
+    x_grid = [round(x, 4) for x in xs]
+    T_grid = [round(Tx(x), 4) for x in xs]
+
+    # Tu ออกแบบ = max|T| ในช่วงออกแบบ [d, L−d] (ลดที่ระยะ d) · คานสั้น L≤2d → ใช้ max(|T_A|,|T_B|)
+    if L_m > 2.0 * d_m + FLOAT_TOL:
+        lo, hi = d_m, L_m - d_m
+        Tu_design = max(abs(Tx(x)) for x in xs if lo - FLOAT_TOL <= x <= hi + FLOAT_TOL)
+    else:
+        Tu_design = max(abs(T_A), abs(T_B))
+
+    return {
+        "applicable": True,
+        "Tu_design_tonm": round(Tu_design, 3),
+        "T_A_tonm": round(T_A, 3), "T_B_tonm": round(T_B, 3),
+        "x_grid": x_grid, "T_grid": T_grid,
+        "n_point": len(pts), "n_dist": len(dists),
+    }
+
+
 # ----------------------------------------------------------------------------
 # Main orchestrator
 # ----------------------------------------------------------------------------
@@ -2062,7 +2151,12 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     #   ไม่งั้น Tu_tonm สำเร็จรูป (fallback/UAT/expert)
     _d_tor = out.d_actual or out.d_assumed
     _tu_design = inp.Tu_tonm
-    if inp.Tu_dist_tonm_per_m and inp.Tu_dist_tonm_per_m > 0:
+    _tor_demand = None
+    if inp.torsion_loads:   # B2 · แรงบิดมีตำแหน่ง → TMD จริง + Tu วิกฤต (มาก่อน)
+        _tor_demand = compute_torsion_demand(inp.torsion_loads, inp.L, _d_tor)
+        if _tor_demand.get("applicable"):
+            _tu_design = _tor_demand["Tu_design_tonm"]
+    elif inp.Tu_dist_tonm_per_m and inp.Tu_dist_tonm_per_m > 0:
         _tu_design = max(0.0, inp.Tu_dist_tonm_per_m * (inp.L / 2.0 - _d_tor / 100.0))
     if _tu_design and _tu_design > 0:
         try:
@@ -2072,11 +2166,15 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 cover_cm=inp.cover + inp.d_stirrup / 2.0,   # ถึงศูนย์กลางเหล็กปลอก
                 fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC, fyl_ksc=inp.fy,
                 is_compatibility=inp.torsion_compatibility)
+            if _tor_demand:
+                out.torsion["demand"] = _tor_demand   # TMD จริง (x_grid/T_grid) สำหรับ UI วาดกราฟ
             out.citations.extend(out.torsion.get("citations", []))
             out.notes.extend(out.torsion.get("notes", []))
         except SectionTooSmallForShearError as exc:
             # เฉือน+บิดร่วมกันเกินกำลังหน้าตัด (อัดแตก · Eq 9.17) → fail
             out.torsion = {"applicable": True, "section_ok": False, "error": str(exc)}
+            if _tor_demand:
+                out.torsion["demand"] = _tor_demand   # TMD ยังวาดได้แม้หน้าตัดไม่พอ
             out.passes = False
             out.warnings.append(f"🔴 แรงเฉือน+บิดร่วมกัน: {exc}")
     else:
@@ -2135,6 +2233,7 @@ class ContinuousBeamInput:
     right_cantilever: dict | None = None
     Tu_tonm_per_span: list = field(default_factory=list)   # APPENDED · โมเมนต์บิดสำเร็จรูปต่อช่วง (ตัน·ม · fallback/UAT · ว่าง/0 = ไม่ใช้)
     Tu_dist_tonm_per_span: list = field(default_factory=list)  # APPENDED · แรงบิดกระจาย t ต่อช่วง → Tu=t·(L/2−d_actual) ใช้ d จริง (Codex P2)
+    torsion_loads_per_span: list = field(default_factory=list)  # APPENDED · B2 · แรงบิดมีตำแหน่งต่อช่วง (list ของ list[dict] · x วัดจากปลายซ้ายช่วง)
     torsion_compatibility: bool = False                    # APPENDED · compatibility torsion (ลด Tu เหลือ φTcr · Eq 9.27)
 
 
@@ -3114,10 +3213,16 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
         _md_kind_i = "one_end" if (i == 0 or i == n - 1) else "both_ends"
         _h_min_i = min_beam_depth(Ls[i], _md_kind_i, inp.fy)
         # torsion ต่อช่วง (DRMK Ch.9) · Tu ของช่วง i (default 0 → ข้าม · zero-reg)
-        #   แรงบิดกระจาย t_dist มาก่อน → Tu=t·(L/2−d_actual) ใช้ d จริงของช่วง (Codex P2) · ไม่งั้น Tu สำเร็จรูป
+        #   B2 แรงบิดมีตำแหน่ง มาก่อน → ไม่งั้น t_dist (Codex P2) → ไม่งั้น Tu สำเร็จรูป · ใช้ d จริงของช่วง
         _tu_i = inp.Tu_tonm_per_span[i] if (inp.Tu_tonm_per_span and i < len(inp.Tu_tonm_per_span)) else 0.0
         _tdist_i = inp.Tu_dist_tonm_per_span[i] if (inp.Tu_dist_tonm_per_span and i < len(inp.Tu_dist_tonm_per_span)) else 0.0
-        if _tdist_i and _tdist_i > 0:
+        _tloads_i = inp.torsion_loads_per_span[i] if (inp.torsion_loads_per_span and i < len(inp.torsion_loads_per_span)) else None
+        _demand_i = None
+        if _tloads_i:   # B2
+            _demand_i = compute_torsion_demand(_tloads_i, Ls[i], d_act)
+            if _demand_i.get("applicable"):
+                _tu_i = _demand_i["Tu_design_tonm"]
+        elif _tdist_i and _tdist_i > 0:
             _tu_i = max(0.0, _tdist_i * (Ls[i] / 2.0 - d_act / 100.0))
         _tor_i = None
         if _tu_i and _tu_i > 0:
@@ -3128,8 +3233,12 @@ def design_continuous_beam_exact(inp: ContinuousBeamInput) -> dict:
                     cover_cm=inp.cover + inp.d_stirrup / 2.0,
                     fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC, fyl_ksc=inp.fy,
                     is_compatibility=inp.torsion_compatibility)
+                if _demand_i:
+                    _tor_i["demand"] = _demand_i   # TMD จริงต่อช่วง สำหรับ UI
             except SectionTooSmallForShearError as exc:
                 _tor_i = {"applicable": True, "section_ok": False, "error": str(exc)}
+                if _demand_i:
+                    _tor_i["demand"] = _demand_i   # TMD ยังวาดได้แม้หน้าตัดไม่พอ
                 _tor_warnings.append(
                     f"🔴 ช่วง {_grid_label(i)}-{_grid_label(i+1)} แรงเฉือน+บิดร่วมกัน: {exc}")
         spans_out.append({
