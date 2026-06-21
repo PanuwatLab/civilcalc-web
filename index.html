@@ -2355,7 +2355,7 @@
       card.appendChild(head);
       const sub = { spans: [sp], nodes: [c.nodes[si], c.nodes[si + 1]], h: c.h, b: c.b, col: c.col,
         endFlags: [si === 0, si === c.spans.length - 1],   // node ไหนเป็นปลายจริงของคานเต็ม (Codex P2)
-        bars: c.bars ? { spanBot: [c.bars.spanBot[si]], supTop: [c.bars.supTop[si], c.bars.supTop[si + 1]] } : null,
+        bars: c.bars ? { spanBot: [c.bars.spanBot[si]], supTop: [c.bars.supTop[si], c.bars.supTop[si + 1]], spanStir: c.bars.spanStir ? [c.bars.spanStir[si]] : undefined } : null,   // thread spanStir → tile ใช้ zone engine (เดิม undefined → schematic · Codex P2)
         curt: c.curt ? { top: [c.curt.top[si], c.curt.top[si + 1]], bot: [c.curt.bot[si]], applicable: c.curt.applicable } : null };
       const { svg } = buildElevationSVG(sub, { compact: true, marginX: 22, pxm: sharedPxm, showDim: true });
       svg.style.maxWidth = '100%'; svg.style.height = 'auto'; card.appendChild(svg);
