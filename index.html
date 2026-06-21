@@ -1387,7 +1387,7 @@
         spacingClear: o.rebar ? o.rebar.spacing_min_clear : 0,
         Vc: (sd.Vc_ton || 0) * 1000, phiVc: (sd.phi_Vc_ton || 0) * 1000, Vs: (sd.Vs_required_ton || 0) * 1000,  // ตัน → กก.
         VuAtD: (sd.Vu_at_d_ton || 0) * 1000, dShear: o.d_actual,
-        stirBar: sd.bar, stirLegs: sd.n_legs, S1: sd.S1_cm, S2: sd.S2_cm, stirShop: sd.shop_drawing_notation, stirPass: sd.passes, stirN: stirrupCount(sd),
+        stirBar: sd.bar, stirLegs: sd.n_legs, S1: sd.S1_cm, S2: sd.S2_cm, L1: sd.L_S1_cm, L2: sd.L_S2_cm, stirShop: sd.shop_drawing_notation, stirPass: sd.passes, stirN: stirrupCount(sd),
       };
     } else {
       const ac = analyzeContinuous(); if (!ac) return;
@@ -2046,7 +2046,7 @@
   function detailBars() {
     const fromRebar = rb => { if (!rb || !rb.main_bars || !rb.main_bars.length) return { n: 0, size: 'DB16', list: [], n_layers: 1 }; const list = rb.main_bars.map(t => [t[0], t[1]]); const n = list.reduce((s, t) => s + t[1], 0); return { n, size: list[0][0], list, n_layers: rb.n_layers || 1 }; };   // n_layers จาก engine RebarSelection → หน้าตัดวาดชั้นตรง (ปิด display cascade)
     const fromStr = s => { const p = (s && s !== '—') ? s.split('+').map(x => x.trim().match(/(\d+)-?([RD]B?\d+)/)).filter(Boolean) : []; const list = p.map(mm => [mm[2], +mm[1]]); const n = list.reduce((a, t) => a + t[1], 0); return { n, size: list.length ? list[0][0] : 'DB16', list }; };
-    const stir = sh => ({ bar: (sh && sh.bar) || 'RB9', s1: sh && sh.S1_cm, s2: sh && sh.S2_cm });
+    const stir = sh => ({ bar: (sh && sh.bar) || 'RB9', s1: sh && sh.S1_cm, s2: sh && sh.S2_cm, l1: sh && sh.L_S1_cm, l2: sh && sh.L_S2_cm });   // l1/l2 = ความยาวโซน S1/S2 (รูปด้านข้างวาดโซนจริง · P3-1)
     if (state.mode === 'cont') {
       const ac = analyzeContinuous(), o = ac && ac.out;
       if (!o || !o.spans) return null;
@@ -2065,7 +2065,7 @@
     const sb = fromStr(m.rebarMain); sb.n_layers = m.nLayers || 1;   // single bottom n_layers จาก engine result (fromStr อ่านจาก string ไม่มีชั้น → เสียบจาก state.res.nLayers)
     // doubly: เหล็กรับแรงอัด (บน · midspan) จาก engine · isDoubly flag → section/summary โชว์
     const comp = m.isDoubly ? (() => { const c = fromStr(m.rebarComp); c.n_layers = m.compLayers || 1; return c; })() : { n: 0, size: 'DB16', n_layers: 1 };
-    return { spanBot: [sb], supTop: [{ n: 0, size: 'DB16', n_layers: 1 }, { n: 0, size: 'DB16', n_layers: 1 }], spanStir: [{ bar: m.stirBar || 'RB9', s1: m.S1, s2: m.S2 }], comp, isDoubly: !!m.isDoubly };  // ปลายคานเดี่ยว = ไม่มี −M · comp = เหล็กอัด (doubly)
+    return { spanBot: [sb], supTop: [{ n: 0, size: 'DB16', n_layers: 1 }, { n: 0, size: 'DB16', n_layers: 1 }], spanStir: [{ bar: m.stirBar || 'RB9', s1: m.S1, s2: m.S2, l1: m.L1, l2: m.L2 }], comp, isDoubly: !!m.isDoubly };  // ปลายคานเดี่ยว = ไม่มี −M · comp = เหล็กอัด (doubly)
   }
 
   // curtData — ระยะหยุดเหล็กจาก engine (out.curtailment) จัดเรียงตาม index span/node เหมือน detailBars · parity-safe (อ่านตรง ไม่คำนวณซ้ำ)
@@ -2135,16 +2135,36 @@
     // beam body
     svg.appendChild(svgEl('rect', { x: X(node0), y: beamTop, width: totalLen * pxm, height: beamH, fill: '#EEF2F6', stroke: '#94A3B8', 'stroke-width': 1.2 }));
 
-    // stirrup lines (visual · ป้ายระยะเรียง/จำนวน ดูในตาราง BBS · ไม่ใส่ label ที่นี่ กัน text ทับ)
+    // stirrup lines (visual · โซน S1-S2-S1 + ระยะจริงจาก engine · ป้ายระยะ/จำนวนดู BBS · pi P3-1 2026-06-21 · เดิม hardcode 25/75%)
+    let stirZoneSrc = 'schematic';
+    const minStepM = 3.5 / pxm;   // floor เป็น px กันเส้นทับเบลอตอน fit-width (สเกลเล็ก) · สเกลใหญ่ → ระยะจริงเต็ม
     c.spans.forEach((sp, si) => {
       const xA = c.nodes[si], xB = c.nodes[si + 1];
-      const segs = [
-        { a: xA, b: xA + sp * 0.25, step: Math.max(sp * 0.05, 0.12) },
-        { a: xA + sp * 0.25, b: xA + sp * 0.75, step: Math.max(sp * 0.08, 0.26) },
-        { a: xA + sp * 0.75, b: xB, step: Math.max(sp * 0.05, 0.12) },
-      ];
-      segs.forEach(seg => { for (let xx = seg.a; xx <= seg.b + 1e-6; xx += seg.step) svg.appendChild(svgEl('line', { x1: X(xx), y1: beamTop + inset * 0.6, x2: X(xx), y2: beamBot - inset * 0.6, stroke: '#cbd5e1', 'stroke-width': 1 })); });
+      const st = c.bars && c.bars.spanStir && c.bars.spanStir[si];
+      const s1 = st && st.s1 ? st.s1 / 100 : 0, s2 = st && st.s2 ? st.s2 / 100 : 0;   // ซม.→ม.
+      let l1 = st && st.l1 != null ? st.l1 / 100 : 0; const l2 = st && st.l2 != null ? st.l2 / 100 : 0;
+      let segs;
+      if (s1 && l1 > 0 && l2 > 0 && s2) {                       // โซน S1-S2-S1 จริง (engine · 2·l1+l2≈sp)
+        l1 = Math.min(l1, sp / 2); const lm = Math.max(0, sp - 2 * l1);
+        segs = [
+          { a: xA, b: xA + l1, step: Math.max(s1, minStepM) },
+          { a: xA + l1, b: xA + l1 + lm, step: Math.max(s2, minStepM) },
+          { a: xA + l1 + lm, b: xB, step: Math.max(s1, minStepM) },
+        ];
+        stirZoneSrc = 'engine';
+      } else if (s1) {                                          // uniform (ไม่มีโซน S2) → ระยะ s1 ทั้งช่วง
+        segs = [{ a: xA, b: xB, step: Math.max(s1, minStepM) }];
+        stirZoneSrc = 'engine';
+      } else {                                                  // fallback schematic (ไม่มีข้อมูล engine)
+        segs = [
+          { a: xA, b: xA + sp * 0.25, step: Math.max(sp * 0.05, 0.12) },
+          { a: xA + sp * 0.25, b: xA + sp * 0.75, step: Math.max(sp * 0.08, 0.26) },
+          { a: xA + sp * 0.75, b: xB, step: Math.max(sp * 0.05, 0.12) },
+        ];
+      }
+      segs.forEach(seg => { for (let xx = seg.a; xx <= seg.b + 1e-6; xx += seg.step) svg.appendChild(svgEl('line', { x1: X(xx), y1: beamTop + inset * 0.6, x2: X(xx), y2: beamBot - inset * 0.6, stroke: '#cbd5e1', 'stroke-width': 1, 'data-stir': '1' })); });
     });
+    svg.setAttribute('data-stirzone', stirZoneSrc);
 
     // columns
     c.nodes.forEach(nx => {
@@ -6377,6 +6397,10 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         A(`${lbl}: รูปด้านคาน wire ระยะตัด engine (data-curt)`,
           !!elSvg && elSvg.getAttribute('data-curt') === 'engine',
           elSvg ? elSvg.getAttribute('data-curt') : 'no-attr');
+        // เส้นปลอกในรูปด้านข้างใช้ zone S1/S2 + ความยาวจริงจาก engine (pi P3-1 · กัน regress กลับ schematic 25/75%)
+        A(`${lbl}: รูปด้านคาน เส้นปลอกใช้ zone engine (data-stirzone)`,
+          !!elSvg && elSvg.getAttribute('data-stirzone') === 'engine',
+          elSvg ? elSvg.getAttribute('data-stirzone') : 'no-attr');
         // drift probe: section b×h label == engine (buildSection เคยใช้ MOCK)
         const secTxt = (document.querySelector('#sectionMain') || {}).textContent || '';
         A(`${lbl}: หน้าตัดป้าย b×h ตรง engine (drift probe)`,
