@@ -98,6 +98,31 @@ except calc.SectionTooSmallForShearError:
 chk_true("section-adequacy เกิน limit → raise SectionTooSmallForShearError", threw)
 
 print("=" * 64)
+print(" F · integration · design_beam wiring (zero-reg เมื่อ Tu=0)")
+print("=" * 64)
+BI = calc.BeamInput
+# Tu=0 → torsion None (zero-reg · พฤติกรรมเดิม)
+o0 = calc.design_beam(BI(b=30, h=60, L=6, fc=280, fy=4000, DL=2, LL=1))
+chk_true("design_beam Tu=0 → out.torsion is None (zero-reg)", o0.torsion is None)
+chk_true("design_beam Tu=0 → ผ่านปกติ", o0.passes is True, f"(passes={o0.passes})")
+# Tu สูง (>threshold) → torsion applicable + มี At/s, Al · flexure As ไม่เปลี่ยน
+oT = calc.design_beam(BI(b=30, h=60, L=6, fc=280, fy=4000, DL=2, LL=1, Tu_tonm=3.3))
+chk_true("design_beam Tu=3.3 → out.torsion applicable", bool(oT.torsion and oT.torsion.get("applicable")))
+chk_true("design_beam Tu=3.3 → At/s > 0", bool(oT.torsion and oT.torsion.get("At_s", 0) > 0),
+         f"(At_s={oT.torsion.get('At_s') if oT.torsion else None})")
+chk_true("design_beam Tu=3.3 → Al > 0", bool(oT.torsion and oT.torsion.get("Al_final_cm2", 0) > 0))
+chk_true("design_beam Tu=3.3 → flexure As เท่าเดิม (torsion ไม่แตะดัด · zero-reg)",
+         abs(oT.As_required - o0.As_required) < 1e-6,
+         f"(As Tu0={o0.As_required:.3f} · TuX={oT.As_required:.3f})")
+# Tu ต่ำกว่า threshold → applicable=False (ไม่คิดบิด · ไม่กระทบ passes)
+oL = calc.design_beam(BI(b=30, h=60, L=6, fc=280, fy=4000, DL=2, LL=1, Tu_tonm=0.3))
+chk_true("design_beam Tu=0.3 (<threshold) → torsion applicable=False",
+         bool(oL.torsion is not None and oL.torsion.get("applicable") is False))
+chk_true("design_beam Tu=0.3 → ยังผ่าน (บิดน้อย)", oL.passes is True)
+# to_dict serialize torsion ไป JS ได้
+chk_true("design_beam to_dict() มี key torsion (serialize ไป JS)", "torsion" in oT.to_dict())
+
+print("=" * 64)
 n_pass, n_fail = len(PASS), len(FAIL)
 print(f" RESULT: {n_pass}/{n_pass + n_fail} passed" + (f" · FAILED: {FAIL}" if FAIL else " · ALL PASS ✓"))
 print("=" * 64)

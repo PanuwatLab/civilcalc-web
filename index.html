@@ -3117,6 +3117,8 @@ class BeamInput:
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
     stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
     partial_udls: list = field(default_factory=list)   # list[PartialUDL] · simply-supported
+    Tu_tonm: float = 0.0              # APPENDED · โมเมนต์บิดออกแบบที่หน้าตัดวิกฤต (ตัน·ม · 0 = ไม่มีบิด · DRMK Ch.9)
+    torsion_compatibility: bool = False   # APPENDED · True → compatibility torsion (ลด Tu เหลือ φTcr · Eq 9.27)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -3205,6 +3207,9 @@ class BeamOutput:
 
     # detailing · ระยะหยุดเหล็กล่าง คานช่วงเดียว (Phase detailing · bottom-only)
     curtailment: Optional[dict] = None
+
+    # torsion · การบิด (DRMK Ch.9 · None ถ้าไม่มี Tu input · applicable=False ถ้า Tu<φTcr/4)
+    torsion: Optional[dict] = None
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -4974,6 +4979,26 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 out.rebar, inp.L, _d_cur, inp.db_assume, inp.point_loads, inp.partial_udls)
     else:
         out.curtailment = None
+
+    # torsion · การบิด (DRMK Ch.9 · New Module) — เฉพาะเมื่อมี Tu input · default 0 → ข้าม (zero-reg)
+    if inp.Tu_tonm and inp.Tu_tonm > 0:
+        _d_tor = out.d_actual or out.d_assumed
+        try:
+            out.torsion = compute_torsion(
+                Tu_tonm=inp.Tu_tonm, Vu_ton=out.Vu * KN_TO_TON,
+                b_cm=inp.b, h_cm=inp.h, fc_ksc=inp.fc, d_cm=_d_tor,
+                cover_cm=inp.cover + inp.d_stirrup / 2.0,   # ถึงศูนย์กลางเหล็กปลอก
+                fyt_ksc=_FYT_STIRRUP_DEFAULT_KSC, fyl_ksc=inp.fy,
+                is_compatibility=inp.torsion_compatibility)
+            out.citations.extend(out.torsion.get("citations", []))
+            out.notes.extend(out.torsion.get("notes", []))
+        except SectionTooSmallForShearError as exc:
+            # เฉือน+บิดร่วมกันเกินกำลังหน้าตัด (อัดแตก · Eq 9.17) → fail
+            out.torsion = {"applicable": True, "section_ok": False, "error": str(exc)}
+            out.passes = False
+            out.warnings.append(f"🔴 แรงเฉือน+บิดร่วมกัน: {exc}")
+    else:
+        out.torsion = None
 
     return out
 
