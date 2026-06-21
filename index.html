@@ -1978,7 +1978,7 @@
         let Tmax = 0; spans.forEach((L, i) => { Tmax = Math.max(Tmax, torTuSupport(torTat(i), L)); });
         Tmax = Tmax || 1;
         const tsc = tAmp / Tmax;
-        lbl(svg, 'แรงบิด  T (ตัน·ม)  — TMD (พล็อตจาก t·L/2 ปลายช่วง · ออกแบบที่ d)', tTitleY);
+        lbl(svg, 'แรงบิด  T (' + ccUnits.uM() + ')  — TMD (พล็อตจาก t·L/2 ปลายช่วง · ออกแบบที่ d)', tTitleY);   // หน่วยตาม toggle kg↔T เหมือน V/M
         ax(svg, X(0), X(total), tMid);
         spans.forEach((L, i) => {
           const t = torTat(i); if (t <= 0) return;
@@ -1991,7 +1991,7 @@
           svg.appendChild(svgEl('polyline', { points: `${X(x0)},${yL} ${X(xMid)},${tMid} ${X(x1)},${yR}`, fill: 'none', stroke: '#D97706', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
           // ค่ายอด Tu ที่ผิวเสา (ปลายซ้าย) + จุด
           svg.appendChild(svgEl('circle', { cx: X(x0), cy: yL, r: 3, fill: '#D97706', stroke: '#fff', 'stroke-width': 1 }));
-          momLabel(svg, X(x0), yL - 8, '±' + peak.toFixed(2), '#D97706');
+          momLabel(svg, X(x0), yL - 8, '±' + ccUnits.Mn(peak * 1000), '#D97706');   // ตัน·ม → kg·ม (×1000) แล้วฟอร์แมตตาม toggle (เหมือน M)
         });
       }
 
