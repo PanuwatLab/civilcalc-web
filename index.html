@@ -99,17 +99,47 @@
   ::-webkit-scrollbar{ height:8px; width:8px; }
   ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:99px; }
 
-  /* ── PRINT (A4 portrait) ── */
+  /* ── PRINT (A4 · เอกสารรายการคำนวณเฉพาะ #cc-print-doc · pi 2026-06-21) ── */
   @media print{
-    @page{ size:A4 portrait; margin:14mm 12mm; }
-    .no-print{ display:none !important; }
-    body{ background:#fff; }
-    .print-only{ display:block !important; }
-    .print-block{ break-inside:avoid; }
-    .page-break{ break-before:page; }
-    main{ max-width:none !important; padding:0 !important; }
-    .card{ box-shadow:none !important; border-color:#cbd5e1 !important; }
+    @page{ size:A4 portrait; margin:12mm 11mm 16mm;
+      @bottom-right{ content:"แผ่นที่ " counter(page) " / " counter(pages); font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; font-size:9px; color:#94a3b8; }
+      @bottom-left{ content:"Civil Calc · รายการคำนวณ ก.ว."; font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; font-size:9px; color:#cbd5e1; }
+    }
+    body{ background:#fff !important; }
+    body > *:not(#cc-print-doc){ display:none !important; }   /* ซ่อนแอปบนจอ · โชว์เฉพาะเอกสารพิมพ์ */
+    #cc-print-doc{ display:block !important; font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; color:#1e293b; font-size:11px; line-height:1.45; }
+    #cc-print-doc .pd-head{ background:#0f2742; color:#fff; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; }
+    #cc-print-doc .pd-h1{ font-size:13px; font-weight:600; }
+    #cc-print-doc .pd-h2,#cc-print-doc .pd-hr{ font-size:9.5px; opacity:.85; }
+    #cc-print-doc .pd-hr{ text-align:right; }
+    #cc-print-doc .pd-tb{ width:100%; border-collapse:collapse; margin:8px 0; font-size:10px; }
+    #cc-print-doc .pd-tb td{ border:0.5px solid #cbd5e1; padding:4px 8px; }
+    #cc-print-doc .pd-tb td.k{ color:#64748b; width:13%; background:#f8fafc; }
+    #cc-print-doc .pd-sec{ margin-top:9px; }   /* ไม่ avoid-break → เนื้อหาไหลเต็มหน้า ไม่เหลือช่องว่างล่าง (UAT pi) */
+    #cc-print-doc .pd-st{ font-size:11px; font-weight:600; color:#0f2742; border-bottom:1.2px solid #0f2742; padding-bottom:2px; margin-bottom:5px; }
+    #cc-print-doc .pd-sub{ font-size:10px; font-weight:600; color:#334155; margin:7px 0 3px; }   /* หัวข้อย่อย §2: ดัด / เฉือน */
+    #cc-print-doc .pd-sum{ width:100%; border-collapse:collapse; margin-top:6px; font-size:10px; }   /* §3 ตารางสรุปเหล็ก (clone #summaryRows · รวมเหล็กบนหัวเสา) */
+    #cc-print-doc .pd-sum th{ border:0.5px solid #cbd5e1; padding:4px 8px; background:#f1f5f9; color:#475569; font-weight:600; text-align:right; }
+    #cc-print-doc .pd-sum th:first-child{ text-align:left; }
+    #cc-print-doc .pd-sum td{ border:0.5px solid #cbd5e1; padding:4px 8px; text-align:right; }
+    #cc-print-doc .pd-sum td:first-child{ text-align:left; }
+    #cc-print-doc .pd-pending{ font-size:11px; color:#b45309; background:#fffbeb; border:0.5px solid #fde68a; padding:9px 11px; border-radius:4px; margin-top:6px; }   /* P2-B: engine ไม่พร้อม → ไม่พิมพ์ค่า mock */
+    #cc-print-doc .pd-diag{ margin:3px 0; break-inside:avoid; }   /* แต่ละกราฟไม่ฉีกข้ามหน้า */
+    #cc-print-doc .pd-diag svg{ width:100%; height:auto; max-height:74mm; }
+    #cc-print-doc .pd-verdict{ font-size:13px; font-weight:600; padding:6px 10px; border-radius:4px; }
+    #cc-print-doc .pd-pass{ background:#f0fdf4; color:#15803d; border:0.5px solid #bbf7d0; }
+    #cc-print-doc .pd-warn{ background:#fffbeb; color:#b45309; border:0.5px solid #fde68a; }
+    #cc-print-doc .pd-fail{ background:#fef2f2; color:#b91c1c; border:0.5px solid #fecaca; }
+    #cc-print-doc .pd-md{ font-size:9.5px; color:#92400e; margin-top:3px; }
+    #cc-print-doc .pd-sign{ display:flex; justify-content:space-between; gap:30px; margin-top:13mm; break-inside:avoid; }
+    #cc-print-doc .pd-sign .s{ flex:1; text-align:center; }
+    #cc-print-doc .pd-sign .l{ border-top:1px solid #1e293b; padding-top:3px; font-size:10px; }
+    #cc-print-doc .pd-sign .r{ font-size:9px; color:#94a3b8; margin-top:2px; }
+    #cc-print-doc .pd-foot{ margin-top:6px; font-size:8.5px; color:#94a3b8; border-top:1px dashed #e2e8f0; padding-top:4px; }
+    #cc-print-doc .wstep,#cc-print-doc .print-block{ break-inside:avoid; }
+    #cc-print-doc .page-break{ break-before:page; }
   }
+  #cc-print-doc{ display:none; }
   .print-only{ display:none; }
 
   .card{ background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
@@ -1735,7 +1765,7 @@
       const H = mAxis + momDown + 30;                            // total incl. tick labels
       const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, class: 'svg-fit', 'font-family': 'JetBrains Mono, monospace' });
 
-      let Vmax, Mmax, vLine, vArea, mLine, mFill, marks = [];
+      let Vmax, Mmax, vLine, vArea, mLine, mFill, marks = [], vMarks = [];
 
       if (!cont) {
         const a = analyzeSingle(total, ccModel.Wu, ccModel.points, ccModel.partials);
@@ -1746,6 +1776,7 @@
         const vsc = (vH * 0.42) / Vmax, msc = (Mmin < -1 ? momUp : momDown) / Mpk;
         vLine = a.xs.map((x, i) => `${X(x)},${(vMid - a.V[i] * vsc).toFixed(1)}`).join(' ');
         vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+        vMarks = vPeaks(a.xs, a.V, vsc);
         const lp = [], fp = [];
         a.xs.forEach((x, i) => { const py = mAxis + a.M[i] * msc; lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`); });
         mLine = lp.join(' ');
@@ -1763,6 +1794,7 @@
           const vsc = (vH * 0.42) / Vmax, msc = Math.min(momDown / maxPos, momUp / maxNeg);
           vLine = ac.xs.map((x, i) => `${X(x)},${(vMid - ac.V[i] * vsc).toFixed(1)}`).join(' ');
           vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+          vMarks = vPeaks(ac.xs, ac.V, vsc);
           const lp = [], fp = [];
           ac.xs.forEach((x, i) => { const py = mAxis + ac.M[i] * msc; lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`); });
           mLine = lp.join(' ');
@@ -1793,6 +1825,7 @@
           mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
           vLine = vpts.map(([x, y]) => `${x},${y}`).join(' ');
           vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+          vMarks = [{ x: X(g.nodes[0]), y: vMid - vH * 0.34, val: Vmax, sign: '+' }];   // schematic peak
         }
       }
 
@@ -1801,6 +1834,11 @@
       ax(svg, X(0), X(total), vMid);
       svg.appendChild(svgEl('polyline', { points: vArea, fill: 'rgba(8,145,178,.10)', stroke: 'none' }));
       svg.appendChild(svgEl('polyline', { points: vLine, fill: 'none', stroke: '#0891b2', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
+      // peak V labels (จุด + ค่า max · เดิม shear ไม่โชว์ค่า/สเกล · pi 2026-06-21)
+      vMarks.forEach(mk => {
+        svg.appendChild(svgEl('circle', { cx: mk.x, cy: mk.y, r: 3, fill: '#0891b2', stroke: '#fff', 'stroke-width': 1 }));
+        momLabel(svg, mk.x, mk.y + (mk.sign === '+' ? -9 : 15), mk.sign + ccUnits.P(mk.val), '#0891b2');
+      });
       // ── M band ──
       lbl(svg, 'โมเมนต์  M (' + ccUnits.uM() + ')  — พล็อตคว่ำ', mAxis - momUp - 12);
       ax(svg, X(0), X(total), mAxis);
@@ -1823,6 +1861,14 @@
       $('#mmaxLbl').textContent = ccUnits.M(Mmax);
       function lbl(s, txt, y) { const t = svgEl('text', { x: CV.mx, y, 'font-size': 11, fill: '#64748B', 'font-family': 'IBM Plex Sans Thai, sans-serif' }); t.textContent = txt; s.appendChild(t); }
       function ax(s, x0, x1, y) { s.appendChild(svgEl('line', { x1: x0, y1: y, x2: x1, y2: y, stroke: '#cbd5e1', 'stroke-width': 1, 'stroke-dasharray': '2 3' })); }
+      function vPeaks(xs, V, vsc) {   // จุดค่าสูงสุด V (บวก/ลบ) + ตำแหน่ง → ป้ายบน SFD
+        let iMx = -1, vMx = 0, iMn = -1, vMn = 0;
+        (V || []).forEach((v, i) => { if (v > vMx) { vMx = v; iMx = i; } if (v < vMn) { vMn = v; iMn = i; } });
+        const out = [];
+        if (iMx >= 0 && vMx > 0.01) out.push({ x: X(xs[iMx]), y: vMid - vMx * vsc, val: vMx, sign: '+' });
+        if (iMn >= 0 && vMn < -0.01) out.push({ x: X(xs[iMn]), y: vMid - vMn * vsc, val: -vMn, sign: '−' });
+        return out;
+      }
     }
   };
 
@@ -2781,6 +2827,64 @@
   }
 
   /* ╔══════════════ master render ══════════════╗ */
+  /* ── เอกสารรายการคำนวณ ก.ว. (A4 · ลำดับ: title → กราฟ → รายการคำนวณ → สรุปผล → เซ็น · pi 2026-06-21) ──
+     populate จาก node ที่ render แล้ว (clone กราฟ + show-work · ไม่ยุ่งลำดับบนจอ) · display-only */
+  function ccPopulatePrintDoc() {
+    const doc = $('#cc-print-doc'); if (!doc) return;
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const m = liveData(), r = state.res || {}, cont = state.mode === 'cont';
+    const proj = ($('#projName') && $('#projName').value) || '—';
+    const member = ($('#pt_member') && $('#pt_member').textContent) || ('คาน (' + (cont ? 'ต่อเนื่อง' : 'ช่วงเดียว') + ')');
+    let grid = '';   // ดึงค่ากริดจากในรูป (ccModel.grid ที่วาดในผัง/กราฟ · pi 2026-06-21) → A–B / A–B–C–D
+    try { const _gn = geom().nodes; grid = _gn.map((_, i) => ccModel.grid(i)).join('–'); } catch (e) { grid = ''; }
+    const fy = fyOf(P.grade);
+    let dstr = ''; try { dstr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { dstr = ''; }
+    const planSvg = $('#ccCanvasHost svg'), diagSvg = $('#ccDiagHost svg');
+    const planHTML = planSvg ? planSvg.outerHTML : '';
+    const diagHTML = diagSvg ? diagSvg.outerHTML : '';
+    const workHTML = ($('#workSteps') && $('#workSteps').innerHTML) || '';
+    const shearHTML = ($('#shearSteps') && $('#shearSteps').innerHTML) || '';   // วิธีทำเฉือน/ปลอก (Codex P2 #35 — เดิมพิมพ์แค่ดัด)
+    // สถานะผลก่อนพิมพ์ (Codex P2 #35): pending = ยังไม่ได้คำนวณ (boot ก่อน Pyodide) · err = ผลผิดพลาด · ready = ผลจริง
+    //   จอ preview fallback mock = "ผ่าน" เพื่อ UX สด — แต่เอกสาร ก.ว. ห้ามเคลม "ผ่าน/ไม่ผ่าน" บนค่าจำลอง → โชว์ "รอผลคำนวณ"
+    const pending = !state.res, errored = !!(state.res && state.res._err), ready = !pending && !errored;
+    const pass = ready && !!r.pass, mdOk = r.minDepthOk !== false, dc = (r.dc != null ? r.dc : '—');
+    // verdict นี้ใช้เฉพาะตอน ready (pass = ready && r.pass) · not-ready (pending/_err) จัดการแยกใน calcBody (กัน ✕ คู่ placeholder · Codex P2-C #35)
+    let vClass = 'pd-pass', vText = '✓ ผ่าน';
+    if (!pass) { vClass = 'pd-fail'; vText = '✕ ไม่ผ่าน'; }
+    else if (!mdOk) { vClass = 'pd-warn'; vText = '⚠ ผ่านกำลัง · ตื้นเกิน (ต้องตรวจการแอ่น)'; }
+    const mdWarn = (r.minDepthWarn || []).map(w => `<div class="pd-md">${esc(w)}</div>`).join('');
+    const rebar = r.rebarMain ? ('เหล็กล่าง ' + esc(r.rebarMain) + (r.isDoubly && r.rebarComp ? (' · เหล็กอัด ' + esc(r.rebarComp)) : '')) : '';
+    // §3 ตารางสรุปเหล็ก = clone #summaryRows (ราย span/หัวเสา · รวม "เหล็กบน" หัวเสาโหมดต่อเนื่อง · parity กับจอ · Codex P2-A #35)
+    const summaryRowsHTML = ($('#summaryRows') && $('#summaryRows').innerHTML) || '';
+    const summaryTable = summaryRowsHTML
+      ? `<table class="pd-sum"><thead><tr><th>ตำแหน่ง</th><th>+M / −M</th><th>เหล็กหลัก</th><th>Vu</th><th>ปลอก</th></tr></thead><tbody>${summaryRowsHTML}</tbody></table>`
+      : '';
+    const sec1 = `<div class="pd-sec"><div class="pd-st">§1 รูปวิเคราะห์ — กริดไลน์ · แรงเฉือน · โมเมนต์</div><div class="pd-diag">${planHTML}</div><div class="pd-diag">${diagHTML}</div></div>`;
+    const sec2 = `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>`
+      + `<div class="pd-sub" data-pd="flex">ออกแบบรับดัด · ว.ส.ท. 1008/1009</div>${workHTML}`
+      + (shearHTML ? `<div class="pd-sub" data-pd="shear">ออกแบบรับเฉือน · ว.ส.ท. 1007</div>${shearHTML}` : '')
+      + `</div>`;
+    const verdictBlock = `<div class="pd-verdict ${vClass}">${vText}${rebar ? (' · <span class="mono">' + rebar + '</span>') : ''}</div>`;
+    // ไม่ ready → verdict กลาง (⏳ pending / ⚠ error) ไม่ใช่ ✓/✕ — กันเอกสารโชว์ "ไม่ผ่าน" คู่ placeholder "ยังไม่มีผล" (Codex P2-C #35)
+    const notReadyVerdict = `<div class="pd-verdict pd-warn">${pending ? '⏳ ยังไม่ได้คำนวณ' : '⚠ เกิดข้อผิดพลาดในการคำนวณ'}</div>`;
+    // P2-B (#35): engine ไม่พร้อม (boot/offline/_err) → §1+§2+ตาราง เป็นค่า MOCK → แทนด้วย placeholder · ห้ามพิมพ์ตัวเลขปลอมในเอกสาร ก.ว.
+    const calcBody = ready
+      ? (sec1 + sec2 + `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div>${verdictBlock}${summaryTable}${mdWarn}</div>`)
+      : (`<div class="pd-sec"><div class="pd-st">§ สรุปผล</div>${notReadyVerdict}<div class="pd-pending">ยังไม่มีผลคำนวณจริง — กด “คำนวณ” บนหน้าจอก่อนพิมพ์ · เอกสารนี้ยังไม่พร้อมใช้งาน</div></div>`);
+    doc.innerHTML =
+      '<div class="pd-head"><div><div class="pd-h1">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก</div>' +
+      '<div class="pd-h2">วิธีกำลัง (SDM) · มาตรฐาน ว.ส.ท. 1008/1009</div></div><div class="pd-hr">Civil Calc · Panuwat Lab</div></div>' +
+      '<table class="pd-tb"><tbody>' +
+      `<tr><td class="k">โครงการ</td><td>${esc(proj)}</td><td class="k">มาตรฐาน</td><td>ว.ส.ท. (SDM/USD)</td></tr>` +
+      `<tr><td class="k">องค์อาคาร</td><td>${esc(member)}</td><td class="k">b × h</td><td class="mono">${P.b}×${P.h} ซม.</td></tr>` +
+      `<tr><td class="k">ตำแหน่ง/กริด</td><td>${esc(grid || '—')}</td><td class="k">วัสดุ</td><td class="mono">f'c ${P.fc} · fy ${fy} ksc</td></tr>` +
+      `<tr><td class="k">วันที่</td><td>${esc(dstr)}</td><td class="k">D/C</td><td class="mono">${dc === '—' ? '—' : dc + '%'}</td></tr>` +
+      '</tbody></table>' +
+      calcBody +
+      '<div class="pd-sign"><div class="s"><div class="l">ผู้คำนวณ</div></div><div class="s"><div class="l">วิศวกรผู้ออกแบบ (ก.ว.)</div><div class="r">เลขทะเบียน ภย. __________</div></div></div>' +
+      `<div class="pd-foot">ผลคำนวณเบื้องต้น · ต้องตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง · Civil Calc · พิมพ์ ${esc(dstr)}</div>`;
+  }
+
   function render() {
     applyMode();
     updateSelfWeightRow();  // อัป self-weight ตาม b/h ก่อน recompute อ่าน sumLoads (Codex P2 · กันผลค้าง 1 render)
@@ -2796,7 +2900,9 @@
     $('#ls_bh').textContent = P.b + '×' + P.h;
     { const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h; }
     updateNav();
+    ccPopulatePrintDoc();   // เอกสารพิมพ์ A4 (populate-on-render · gotcha 1 — ไม่พึ่ง beforeprint อย่างเดียว)
   }
+  window.addEventListener('beforeprint', ccPopulatePrintDoc);   // backup ก่อนพิมพ์ (Ctrl+P)
 
   /* ── go ── */
   document.addEventListener('DOMContentLoaded', boot);
@@ -6671,6 +6777,33 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('min-depth: คานลึกพอ (40×60) → min_depth_ok=true + banner ซ่อน',
         _mdOk.minDepthOk !== false && (!_mdSw2 || _mdSw2.classList.contains('step-hidden')),
         'minDepthOk=' + _mdOk.minDepthOk + ' hidden=' + (_mdSw2 && _mdSw2.classList.contains('step-hidden')));
+
+      // ── F · เอกสารพิมพ์ A4 calc-sheet (#cc-print-doc · pi 2026-06-21) ──
+      TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().recompute(); TT().render();
+      const _pd = document.querySelector('#cc-print-doc');
+      A('print: #cc-print-doc populate ครบ (title+กราฟ+show-work+verdict+เซ็น)',
+        !!_pd && !!_pd.querySelector('.pd-head') && _pd.querySelectorAll('.pd-diag svg').length >= 1 &&
+        _pd.querySelectorAll('.wstep').length >= 1 && !!_pd.querySelector('.pd-verdict') && !!_pd.querySelector('.pd-sign'),
+        _pd ? ('diag=' + _pd.querySelectorAll('.pd-diag svg').length + ' work=' + _pd.querySelectorAll('.wstep').length) : 'no-doc');
+      A('print: §2 มีวิธีทำทั้งดัด+เฉือน (parity กับจอ · Codex P2 #35)',
+        !!_pd && !!_pd.querySelector('[data-pd="flex"]') && !!_pd.querySelector('[data-pd="shear"]') &&
+        _pd.querySelectorAll('.wstep').length >= (document.querySelectorAll('#workSteps .wstep').length + document.querySelectorAll('#shearSteps .wstep').length),
+        _pd ? ('flex=' + !!_pd.querySelector('[data-pd="flex"]') + ' shear=' + !!_pd.querySelector('[data-pd="shear"]') + ' pdWstep=' + _pd.querySelectorAll('.wstep').length) : 'no-doc');
+      const _ph = _pd ? _pd.innerHTML : '';
+      A('print: ลำดับเอกสาร = title → กราฟ → สรุปผล → เซ็น (ตามที่ออกแบบ)',
+        _ph.indexOf('pd-tb') >= 0 && _ph.indexOf('pd-tb') < _ph.indexOf('pd-diag') &&
+        _ph.indexOf('pd-diag') < _ph.indexOf('pd-verdict') && _ph.indexOf('pd-verdict') < _ph.indexOf('pd-sign'),
+        'order-ok');
+      // P2-A/B (#35): §3 มีตารางสรุปเหล็ก (clone #summaryRows) + ready-state ไม่มี placeholder ค้าง
+      A('print: §3 มีตารางสรุปเหล็ก (.pd-sum) + ไม่มี placeholder ตอน ready (Codex P2-B #35)',
+        !!_pd && !!_pd.querySelector('.pd-sum') && _pd.querySelectorAll('.pd-sum tbody tr').length >= 1 && !_pd.querySelector('.pd-pending'),
+        _pd && _pd.querySelector('.pd-sum') ? ('rows=' + _pd.querySelectorAll('.pd-sum tbody tr').length + ' pending=' + !!_pd.querySelector('.pd-pending')) : 'no-sum');
+      // P2-A (#35): ต่อเนื่อง §3 ตารางสรุปต้องมี "เหล็กบน" หัวเสา (เดิมตก · โชว์แค่ rebarMain ล่าง)
+      TT().setMode('cont'); TT().recompute(); TT().render();
+      const _pdc = document.querySelector('#cc-print-doc'), _sum = _pdc && _pdc.querySelector('.pd-sum');
+      A('print·ต่อเนื่อง: §3 ตารางสรุปมีเหล็กบนหัวเสา (Codex P2-A #35)',
+        !!_sum && /\(บน\)/.test(_sum.textContent || '') && _pdc.querySelectorAll('.pd-sum tbody tr').length >= 3,
+        _sum ? ('top=' + /\(บน\)/.test(_sum.textContent) + ' rows=' + _pdc.querySelectorAll('.pd-sum tbody tr').length) : 'no-sum');
     } finally {
       if (snap && TT()) { TT().restore(snap); TT().render(); TT().selectCtab(origCtab); }   // restore state+แท็บเดิม ผ่าน DOM-updating path
     }
@@ -6693,5 +6826,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
   console.log('[design-audit] window.runDesignAudit() — ตรวจ UI drift 2 โหมด');
 })();
 </script>
+<!-- เอกสารรายการคำนวณ ก.ว. (print-only · populate โดย ccPopulatePrintDoc · pi 2026-06-21) -->
+<div id="cc-print-doc" aria-hidden="true"></div>
 </body>
 </html>
