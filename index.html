@@ -85,6 +85,9 @@
   .num-field.invalid{ border-color:var(--fail); box-shadow:0 0 0 3px rgba(220,38,38,.10); }
 
   .badge-code{ background:var(--code-badge-bg); color:var(--accent); border:1px solid #DBE3FF; font-size:11px; padding:1px 7px; border-radius:5px; white-space:nowrap; }
+  .badge-type{ font-size:11px; padding:1px 8px; border-radius:5px; white-space:nowrap; font-weight:600; }   /* ชนิดเสริมเหล็กรับดัด: เดี่ยว/คู่ (plan A) */
+  .badge-type.singly{ background:#F1F5F9; color:#475569; border:1px solid #E2E8F0; }
+  .badge-type.doubly{ background:#FEF3C7; color:#B45309; border:1px solid #FDE68A; }
   .pill{ border:1px solid var(--border); border-radius:6px; padding:6px 12px; font-family:"JetBrains Mono",monospace; font-size:14px; background:#fff; cursor:pointer; }
   .pill[aria-pressed=true]{ border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600; }
 
@@ -124,6 +127,7 @@
     #cc-print-doc .pd-sum td{ border:0.5px solid #cbd5e1; padding:4px 8px; text-align:right; }
     #cc-print-doc .pd-sum td:first-child{ text-align:left; }
     #cc-print-doc .pd-pending{ font-size:11px; color:#b45309; background:#fffbeb; border:0.5px solid #fde68a; padding:9px 11px; border-radius:4px; margin-top:6px; }   /* P2-B: engine ไม่พร้อม → ไม่พิมพ์ค่า mock */
+    #cc-print-doc .pd-flextype{ font-size:10px; color:#334155; margin:5px 0 2px; }   /* ชนิดเสริมเหล็กรับดัด เดี่ยว/คู่ (plan A) */
     #cc-print-doc .pd-diag{ margin:3px 0; break-inside:avoid; }   /* แต่ละกราฟไม่ฉีกข้ามหน้า */
     #cc-print-doc .pd-diag svg{ width:100%; height:auto; max-height:74mm; }
     #cc-print-doc .pd-verdict{ font-size:13px; font-weight:600; padding:6px 10px; border-radius:4px; }
@@ -579,7 +583,7 @@
           </div>
 
           <!-- ออกแบบรับดัด: steps 1-11 -->
-          <h3 class="text-[15px] font-semibold mb-3 flex items-center gap-2">ออกแบบรับดัด <span class="badge-code mono">มาตรฐาน ว.ส.ท. 1008/1009</span></h3>
+          <h3 class="text-[15px] font-semibold mb-3 flex items-center gap-2">ออกแบบรับดัด <span class="badge-code mono">มาตรฐาน ว.ส.ท. 1008/1009</span><span id="flexTypeBadge" class="badge-type singly">เหล็กเดี่ยว · Singly</span></h3>
           <div id="workSteps" class="space-y-2.5"></div>
 
           <!-- ออกแบบรับเฉือน -->
@@ -2000,8 +2004,10 @@
 
     // summary table — Phase 2d · engine จริง (continuous: spans/supports · single: state.res)
     let rows = [];
+    let flexDoubly = !!m.isDoubly;   // ชนิดเสริมเหล็กรับดัด (plan A) · single จาก engine · cont = any span/support doubly (reuse o ด้านล่าง)
     if (state.mode === 'cont') {
       const ac = analyzeContinuous(), o = ac && ac.out;
+      flexDoubly = !!(o && o.spans && (o.spans.some(sp => sp.bottom && sp.bottom.is_doubly) || o.supports.some(su => su.top && su.top.is_doubly)));
       // engine shear ราย span → ป้ายปลอก (S1=หัวเสา · S2=กลางช่วง)
       //   - เฉือน FAIL (passes=false · ไม่มี S1/S2) → โชว์ "✗ หน้าตัดไม่พอ" ห้ามแต่งเป็น spacing ปลอม (Codex P1)
       //   - ไม่มีข้อมูล → "—" (ไม่ใช้ stirText/state.legs · กัน leak 2ป จาก single · Codex P2)
@@ -2058,6 +2064,14 @@
       <td class="py-2 font-sans">${r[0]}</td><td class="py-2 text-right">${r[1]}</td>
       <td class="py-2 text-right">${r[2]}</td><td class="py-2 text-right">${r[3]}</td>
       <td class="py-2 text-right">${r[4]}</td></tr>`).join('');
+    // badge ชนิดเสริมเหล็กรับดัด (plan A) · single: เดี่ยว/คู่ · cont: ทั้งหมด/บางตำแหน่ง · สี amber=คู่ (หน้าตัดถูกจำกัด)
+    const _ftb = $('#flexTypeBadge');
+    if (_ftb) {
+      _ftb.className = 'badge-type ' + (flexDoubly ? 'doubly' : 'singly');
+      _ftb.textContent = flexDoubly
+        ? (state.mode === 'cont' ? 'เหล็กคู่บางตำแหน่ง · Doubly' : 'เหล็กคู่ · Doubly (รับแรงอัด)')
+        : (state.mode === 'cont' ? 'เหล็กเดี่ยวทั้งหมด · Singly' : 'เหล็กเดี่ยว · Singly');
+    }
   }
 
   /* ╔══════════════ ⭐ ccDraw — elevation to scale ══════════════╗ */
@@ -2856,6 +2870,7 @@
     const rebar = r.rebarMain ? ('เหล็กล่าง ' + esc(r.rebarMain) + (r.isDoubly && r.rebarComp ? (' · เหล็กอัด ' + esc(r.rebarComp)) : '')) : '';
     // §3 ตารางสรุปเหล็ก = clone #summaryRows (ราย span/หัวเสา · รวม "เหล็กบน" หัวเสาโหมดต่อเนื่อง · parity กับจอ · Codex P2-A #35)
     const summaryRowsHTML = ($('#summaryRows') && $('#summaryRows').innerHTML) || '';
+    const flexType = ($('#flexTypeBadge') && $('#flexTypeBadge').textContent) || '';   // ชนิดเสริมเหล็กรับดัด เดี่ยว/คู่ (plan A · clone จากจอ · parity-safe)
     const summaryTable = summaryRowsHTML
       ? `<table class="pd-sum"><thead><tr><th>ตำแหน่ง</th><th>+M / −M</th><th>เหล็กหลัก</th><th>Vu</th><th>ปลอก</th></tr></thead><tbody>${summaryRowsHTML}</tbody></table>`
       : '';
@@ -2869,7 +2884,7 @@
     const notReadyVerdict = `<div class="pd-verdict pd-warn">${pending ? '⏳ ยังไม่ได้คำนวณ' : '⚠ เกิดข้อผิดพลาดในการคำนวณ'}</div>`;
     // P2-B (#35): engine ไม่พร้อม (boot/offline/_err) → §1+§2+ตาราง เป็นค่า MOCK → แทนด้วย placeholder · ห้ามพิมพ์ตัวเลขปลอมในเอกสาร ก.ว.
     const calcBody = ready
-      ? (sec1 + sec2 + `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div>${verdictBlock}${summaryTable}${mdWarn}</div>`)
+      ? (sec1 + sec2 + `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div>${verdictBlock}${flexType ? `<div class="pd-flextype">ชนิดเสริมเหล็กรับดัด: <b>${esc(flexType)}</b></div>` : ''}${summaryTable}${mdWarn}</div>`)
       : (`<div class="pd-sec"><div class="pd-st">§ สรุปผล</div>${notReadyVerdict}<div class="pd-pending">ยังไม่มีผลคำนวณจริง — กด “คำนวณ” บนหน้าจอก่อนพิมพ์ · เอกสารนี้ยังไม่พร้อมใช้งาน</div></div>`);
     doc.innerHTML =
       '<div class="pd-head"><div><div class="pd-h1">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก</div>' +
@@ -6719,11 +6734,21 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('doubly: show-work แสดงสูตรเหล็กคู่ (As′/เสริมเหล็กคู่) ไม่ขัด verdict',
         /เสริมเหล็กคู่|As′/.test(_dwork) && !/ρ_final/.test(_dwork),
         'hasDoubly=' + /เสริมเหล็กคู่|As′/.test(_dwork) + ' hasSinglyRhoFinal=' + /ρ_final/.test(_dwork));
+      // A (plan A): badge ชนิดเหล็ก = "คู่/Doubly" ตรง engine is_doubly (สถานะ doubly)
+      const _dbadge = (document.querySelector('#flexTypeBadge') || {}).textContent || '';
+      A('A·doubly: badge "คู่/Doubly" ตรง engine is_doubly',
+        /คู่|Doubly/.test(_dbadge) && !!(_dr && _dr.isDoubly), 'badge="' + _dbadge + '" eng=' + (_dr && _dr.isDoubly));
       // BBS ช่วงเดียว doubly: ต้องมีแถวเหล็กรับแรงอัด (ปิด gap #27 · sibling-surface)
       TT().drawDetailing();
       const _dbbs = (document.querySelector('#bbsRows') || {}).textContent || '';
       A('doubly: BBS ช่วงเดียวมีแถวเหล็กรับแรงอัด (รับอัด) — takeoff ไม่ขาด (#27 gap closed)',
         !(_deb && _deb.isDoubly) || /รับอัด/.test(_dbbs), 'hasCompRow=' + /รับอัด/.test(_dbbs));
+      // A (plan A): สถานะ singly → badge "เดี่ยว/Singly" + show-work สูตร a→Mn (ไม่มี As′) ตรง engine path
+      _dclean(); TT().setSection(30, 60, 240, 'SD40'); TT().recompute(); TT().renderWork();
+      const _sr = TT().res(), _sbadge = (document.querySelector('#flexTypeBadge') || {}).textContent || '', _swork = (document.querySelector('#workSteps') || {}).textContent || '';
+      A('A·singly: badge "เดี่ยว/Singly" + สูตร a→Mn (ไม่มี As′) ตรง engine',
+        !(_sr && _sr.isDoubly) && /เดี่ยว|Singly/.test(_sbadge) && /a → Mn/.test(_swork) && !/As′/.test(_swork),
+        'eng_doubly=' + (_sr && _sr.isDoubly) + ' badge="' + _sbadge + '" hasAprime=' + /As′/.test(_swork));
       _dclean(); TT().setPoints([]); TT().setMode('cont');
 
       // ── C4 · doubly-reinforced CONTINUOUS (−M หัวเสา · เหล็กอัด "ล่าง" สลับด้านจาก +M · DRMK book p70) ──
