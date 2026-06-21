@@ -99,17 +99,37 @@
   ::-webkit-scrollbar{ height:8px; width:8px; }
   ::-webkit-scrollbar-thumb{ background:#cbd5e1; border-radius:99px; }
 
-  /* ── PRINT (A4 portrait) ── */
+  /* ── PRINT (A4 · เอกสารรายการคำนวณเฉพาะ #cc-print-doc · pi 2026-06-21) ── */
   @media print{
-    @page{ size:A4 portrait; margin:14mm 12mm; }
-    .no-print{ display:none !important; }
-    body{ background:#fff; }
-    .print-only{ display:block !important; }
-    .print-block{ break-inside:avoid; }
-    .page-break{ break-before:page; }
-    main{ max-width:none !important; padding:0 !important; }
-    .card{ box-shadow:none !important; border-color:#cbd5e1 !important; }
+    @page{ size:A4 portrait; margin:12mm 11mm; }
+    body{ background:#fff !important; }
+    body > *:not(#cc-print-doc){ display:none !important; }   /* ซ่อนแอปบนจอ · โชว์เฉพาะเอกสารพิมพ์ */
+    #cc-print-doc{ display:block !important; font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; color:#1e293b; font-size:11px; line-height:1.45; }
+    #cc-print-doc .pd-head{ background:#0f2742; color:#fff; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; }
+    #cc-print-doc .pd-h1{ font-size:13px; font-weight:600; }
+    #cc-print-doc .pd-h2,#cc-print-doc .pd-hr{ font-size:9.5px; opacity:.85; }
+    #cc-print-doc .pd-hr{ text-align:right; }
+    #cc-print-doc .pd-tb{ width:100%; border-collapse:collapse; margin:8px 0; font-size:10px; }
+    #cc-print-doc .pd-tb td{ border:0.5px solid #cbd5e1; padding:4px 8px; }
+    #cc-print-doc .pd-tb td.k{ color:#64748b; width:13%; background:#f8fafc; }
+    #cc-print-doc .pd-sec{ break-inside:avoid; margin-top:9px; }
+    #cc-print-doc .pd-st{ font-size:11px; font-weight:600; color:#0f2742; border-bottom:1.2px solid #0f2742; padding-bottom:2px; margin-bottom:5px; }
+    #cc-print-doc .pd-diag{ margin:3px 0; }
+    #cc-print-doc .pd-diag svg{ width:100%; height:auto; max-height:74mm; }
+    #cc-print-doc .pd-verdict{ font-size:13px; font-weight:600; padding:6px 10px; border-radius:4px; }
+    #cc-print-doc .pd-pass{ background:#f0fdf4; color:#15803d; border:0.5px solid #bbf7d0; }
+    #cc-print-doc .pd-warn{ background:#fffbeb; color:#b45309; border:0.5px solid #fde68a; }
+    #cc-print-doc .pd-fail{ background:#fef2f2; color:#b91c1c; border:0.5px solid #fecaca; }
+    #cc-print-doc .pd-md{ font-size:9.5px; color:#92400e; margin-top:3px; }
+    #cc-print-doc .pd-sign{ display:flex; justify-content:space-between; gap:30px; margin-top:13mm; break-inside:avoid; }
+    #cc-print-doc .pd-sign .s{ flex:1; text-align:center; }
+    #cc-print-doc .pd-sign .l{ border-top:1px solid #1e293b; padding-top:3px; font-size:10px; }
+    #cc-print-doc .pd-sign .r{ font-size:9px; color:#94a3b8; margin-top:2px; }
+    #cc-print-doc .pd-foot{ margin-top:6px; font-size:8.5px; color:#94a3b8; border-top:1px dashed #e2e8f0; padding-top:4px; }
+    #cc-print-doc .wstep,#cc-print-doc .print-block{ break-inside:avoid; }
+    #cc-print-doc .page-break{ break-before:page; }
   }
+  #cc-print-doc{ display:none; }
   .print-only{ display:none; }
 
   .card{ background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
@@ -2781,6 +2801,43 @@
   }
 
   /* ╔══════════════ master render ══════════════╗ */
+  /* ── เอกสารรายการคำนวณ ก.ว. (A4 · ลำดับ: title → กราฟ → รายการคำนวณ → สรุปผล → เซ็น · pi 2026-06-21) ──
+     populate จาก node ที่ render แล้ว (clone กราฟ + show-work · ไม่ยุ่งลำดับบนจอ) · display-only */
+  function ccPopulatePrintDoc() {
+    const doc = $('#cc-print-doc'); if (!doc) return;
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const m = liveData(), r = state.res || {}, cont = state.mode === 'cont';
+    const proj = ($('#projName') && $('#projName').value) || '—';
+    const member = ($('#pt_member') && $('#pt_member').textContent) || ('คาน (' + (cont ? 'ต่อเนื่อง' : 'ช่วงเดียว') + ')');
+    const grid = (window.BeamWorkspace && BeamWorkspace.headerStr) ? BeamWorkspace.headerStr() : '';
+    const fy = fyOf(P.grade);
+    let dstr = ''; try { dstr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { dstr = ''; }
+    const planSvg = $('#ccCanvasHost svg'), diagSvg = $('#ccDiagHost svg');
+    const planHTML = planSvg ? planSvg.outerHTML : '';
+    const diagHTML = diagSvg ? diagSvg.outerHTML : '';
+    const workHTML = ($('#workSteps') && $('#workSteps').innerHTML) || '';
+    const pass = !!r.pass, mdOk = r.minDepthOk !== false, dc = (r.dc != null ? r.dc : '—');
+    let vClass = 'pd-pass', vText = '✓ ผ่าน';
+    if (!pass) { vClass = 'pd-fail'; vText = '✕ ไม่ผ่าน'; }
+    else if (!mdOk) { vClass = 'pd-warn'; vText = '⚠ ผ่านกำลัง · ตื้นเกิน (ต้องตรวจการแอ่น)'; }
+    const mdWarn = (r.minDepthWarn || []).map(w => `<div class="pd-md">${esc(w)}</div>`).join('');
+    const rebar = r.rebarMain ? ('เหล็กล่าง ' + esc(r.rebarMain) + (r.isDoubly && r.rebarComp ? (' · เหล็กอัด ' + esc(r.rebarComp)) : '')) : '';
+    doc.innerHTML =
+      '<div class="pd-head"><div><div class="pd-h1">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก</div>' +
+      '<div class="pd-h2">วิธีกำลัง (SDM) · มาตรฐาน ว.ส.ท. 1008/1009</div></div><div class="pd-hr">Civil Calc · Panuwat Lab</div></div>' +
+      '<table class="pd-tb"><tbody>' +
+      `<tr><td class="k">โครงการ</td><td>${esc(proj)}</td><td class="k">มาตรฐาน</td><td>ว.ส.ท. (SDM/USD)</td></tr>` +
+      `<tr><td class="k">องค์อาคาร</td><td>${esc(member)}</td><td class="k">b × h</td><td class="mono">${m.b}×${m.h} ซม.</td></tr>` +
+      `<tr><td class="k">ตำแหน่ง/กริด</td><td>${esc(grid || '—')}</td><td class="k">วัสดุ</td><td class="mono">f'c ${P.fc} · fy ${fy} ksc</td></tr>` +
+      `<tr><td class="k">วันที่</td><td>${esc(dstr)}</td><td class="k">D/C</td><td class="mono">${dc}%</td></tr>` +
+      '</tbody></table>' +
+      `<div class="pd-sec"><div class="pd-st">§1 รูปวิเคราะห์ — กริดไลน์ · แรงเฉือน · โมเมนต์</div><div class="pd-diag">${planHTML}</div><div class="pd-diag">${diagHTML}</div></div>` +
+      `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>${workHTML}</div>` +
+      `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div><div class="pd-verdict ${vClass}">${vText}${rebar ? (' · <span class="mono">' + rebar + '</span>') : ''}</div>${mdWarn}</div>` +
+      '<div class="pd-sign"><div class="s"><div class="l">ผู้คำนวณ</div></div><div class="s"><div class="l">วิศวกรผู้ออกแบบ (ก.ว.)</div><div class="r">เลขทะเบียน ภย. __________</div></div></div>' +
+      `<div class="pd-foot">ผลคำนวณเบื้องต้น · ต้องตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง · Civil Calc · พิมพ์ ${esc(dstr)}</div>`;
+  }
+
   function render() {
     applyMode();
     updateSelfWeightRow();  // อัป self-weight ตาม b/h ก่อน recompute อ่าน sumLoads (Codex P2 · กันผลค้าง 1 render)
@@ -2796,7 +2853,9 @@
     $('#ls_bh').textContent = P.b + '×' + P.h;
     { const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h; }
     updateNav();
+    ccPopulatePrintDoc();   // เอกสารพิมพ์ A4 (populate-on-render · gotcha 1 — ไม่พึ่ง beforeprint อย่างเดียว)
   }
+  window.addEventListener('beforeprint', ccPopulatePrintDoc);   // backup ก่อนพิมพ์ (Ctrl+P)
 
   /* ── go ── */
   document.addEventListener('DOMContentLoaded', boot);
@@ -6671,6 +6730,19 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('min-depth: คานลึกพอ (40×60) → min_depth_ok=true + banner ซ่อน',
         _mdOk.minDepthOk !== false && (!_mdSw2 || _mdSw2.classList.contains('step-hidden')),
         'minDepthOk=' + _mdOk.minDepthOk + ' hidden=' + (_mdSw2 && _mdSw2.classList.contains('step-hidden')));
+
+      // ── F · เอกสารพิมพ์ A4 calc-sheet (#cc-print-doc · pi 2026-06-21) ──
+      TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().recompute(); TT().render();
+      const _pd = document.querySelector('#cc-print-doc');
+      A('print: #cc-print-doc populate ครบ (title+กราฟ+show-work+verdict+เซ็น)',
+        !!_pd && !!_pd.querySelector('.pd-head') && _pd.querySelectorAll('.pd-diag svg').length >= 1 &&
+        _pd.querySelectorAll('.wstep').length >= 1 && !!_pd.querySelector('.pd-verdict') && !!_pd.querySelector('.pd-sign'),
+        _pd ? ('diag=' + _pd.querySelectorAll('.pd-diag svg').length + ' work=' + _pd.querySelectorAll('.wstep').length) : 'no-doc');
+      const _ph = _pd ? _pd.innerHTML : '';
+      A('print: ลำดับเอกสาร = title → กราฟ → สรุปผล → เซ็น (ตามที่ออกแบบ)',
+        _ph.indexOf('pd-tb') >= 0 && _ph.indexOf('pd-tb') < _ph.indexOf('pd-diag') &&
+        _ph.indexOf('pd-diag') < _ph.indexOf('pd-verdict') && _ph.indexOf('pd-verdict') < _ph.indexOf('pd-sign'),
+        'order-ok');
     } finally {
       if (snap && TT()) { TT().restore(snap); TT().render(); TT().selectCtab(origCtab); }   // restore state+แท็บเดิม ผ่าน DOM-updating path
     }
@@ -6693,5 +6765,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
   console.log('[design-audit] window.runDesignAudit() — ตรวจ UI drift 2 โหมด');
 })();
 </script>
+<!-- เอกสารรายการคำนวณ ก.ว. (print-only · populate โดย ccPopulatePrintDoc · pi 2026-06-21) -->
+<div id="cc-print-doc" aria-hidden="true"></div>
 </body>
 </html>
