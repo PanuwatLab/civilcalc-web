@@ -1858,7 +1858,7 @@
     tb.querySelectorAll('tr:not([data-selfweight]) .load-val').forEach(ccWireLoadCell);
   }
 
-  // จับ input ปัจจุบันทั้งหมดเป็นสแน็ปช็อต (lossless) · TODO: เพิ่ม torsion เมื่อ merge เข้า dev
+  // จับ input ปัจจุบันทั้งหมดเป็นสแน็ปช็อต (lossless) · รวมแรงบิด (torsion) ต่อคาน — กันรั่ว/หายตอนสลับคานในโปรเจกต์
   function ccCaptureInput() {
     return {
       P: { b: P.b, h: P.h, cover: P.cover, db: P.db, dstir: P.dstir, L: P.L, fc: P.fc, grade: P.grade },
@@ -1866,6 +1866,7 @@
       points: JSON.parse(JSON.stringify(ccModel.points)),
       partials: JSON.parse(JSON.stringify(ccModel.partials)),
       gridNames: JSON.parse(JSON.stringify(ccModel.gridNames || {})),
+      torsion: JSON.parse(JSON.stringify(ccModel.torsion || { on: false, compat: false, t: [], tps: [] })),
       loads: [...document.querySelectorAll('#loadRows tr')].map(tr => {
         const c = tr.querySelector('.load-val'), tds = tr.querySelectorAll('td');
         return { name: (tds[0] || {}).textContent || '', source: (tds[1] || {}).textContent || '',
@@ -1895,10 +1896,12 @@
     ccModel.points = JSON.parse(JSON.stringify(s.points || []));
     ccModel.partials = JSON.parse(JSON.stringify(s.partials || []));
     ccModel.gridNames = JSON.parse(JSON.stringify(s.gridNames || {}));
+    ccModel.torsion = s.torsion ? JSON.parse(JSON.stringify(s.torsion)) : { on: false, compat: false, t: [], tps: [] };   // restore แรงบิดต่อคาน · ไม่มี → reset (กันรั่วจากคานก่อนหน้า)
     ccRebuildLoadRows(s.loads);
     ccSyncControls();
     buildSpanLenInputs();   // rebuild ช่องความยาวช่วงตาม nspan/spanLens
-    render();               // applyMode + recompute + re-render เต็ม
+    render();               // applyMode + recompute + re-render เต็ม (recompute ใช้ ccModel.torsion ที่ตั้งแล้ว)
+    renderTorsionInputs();  // rebuild UI ช่องแรงบิดตามที่ restore (หลัง render → ccModel.spans ตรงจำนวนช่วง)
   }
 
   window.CCProject = {
@@ -8148,6 +8151,17 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           _CCP.select(_newId);                             // ไปคานใหม่
           const _b2 = _CCP.capture();
           A('โปรเจกต์: คานใหม่เก็บค่าแยกอิสระ (35×65)', _b2.P.b === 35 && _b2.P.h === 65, _b2.P.b + '×' + _b2.P.h);
+          // ── แรงบิด (torsion) ต่อคาน: capture/apply ครอบ torsion → ไม่รั่ว/ไม่หายตอนสลับคาน (P1 จาก review · B2 merge เข้า dev) ──
+          TT().setTorquePoints([{ x: 1, T: 2 }]);            // ใส่แรงบิดจุดที่คานใหม่ (_newId)
+          const _tNew = _CCP.capture();
+          A('โปรเจกต์·แรงบิด: capture เก็บ torsion ต่อคาน (tps)', !!(_tNew.torsion && _tNew.torsion.on && _tNew.torsion.tps.length === 1));
+          _CCP.select(_curId);                                // → คานเดิม (ไม่เคยมีแรงบิด)
+          const _tCur = _CCP.capture();
+          A('โปรเจกต์·แรงบิด: สลับคาน → ไม่รั่วข้ามคาน (คานเดิม on=false)', !(_tCur.torsion && _tCur.torsion.on), 'on=' + !!(_tCur.torsion && _tCur.torsion.on));
+          _CCP.select(_newId);                                // กลับคานใหม่
+          const _tBack = _CCP.capture();
+          A('โปรเจกต์·แรงบิด: กลับคาน → torsion คงอยู่ (round-trip ไม่หาย)', !!(_tBack.torsion && _tBack.torsion.on && _tBack.torsion.tps.length === 1));
+          TT().setTorsion(false); { const _ab = _CCP.active(); if (_ab) _ab.input = _CCP.capture(); }   // cleanup: เคลียร์แรงบิดออกจากคานทดสอบ (กันปนเปื้อน guard ถัดไป)
           A('โปรเจกต์: สถานะต่อคานคำนวณ (ผ่าน/ไม่ผ่าน/ค้าง)', _CCP.data.beams.every(b => b.summary && b.summary.status), _CCP.data.beams.map(b => b.summary && b.summary.status).join(','));
           // ── ระบบชั้น (floors) · เพิ่มชั้น · ย้ายคาน · พับ · migration ──
           const _f0 = _CCP._floorList().length;
