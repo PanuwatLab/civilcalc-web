@@ -183,6 +183,8 @@ class BeamInput:
     cover: float = 3.0                # concrete cover (cm · default 3.0 for indoor)
     d_stirrup: float = 0.9            # stirrup diameter (cm · RB9 typical)
     db_assume: float = 1.6            # assumed main bar diameter for d-calc (cm · DB16 typical)
+    main_bar_force: str = ""          # บังคับขนาดเหล็กเมน (user เลือกหลังคำนวณ · "" = auto เลือก optimal · "DB16"/"DB20"/... = เฉพาะขนาดนี้)
+    stirrup_force: str = ""           # บังคับขนาดเหล็กปลอก (user เลือก · "" = auto RB9/DB10 · "RB6"/"RB9"/"DB10")
     load_combo: LoadCombo = LoadCombo.ACI_MODERN
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
     stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
@@ -943,6 +945,7 @@ def design_shear(
     vu_design_override_kN: float | None = None,
     n_legs: int = 2,
     partials: list | None = None,
+    force_stirrup_bar: str = None,
 ) -> dict:
     """End-to-end shear design · returns a structured dict.
 
@@ -971,6 +974,10 @@ def design_shear(
     if n_legs not in (2, 4):
         raise InvalidInputError(f"n_legs = {n_legs} · รองรับเฉพาะ 2 (1ป) หรือ 4 (2ป)")
     n_stirrups = n_legs // 2
+
+    forced_tight = False   # บังคับปลอก + ระยะที่ต้องการ <5 ซม. (impractical · review P2-1) → flag ให้ UI เตือน
+    if force_stirrup_bar and force_stirrup_bar not in _STIRRUP_2LEG_AV_CM2:
+        force_stirrup_bar = None   # ชื่อปลอกไม่รู้จัก → auto (defensive · กัน KeyError ใน _av_legs · review P2-2)
 
     # 1. Critical shear · normally at distance d from support (Gemini Q4b).
     #    Cantilever passes vu_design_override = Vu at FACE (no d-reduction · Gemini Q3:
@@ -1010,7 +1017,7 @@ def design_shear(
     if Vu_at_d_kN <= half_phi_Vc + FLOAT_TOL:
         # No stirrup theoretically required · recommend minimum for detailing
         branch = "NO_STIRRUP"
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         s_final_S1 = 30.0   # constructability default
         s_final_S2 = 30.0
@@ -1026,7 +1033,7 @@ def design_shear(
     elif Vu_at_d_kN <= phi_Vc_kN + FLOAT_TOL:
         # Minimum stirrup required · Vs ≈ 0 · use A_v,min spacing limit
         branch = "MIN_STIRRUP"
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         s_min_av = _s_max_av_min(fc_ksc, b_cm, fyt_ksc, A_v)
         s_max_code = min(d_cm / 2.0, 60.0)
@@ -1068,7 +1075,7 @@ def design_shear(
             s_max_code = min(d_cm / 2.0, 60.0)
 
         # Try RB9 first (Thai default), fallback DB10 if spacing < 5 cm
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         # s_S1 from Vs equation (close zone · governed by Vu_at_d)
         # s = A_v · fyt · d / Vs_req   (Vs in kg · units balance: cm² · ksc · cm / kg = cm)
@@ -1082,8 +1089,11 @@ def design_shear(
         # Floor to practical (round DOWN · conservative)
         s_S1_final = _floor_to_practical_spacing(s_S1_capped)
         s_S2_final = _floor_to_practical_spacing(s_S2_capped)
-        # Fallback DB10 if spacing tighter than 5 cm
-        if s_S1_final < 5.0 - FLOAT_TOL:
+        # Fallback DB10 if spacing tighter than 5 cm (เฉพาะ auto · ถ้า user บังคับขนาด → เคารพ + เตือนถ้าแน่น)
+        if force_stirrup_bar and s_S1_capped < 5.0 - FLOAT_TOL:   # review P2-1: เทียบก่อน floor (s_S1_final clamp ≥5 → เดิม dead code)
+            forced_tight = True
+            notes.append(f"⚠ ปลอก {bar} ระยะที่ต้องการ {s_S1_capped:.1f} ซม. แน่นเกินไป (<5 ซม. · ใช้ขั้นต่ำ 5 ซม.) — ควรเลือกขนาดใหญ่กว่า")
+        if (not force_stirrup_bar) and s_S1_final < 5.0 - FLOAT_TOL:
             bar = "DB10"
             A_v = _av_legs(bar, n_legs)
             s_req_S1_cm = A_v * fyt_ksc * d_cm / Vs_req_kg if Vs_req_kg > 0 else s_max_code
@@ -1177,6 +1187,7 @@ def design_shear(
         "phi_Vn_ton": phi_Vn_kN * KN_TO_TON,
         "shop_drawing_notation": shop,
         "passes": passes,
+        "forced_tight": forced_tight,   # บังคับปลอก + ระยะที่ต้องการ <5 ซม. → UI เตือน (review P2)
         "notes": notes,
         "citations": citations,
         # Black Box mitigation (Gemini Top Risk #1) — show intermediate steps
@@ -1470,6 +1481,7 @@ def select_rebar(
     d_stirrup: float,
     h_cm: float = None,
     rho_max: float = None,
+    force_size: str = None,
 ) -> Optional[RebarSelection]:
     """Pick a practical rebar combination satisfying As_provided ≥ As_required.
 
@@ -1519,6 +1531,8 @@ def select_rebar(
 
     # 1) single-size combos
     for size in sizes:
+        if force_size and size["name"] != force_size:   # บังคับขนาดเหล็ก (user เลือก) → เฉพาะขนาดนี้
+            continue
         db = size["diameter_cm"]
         area_per_bar = size["area_cm2"]
         mc = min_clear_spacing(db)
@@ -1540,8 +1554,10 @@ def select_rebar(
                 n_layers=n_layers, notes=note))
             break  # smallest n for this size
 
-    # 2) 2-size mixes
+    # 2) 2-size mixes (ข้ามถ้าบังคับขนาดเดียว · force_size → ใช้ขนาดเดียวล้วน)
     for big in sizes:
+        if force_size:
+            break
         for small in sizes:
             if small["diameter_cm"] >= big["diameter_cm"]:
                 continue
@@ -1935,7 +1951,8 @@ def design_beam(inp: BeamInput) -> BeamOutput:
 
         # Step 9 · rebar selection
         out.rebar = select_rebar(
-            out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max
+            out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max,
+            force_size=(inp.main_bar_force or None)
         )
         if out.rebar is None:
             out.notes.append("ไม่พบ rebar combo ที่ fit ในหน้าตัดนี้ · ต้องขยาย b หรือ ใช้ multi-layer (เกิน MVP)")
@@ -1956,7 +1973,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
             except CivilCalcError:
                 break   # ที่ d จริงหน้าตัดไม่พอ → หยุด · ρ_provided check ด้านล่างจะจับ over-reinforced (Codex P1 #26)
             As2 = compute_As(rf2, inp.b, out.d_actual)
-            rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max)
+            rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max, force_size=(inp.main_bar_force or None))
             if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
                 break   # ไม่มี combo ดีกว่า → หยุด (รับผลปัจจุบัน)
             out.rebar, out.As_required, out.rho_final, out.Rn, out.rho_design = rb2, As2, rf2, Rn2, rho2
@@ -1995,7 +2012,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                                            inp.fc, inp.fy, out.beta1, out.rho_max)
             if dr is None:
                 break
-            rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h)         # multilayer · ข้าม ρmax filter (ตั้งใจ)
+            rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h, force_size=(inp.main_bar_force or None))         # multilayer · ข้าม ρmax filter (ตั้งใจ) · เคารพขนาดที่ user บังคับ
             rbc = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h)   # เหล็กอัด · ไม่จำกัด ρ ดึง
             if rb is None or rbc is None:                                               # fit ไม่ได้ → fail (Codex P1 r3)
                 dr = None
@@ -2065,6 +2082,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 phi=PHI_SHEAR,
                 n_legs=inp.stirrup_legs,
                 partials=factored_partials,
+                force_stirrup_bar=(inp.stirrup_force or None),
             )
             out.passes_shear = bool(out.stirrup_design.get("passes", False))
             # Merge shear citations into main list
