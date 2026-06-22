@@ -234,6 +234,21 @@
   .cc-crumb-floor{ font-family:inherit; font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:7px; padding:2px 6px; cursor:pointer; height:26px; }
   .cc-crumb-floor:hover{ border-color:var(--steel); }
   @media (prefers-reduced-motion:reduce){ .cc-grp-tog svg,.cc-grp-body{ transition:none !important; } }
+  /* คานเบอร์เดียวใช้หลายชั้น (typical) */
+  .cc-multi{ display:inline-flex; align-items:center; gap:1px; font-size:10px; font-weight:600; color:var(--teal); background:rgba(15,118,110,.1); border-radius:20px; padding:1px 6px 1px 4px; flex:none; }
+  .cc-multi svg{ width:12px; height:12px; }
+  .cc-beam.cc-shared{ opacity:.82; }
+  .cc-beam.cc-shared .cc-beam-lbl{ font-weight:400; }
+  .cc-beam.cc-shared .cc-beam-dim{ color:var(--teal); font-family:inherit; font-size:11px; }
+  .cc-link{ display:grid; place-items:center; color:var(--teal); flex:none; width:13px; }
+  .cc-link svg{ width:13px; height:13px; }
+  .cc-usefloors{ display:inline-flex; align-items:center; gap:5px; flex-wrap:wrap; margin-left:10px; padding-left:10px; border-left:1px solid var(--border); }
+  .cc-uf-lbl{ font-size:11px; color:var(--ink-muted); }
+  .cc-uf{ font-family:inherit; font-size:11.5px; color:var(--ink-muted); background:#fff; border:1px solid var(--border); border-radius:20px; padding:2px 10px; cursor:pointer; transition:.15s ease; }
+  .cc-uf:hover{ border-color:var(--steel); color:var(--ink); }
+  .cc-uf.on{ background:var(--accent-soft); color:var(--steel); border-color:rgba(47,102,144,.4); font-weight:500; }
+  .cc-uf.home{ background:var(--accent-grad); color:#fff; border:none; cursor:default; font-weight:600; }
+  .cc-uf.home:hover{ color:#fff; }
   .cc-beam{ display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:9px; cursor:pointer; position:relative;
     border:1px solid transparent; transition:background .18s ease, border-color .18s ease, transform .18s cubic-bezier(.16,1,.3,1);
     opacity:0; transform:translateX(-8px); animation:ccSlide .42s cubic-bezier(.16,1,.3,1) forwards; }
@@ -1899,7 +1914,10 @@
       const main = document.querySelector('main');
       if (main) {
         const c = document.createElement('div'); c.id = 'ccCrumb'; c.className = 'no-print'; main.insertBefore(c, main.firstChild);
-        c.addEventListener('click', e => { const a = e.target.closest('[data-ccact]'); if (a && this[a.dataset.ccact]) this[a.dataset.ccact](); });
+        c.addEventListener('click', e => {
+          const u = e.target.closest('[data-ccuse]'); if (u) { const [bid, fl] = u.dataset.ccuse.split('|'); this.toggleBeamFloor(bid, fl); return; }
+          const a = e.target.closest('[data-ccact]'); if (a && this[a.dataset.ccact]) this[a.dataset.ccact]();
+        });
         c.addEventListener('change', e => { const s = e.target.closest('[data-cc-floor]'); if (s) this.moveBeamToFloor(this.activeId, s.value); });
       }
       rail.addEventListener('click', e => this._onRailClick(e));
@@ -1913,6 +1931,7 @@
       const fdn = e.target.closest('[data-fl-dn]'); if (fdn) { this.moveFloor(fdn.dataset.flDn, 1); return; }
       const fdl = e.target.closest('[data-fl-del]'); if (fdl) { this.deleteFloor(fdl.dataset.flDel); return; }
       const fnm = e.target.closest('[data-fl-edit]'); if (fnm) { this.editFloor(fnm.dataset.flEdit); return; }
+      const un = e.target.closest('[data-ccunuse]'); if (un) { e.stopPropagation(); const [bid, fl] = un.dataset.ccunuse.split('|'); this.unuseFloor(bid, fl); return; }
       const x = e.target.closest('[data-ccx]'); if (x) { e.stopPropagation(); this.remove(x.dataset.ccx); return; }
       const beam = e.target.closest('[data-ccid]'); if (beam) { this.select(beam.dataset.ccid); return; }
       const act = e.target.closest('[data-ccact]'); if (act) { this[act.dataset.ccact](); }
@@ -1967,7 +1986,33 @@
       const b = { id: this._id(), label: this.nextLabel(), group: floorName, input: JSON.parse(JSON.stringify(src)), summary: cur ? Object.assign({}, cur.summary) : this.summaryNow() };
       this.data.beams.push(b); this.activeId = b.id; this.renderRail(); this.updateCrumb();
     },
-    moveBeamToFloor(beamId, floorName) { const b = this.data.beams.find(x => x.id === beamId); if (!b || b.group === floorName) return; b.group = floorName; this.renderRail(); this.updateCrumb(); },
+    // ── คานเบอร์เดียวใช้ได้หลายชั้น (typical · pi 2026-06-22) ──
+    //   b.group = ชั้นออกแบบ/หลัก (home · วิกฤต) · b.floors = ชั้นที่ใช้ทั้งหมด (รวม home · lazy default [group])
+    _homeFloor(b) { return b.group || 'ชั้น 1'; },
+    _beamFloors(b) {
+      const home = this._homeFloor(b);
+      let fs = Array.isArray(b.floors) && b.floors.length ? b.floors.slice() : [home];
+      if (!fs.includes(home)) fs = [home, ...fs];
+      return fs;
+    },
+    toggleBeamFloor(beamId, floor) {
+      const b = this.data.beams.find(x => x.id === beamId); if (!b) return;
+      const home = this._homeFloor(b); if (floor === home) return;   // ชั้นออกแบบ ปลดไม่ได้
+      let fs = this._beamFloors(b);
+      fs = fs.includes(floor) ? fs.filter(f => f !== floor) : [...fs, floor];
+      b.floors = fs; this.renderRail(); this.updateCrumb();
+    },
+    unuseFloor(beamId, floor) {   // ปลด "ใช้ร่วม" ชั้นหนึ่ง (จากแถว shared ✕)
+      const b = this.data.beams.find(x => x.id === beamId); if (!b || floor === this._homeFloor(b)) return;
+      b.floors = this._beamFloors(b).filter(f => f !== floor); this.renderRail(); this.updateCrumb();
+    },
+    moveBeamToFloor(beamId, floorName) {   // drag = ย้ายชั้นออกแบบ (home) · คงชั้นใช้ร่วมอื่นไว้
+      const b = this.data.beams.find(x => x.id === beamId); if (!b) return;
+      const old = this._homeFloor(b); if (old === floorName) return;
+      const others = this._beamFloors(b).filter(f => f !== old);
+      b.group = floorName; b.floors = [floorName, ...others.filter(f => f !== floorName)];
+      this.renderRail(); this.updateCrumb();
+    },
     toggleFloor(name) {
       this.data.collapsed = this.data.collapsed || {}; this.data.collapsed[name] = !this.data.collapsed[name];
       const el = [...document.querySelectorAll('#ccRail .cc-grp')].find(g => g.dataset.floor === name);
@@ -1982,7 +2027,10 @@
         if (!nw || nw === name) { this.renderRail(); return; }
         const fs = this._floorList(); if (fs.includes(nw)) { alert('มีชั้นชื่อนี้แล้ว'); this.renderRail(); return; }
         const i = fs.indexOf(name); if (i >= 0) fs[i] = nw;
-        this.data.beams.forEach(b => { if ((b.group || 'ชั้น 1') === name) b.group = nw; });
+        this.data.beams.forEach(b => {
+          if ((b.group || 'ชั้น 1') === name) b.group = nw;
+          if (Array.isArray(b.floors)) b.floors = b.floors.map(f => f === name ? nw : f);   // rename ในชั้นที่ใช้ร่วมด้วย
+        });
         if (this.data.collapsed) { this.data.collapsed[nw] = this.data.collapsed[name]; delete this.data.collapsed[name]; }
         this.renderRail(); this.updateCrumb(); this.persist();
       };
@@ -1990,10 +2038,13 @@
     },
     deleteFloor(name) {
       const fs = this._floorList(); if (fs.length <= 1) { alert('ต้องมีอย่างน้อย 1 ชั้น'); return; }
-      const inFloor = this.data.beams.filter(b => (b.group || 'ชั้น 1') === name);
+      const homeHere = this.data.beams.filter(b => (b.group || 'ชั้น 1') === name);
       const other = fs.find(f => f !== name);
-      if (inFloor.length && !confirm('ลบชั้น "' + name + '"? คาน ' + inFloor.length + ' ตัวจะย้ายไป "' + other + '"')) return;
-      inFloor.forEach(b => b.group = other);
+      if (homeHere.length && !confirm('ลบชั้น "' + name + '"? คาน ' + homeHere.length + ' ตัว (ชั้นออกแบบ) จะย้ายไป "' + other + '"')) return;
+      this.data.beams.forEach(b => {
+        if ((b.group || 'ชั้น 1') === name) b.group = other;                                 // ชั้นออกแบบ → ย้าย
+        if (Array.isArray(b.floors)) b.floors = b.floors.filter(f => f !== name);            // ปลดชั้นที่ใช้ร่วม
+      });
       this.data.floors = fs.filter(f => f !== name);
       if (this.data.collapsed) delete this.data.collapsed[name];
       this.renderRail(); this.updateCrumb(); this.persist();
@@ -2015,13 +2066,15 @@
       const parts = [];
       beams.forEach(b => {
         ccApplyInput(b.input);                          // → render() คำนวณ + วาด + populate
-        const mem = document.querySelector('#pt_member'); if (mem) mem.textContent = 'คาน ' + b.label + (b.group ? ' · ' + b.group : '');
+        const fl = this._beamFloors(b), home = this._homeFloor(b);
+        const flTxt = fl.length > 1 ? ('ออกแบบชั้น ' + home + ' · ใช้ชั้น ' + fl.join(', ')) : home;   // typical: เบอร์เดียวใช้หลายชั้น
+        const mem = document.querySelector('#pt_member'); if (mem) mem.textContent = 'คาน ' + b.label + ' · ' + flTxt;
         ccPopulatePrintDoc();                           // repopulate ให้หัวเอกสารมีชื่อคานถูก
         const r = state.res;
         // A1-P2: ไม่ ready → "ยังไม่คำนวณ" · engine reject (_err) หรือ passes:false → "ไม่ผ่าน" (ห้ามซ่อน fail ในเอกสาร ก.ว.)
         const st = !r ? 'ยังไม่คำนวณ' : (r._err ? 'ไม่ผ่าน' : (r.pass ? 'ผ่าน' : 'ไม่ผ่าน'));
         parts.push({ b, html: document.querySelector('#cc-print-doc').innerHTML, bh: P.b + '×' + P.h,
-          status: st, dc: (r && r.dc != null) ? r.dc : null });
+          floorTxt: flTxt, status: st, dc: (r && r.dc != null) ? r.dc : null });
       });
       const html = this._buildCombinedDoc(parts);
       // คืนสภาพ: step + projName + คานที่ active เดิม
@@ -2040,7 +2093,7 @@
         `<div class="s">${parts.length} คาน · ${pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ยังไม่คำนวณ' : ''}</div>` +
         `<div class="s">${esc(dstr)}</div><div class="s" style="margin-top:10px;color:#94a3b8">Civil Calc · Panuwat Lab</div></div>`;
       const toc = `<div class="pd-toc"><div class="pd-st">สารบัญคาน (${parts.length})</div><table><tbody>` +
-        parts.map((p, i) => `<tr><td style="width:7%">${i + 1}</td><td><b>คาน ${esc(p.b.label)}</b></td><td>${esc(p.b.group || '')}</td><td class="mono">${esc(p.bh)}</td><td>${esc(p.status)}${p.dc != null ? (' · D/C ' + p.dc + '%') : ''}</td></tr>`).join('') +
+        parts.map((p, i) => `<tr><td style="width:7%">${i + 1}</td><td><b>คาน ${esc(p.b.label)}</b></td><td>${esc(p.floorTxt || p.b.group || '')}</td><td class="mono">${esc(p.bh)}</td><td>${esc(p.status)}${p.dc != null ? (' · D/C ' + p.dc + '%') : ''}</td></tr>`).join('') +
         `</tbody></table></div>`;
       const sheets = parts.map(p => `<div class="page-break cc-sheet">${p.html}</div>`).join('');
       return cover + toc + sheets;
@@ -2074,20 +2127,30 @@
       const idle = this.data.beams.filter(b => !b.summary || b.summary.status === 'idle').length;
       // render ตามชั้น (floors · ลำดับกำหนดได้ · collapsible · drag-drop ย้ายคาน)
       const floors = this._floorList();
-      const beamRow = (b, i) => {
+      const linkSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 15l6-6M10.5 6.5l1-1a3.5 3.5 0 0 1 5 5l-1 1M13.5 17.5l-1 1a3.5 3.5 0 0 1-5-5l1-1"/></svg>';
+      const beamRow = (b, i, fname) => {
+        const home = this._homeFloor(b), fls = this._beamFloors(b), isHome = home === fname, multi = fls.length > 1;
         const sel = b.id === this.activeId ? ' sel' : '';
         const live = (b.id === this.activeId && b.summary && b.summary.status === 'ok') ? ' live' : '';
         const dim = (b.summary && b.summary.computed) ? b.summary.dims : 'ค้าง';
         const dotcls = (b.summary && b.summary.status === 'ok') ? ('ok' + live) : (b.summary && b.summary.status === 'bad' ? 'bad' : 'idle');
+        if (!isHome) {   // แถว "ใช้ร่วม" (typical · ลิงก์ calc เดียวกับชั้นออกแบบ) · ✕ = ปลดชั้นนี้
+          return `<div class="cc-beam cc-shared${sel}" data-ccid="${b.id}" role="button" tabindex="0" aria-label="คาน ${ccEsc(b.label)} (ใช้ร่วมจากชั้น ${ccEsc(home)})" style="animation-delay:${i * 0.04}s">` +
+            `<span class="cc-link" aria-hidden="true" title="ใช้ร่วม">${linkSvg}</span>` +
+            `<span class="cc-dot ${dotcls}"></span><span class="cc-beam-lbl">${ccEsc(b.label)}</span>` +
+            `<span class="cc-beam-dim">ใช้ร่วม · ออกแบบ ${ccEsc(home)}</span>` +
+            `<button class="cc-beam-x" data-ccunuse="${b.id}|${ccEsc(fname)}" aria-label="ปลดคาน ${ccEsc(b.label)} จากชั้น ${ccEsc(fname)}">✕</button></div>`;
+        }
         return `<div class="cc-beam${sel}" data-ccid="${b.id}" draggable="true" role="button" tabindex="0" aria-label="คาน ${ccEsc(b.label)}" style="animation-delay:${i * 0.04}s">` +
           `<span class="cc-grip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.4"/><circle cx="15" cy="5" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="19" r="1.4"/><circle cx="15" cy="19" r="1.4"/></svg></span>` +
           `<span class="cc-dot ${dotcls}"></span><span class="cc-beam-lbl">${ccEsc(b.label)}</span>` +
+          (multi ? `<span class="cc-multi" title="คานเบอร์นี้ใช้ ${fls.length} ชั้น (typical)">${linkSvg}${fls.length}</span>` : '') +
           `<span class="cc-beam-dim">${ccEsc(dim)}</span>` +
           `<button class="cc-beam-x" data-ccx="${b.id}" aria-label="ลบคาน ${ccEsc(b.label)}">✕</button></div>`;
       };
       const chev = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg>';
       const tree = floors.map(fname => {
-        const fb = this.data.beams.filter(b => (b.group || 'ชั้น 1') === fname);
+        const fb = this.data.beams.filter(b => this._beamFloors(b).includes(fname));   // คานที่ "ใช้" ชั้นนี้ (home + ใช้ร่วม)
         const col = (this.data.collapsed && this.data.collapsed[fname]) ? ' col' : '';
         const pass = fb.filter(b => b.summary && b.summary.status === 'ok').length;
         const bad = fb.filter(b => b.summary && b.summary.status === 'bad').length;
@@ -2102,7 +2165,7 @@
               `<button class="cc-ga" data-fl-dn="${ccEsc(fname)}" aria-label="เลื่อนชั้นลง"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>` +
               `<button class="cc-ga cc-ga-del" data-fl-del="${ccEsc(fname)}" aria-label="ลบชั้น"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` +
             `</span></div>` +
-          `<div class="cc-grp-body" data-drop="${ccEsc(fname)}">${fb.length ? fb.map(beamRow).join('') : '<div class="cc-empty">— ลากคานมาที่นี่ หรือกด + —</div>'}</div></div>`;
+          `<div class="cc-grp-body" data-drop="${ccEsc(fname)}">${fb.length ? fb.map((b, i) => beamRow(b, i, fname)).join('') : '<div class="cc-empty">— ลากคานมาที่นี่ หรือกด + —</div>'}</div></div>`;
       }).join('');
       rail.innerHTML =
         `<div class="cc-head"><div class="cc-logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg></div>` +
@@ -2141,11 +2204,18 @@
       const cp = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
       const tr = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>';
       const floors = this._floorList();
-      const floorSel = `<select class="cc-crumb-floor" data-cc-floor aria-label="ย้ายชั้นของคาน">${floors.map(f => `<option value="${ccEsc(f)}"${f === (b.group || 'ชั้น 1') ? ' selected' : ''}>${ccEsc(f)}</option>`).join('')}</select>`;
+      const home = this._homeFloor(b), used = this._beamFloors(b);
+      const floorSel = `<select class="cc-crumb-floor" data-cc-floor aria-label="ชั้นออกแบบ (home)" title="ชั้นที่ใช้ออกแบบ (วิกฤต)">${floors.map(f => `<option value="${ccEsc(f)}"${f === home ? ' selected' : ''}>${ccEsc(f)}</option>`).join('')}</select>`;
+      // "ใช้ที่ชั้น" — คานเบอร์เดียวใช้ได้หลายชั้น (typical) · ชั้นออกแบบล็อก · อื่นติ๊กได้
+      const useChips = `<span class="cc-usefloors"><span class="cc-uf-lbl">ใช้ที่ชั้น:</span>` +
+        floors.map(f => { const on = used.includes(f), isHome = f === home;
+          return `<button type="button" class="cc-uf${on ? ' on' : ''}${isHome ? ' home' : ''}" data-ccuse="${b.id}|${ccEsc(f)}"${isHome ? ' aria-disabled="true" title="ชั้นออกแบบ (วิกฤต) — ปลดไม่ได้"' : ' title="คลิกเพื่อใช้/ไม่ใช้คานนี้ที่ชั้นนี้"'}>${ccEsc(f)}${isHome ? ' ◆' : ''}</button>`;
+        }).join('') + `</span>`;
       c.innerHTML = `${ccEsc(this.data.name)}${arrow}${floorSel}${arrow}<b>${ccEsc(b.label)}</b>` +
         `<span class="cc-cacts"><button class="cc-cact" data-ccact="renameActive" aria-label="เปลี่ยนชื่อคาน">${ren}</button>` +
         `<button class="cc-cact" data-ccact="dupActive" aria-label="ทำสำเนาคาน">${cp}</button>` +
-        `<button class="cc-cact" data-ccact="delActive" aria-label="ลบคาน">${tr}</button></span>`;
+        `<button class="cc-cact" data-ccact="delActive" aria-label="ลบคาน">${tr}</button></span>` +
+        useChips;
     },
     // เรียกจาก render() ทุกครั้ง — อัปสถานะคานที่เปิดอยู่ (in-place · ไม่ rebuild rail · กัน animation ซ้ำ)
     onRender() {
@@ -7875,6 +7945,16 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
             const o = _CCP._migrateV1toV2({ v: 1, project: { beams: [{ group: 'ชั้น A' }, { group: 'ชั้น B' }] } });
             return o.v === 2 && Array.isArray(o.project.floors) && o.project.floors.includes('ชั้น A') && o.project.floors.includes('ชั้น B');
           })());
+          // ── คานเบอร์เดียวใช้หลายชั้น (typical) · ใช้ที่ชั้น · โผล่ทุกชั้นที่ใช้ · ปลด · home ล็อก ──
+          const _bnew = _CCP.data.beams.find(b => b.id === _newId), _hf = _CCP._homeFloor(_bnew), _of = _CCP._floorList().find(f => f !== _hf);
+          _CCP.toggleBeamFloor(_newId, _of);
+          A('typical: ใช้ที่ชั้น → คานใช้ 2 ชั้น (home + ใช้ร่วม)', _CCP._beamFloors(_bnew).length === 2 && _CCP._beamFloors(_bnew).includes(_of));
+          A('typical: คานโผล่ทุกชั้นที่ใช้ใน rail (≥2 แถว · id เดียว)',
+            document.querySelectorAll('#ccRail .cc-beam[data-ccid="' + _newId + '"]').length >= 2);
+          _CCP.toggleBeamFloor(_newId, _hf);   // พยายามปลดชั้นออกแบบ → ต้องไม่ได้
+          A('typical: ชั้นออกแบบ (home) ปลดไม่ได้', _CCP._beamFloors(_bnew).includes(_hf), 'floors=' + _CCP._beamFloors(_bnew).join(','));
+          _CCP.unuseFloor(_newId, _of);
+          A('typical: ปลดชั้นใช้ร่วม → กลับ 1 ชั้น', _CCP._beamFloors(_bnew).length === 1 && !_CCP._beamFloors(_bnew).includes(_of));
           // เฟส B · persist → load round-trip (localStorage · schema v2 · มี floors) + validate-or-discard
           _CCP._noPersist = false; _CCP.persist(true); const _ld = _CCP.load(); _CCP._noPersist = true;
           A('โปรเจกต์: persist→load round-trip (localStorage · schema v2 · floors)',
