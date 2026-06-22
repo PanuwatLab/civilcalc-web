@@ -183,6 +183,7 @@ class BeamInput:
     cover: float = 3.0                # concrete cover (cm · default 3.0 for indoor)
     d_stirrup: float = 0.9            # stirrup diameter (cm · RB9 typical)
     db_assume: float = 1.6            # assumed main bar diameter for d-calc (cm · DB16 typical)
+    main_bar_force: str = ""          # บังคับขนาดเหล็กเมน (user เลือกหลังคำนวณ · "" = auto เลือก optimal · "DB16"/"DB20"/... = เฉพาะขนาดนี้)
     load_combo: LoadCombo = LoadCombo.ACI_MODERN
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
     stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
@@ -1470,6 +1471,7 @@ def select_rebar(
     d_stirrup: float,
     h_cm: float = None,
     rho_max: float = None,
+    force_size: str = None,
 ) -> Optional[RebarSelection]:
     """Pick a practical rebar combination satisfying As_provided ≥ As_required.
 
@@ -1519,6 +1521,8 @@ def select_rebar(
 
     # 1) single-size combos
     for size in sizes:
+        if force_size and size["name"] != force_size:   # บังคับขนาดเหล็ก (user เลือก) → เฉพาะขนาดนี้
+            continue
         db = size["diameter_cm"]
         area_per_bar = size["area_cm2"]
         mc = min_clear_spacing(db)
@@ -1540,8 +1544,10 @@ def select_rebar(
                 n_layers=n_layers, notes=note))
             break  # smallest n for this size
 
-    # 2) 2-size mixes
+    # 2) 2-size mixes (ข้ามถ้าบังคับขนาดเดียว · force_size → ใช้ขนาดเดียวล้วน)
     for big in sizes:
+        if force_size:
+            break
         for small in sizes:
             if small["diameter_cm"] >= big["diameter_cm"]:
                 continue
@@ -1935,7 +1941,8 @@ def design_beam(inp: BeamInput) -> BeamOutput:
 
         # Step 9 · rebar selection
         out.rebar = select_rebar(
-            out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max
+            out.As_required, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max,
+            force_size=(inp.main_bar_force or None)
         )
         if out.rebar is None:
             out.notes.append("ไม่พบ rebar combo ที่ fit ในหน้าตัดนี้ · ต้องขยาย b หรือ ใช้ multi-layer (เกิน MVP)")
@@ -1956,7 +1963,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
             except CivilCalcError:
                 break   # ที่ d จริงหน้าตัดไม่พอ → หยุด · ρ_provided check ด้านล่างจะจับ over-reinforced (Codex P1 #26)
             As2 = compute_As(rf2, inp.b, out.d_actual)
-            rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max)
+            rb2 = select_rebar(As2, inp.b, inp.cover, inp.d_stirrup, inp.h, out.rho_max, force_size=(inp.main_bar_force or None))
             if rb2 is None or rb2.As_provided <= out.rebar.As_provided + 1e-9:
                 break   # ไม่มี combo ดีกว่า → หยุด (รับผลปัจจุบัน)
             out.rebar, out.As_required, out.rho_final, out.Rn, out.rho_design = rb2, As2, rf2, Rn2, rho2
@@ -1995,7 +2002,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                                            inp.fc, inp.fy, out.beta1, out.rho_max)
             if dr is None:
                 break
-            rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h)         # multilayer · ข้าม ρmax filter (ตั้งใจ)
+            rb = select_rebar(dr["As"], inp.b, inp.cover, inp.d_stirrup, inp.h, force_size=(inp.main_bar_force or None))         # multilayer · ข้าม ρmax filter (ตั้งใจ) · เคารพขนาดที่ user บังคับ
             rbc = select_rebar(dr["As_prime"], inp.b, inp.cover, inp.d_stirrup, inp.h)   # เหล็กอัด · ไม่จำกัด ρ ดึง
             if rb is None or rbc is None:                                               # fit ไม่ได้ → fail (Codex P1 r3)
                 dr = None
