@@ -145,6 +145,14 @@
     #cc-print-doc .pd-foot{ margin-top:6px; font-size:8.5px; color:#94a3b8; border-top:1px dashed #e2e8f0; padding-top:4px; }
     #cc-print-doc .wstep,#cc-print-doc .print-block{ break-inside:avoid; }
     #cc-print-doc .page-break{ break-before:page; }
+    /* เฟส C · เล่มรวมทั้งโครงการ: ปก + สารบัญ */
+    #cc-print-doc .pd-cover{ text-align:center; padding:34mm 0 14mm; border-bottom:1px solid #e2e8f0; }
+    #cc-print-doc .pd-cover .t{ font-size:24px; font-weight:700; color:#0f2742; }
+    #cc-print-doc .pd-cover .s{ font-size:11.5px; color:#475569; margin-top:6px; }
+    #cc-print-doc .pd-toc{ margin:12mm 4mm 0; }
+    #cc-print-doc .pd-toc table{ width:100%; border-collapse:collapse; font-size:11px; margin-top:6px; }
+    #cc-print-doc .pd-toc td{ border-bottom:0.5px solid #e2e8f0; padding:6px 8px; }
+    #cc-print-doc .cc-sheet{ break-before:page; }
   }
   #cc-print-doc{ display:none; }
   .print-only{ display:none; }
@@ -1656,7 +1664,7 @@
   window.CCProject = {
     data: { name: 'โครงการใหม่', beams: [] },
     activeId: null, _seq: 0, _mobile: false,
-    _STORE_KEY: 'civilcalc.project.v1', _SCHEMA: 1, _saveTimer: null, _savedState: 'idle', _noPersist: false,
+    _STORE_KEY: 'civilcalc.project.v1', _SCHEMA: 1, _saveTimer: null, _savedState: 'idle', _noPersist: false, _printingAll: false,
     _id() { return 'b' + (++this._seq); },
     active() { return this.data.beams.find(b => b.id === this.activeId) || null; },
     capture() { return ccCaptureInput(); },   // expose สำหรับ audit (คนละ script scope กับ ccCaptureInput)
@@ -1789,7 +1797,54 @@
       const fin = () => { el.contentEditable = 'false'; this.data.name = (el.textContent || '').trim() || 'โครงการใหม่'; el.textContent = this.data.name; this.updateCrumb(); };
       el.onblur = fin; el.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); } };
     },
-    printAll() { alert('พิมพ์รวมทั้งโครงการ — เฟส C (ถัดไป)\nตอนนี้พิมพ์ได้ทีละคานผ่านปุ่ม "พิมพ์ PDF" ในผลคำนวณ'); },
+    // เฟส C · ประกอบเอกสารพิมพ์รวมทั้งโครงการ (ปก + สารบัญ + ทุกคาน) — แยกจาก print เพื่อเทสต์ได้
+    buildAllHTML() {
+      const beams = this.data.beams; if (!beams.length) return '';
+      const savedActive = this.activeId, savedStep = state.step, wasNP = this._noPersist;
+      this._noPersist = true;
+      const cur = this.active(); if (cur) cur.input = ccCaptureInput();   // เก็บ edits คานปัจจุบันก่อน loop
+      const pn = document.querySelector('#projName'); const oldProj = pn ? pn.value : null;
+      if (pn) pn.value = this.data.name;
+      state.step = 3;   // ให้ render วาดหน้าตัด/สรุปครบทุกคาน
+      const parts = [];
+      beams.forEach(b => {
+        ccApplyInput(b.input);                          // → render() คำนวณ + วาด + populate
+        const mem = document.querySelector('#pt_member'); if (mem) mem.textContent = 'คาน ' + b.label + (b.group ? ' · ' + b.group : '');
+        ccPopulatePrintDoc();                           // repopulate ให้หัวเอกสารมีชื่อคานถูก
+        const r = state.res || {};
+        parts.push({ b, html: document.querySelector('#cc-print-doc').innerHTML, bh: P.b + '×' + P.h,
+          status: (!r._err && state.res) ? (r.pass ? 'ผ่าน' : 'ไม่ผ่าน') : 'ยังไม่คำนวณ', dc: (r.dc != null) ? r.dc : null });
+      });
+      const html = this._buildCombinedDoc(parts);
+      // คืนสภาพ: step + projName + คานที่ active เดิม
+      state.step = savedStep; this.activeId = savedActive;
+      if (pn && oldProj != null) pn.value = oldProj;
+      const sa = this.active(); if (sa) ccApplyInput(sa.input);
+      this._noPersist = wasNP;
+      return html;
+    },
+    _buildCombinedDoc(parts) {
+      const esc = ccEsc;
+      const pass = parts.filter(p => p.status === 'ผ่าน').length, fail = parts.filter(p => p.status === 'ไม่ผ่าน').length, idle = parts.length - pass - fail;
+      let dstr = ''; try { dstr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }); } catch (e) {}
+      const cover = `<div class="pd-cover"><div class="t">${esc(this.data.name)}</div>` +
+        `<div class="s">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก · วิธีกำลัง (ว.ส.ท.)</div>` +
+        `<div class="s">${parts.length} คาน · ${pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ยังไม่คำนวณ' : ''}</div>` +
+        `<div class="s">${esc(dstr)}</div><div class="s" style="margin-top:10px;color:#94a3b8">Civil Calc · Panuwat Lab</div></div>`;
+      const toc = `<div class="pd-toc"><div class="pd-st">สารบัญคาน (${parts.length})</div><table><tbody>` +
+        parts.map((p, i) => `<tr><td style="width:7%">${i + 1}</td><td><b>คาน ${esc(p.b.label)}</b></td><td>${esc(p.b.group || '')}</td><td class="mono">${esc(p.bh)}</td><td>${esc(p.status)}${p.dc != null ? (' · D/C ' + p.dc + '%') : ''}</td></tr>`).join('') +
+        `</tbody></table></div>`;
+      const sheets = parts.map(p => `<div class="page-break cc-sheet">${p.html}</div>`).join('');
+      return cover + toc + sheets;
+    },
+    printAll() {
+      if (!this.data.beams.length) return;
+      const doc = document.querySelector('#cc-print-doc'); if (!doc) return;
+      const html = this.buildAllHTML();
+      this._printingAll = true; doc.innerHTML = html;            // กัน beforeprint clobber
+      try { window.print(); } catch (e) {}
+      this._printingAll = false; ccPopulatePrintDoc();           // คืนเอกสารคานปัจจุบัน
+    },
     exportJSON() {
       const cur = this.active(); if (cur) cur.input = ccCaptureInput();
       const blob = new Blob([JSON.stringify(this.data, null, 2)], { type: 'application/json' });
@@ -3230,6 +3285,7 @@
      populate จาก node ที่ render แล้ว (clone กราฟ + show-work · ไม่ยุ่งลำดับบนจอ) · display-only */
   function ccPopulatePrintDoc() {
     const doc = $('#cc-print-doc'); if (!doc) return;
+    if (window.CCProject && CCProject._printingAll) return;   // เฟส C · พิมพ์รวมทั้งโครงการ → อย่า clobber เอกสารเล่มรวม
     const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const m = liveData(), r = state.res || {}, cont = state.mode === 'cont';
     const proj = ($('#projName') && $('#projName').value) || '—';
@@ -7247,6 +7303,13 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
               localStorage.setItem(_CCP._STORE_KEY, JSON.stringify({ v: 99, project: { beams: [] } })); const a2 = _CCP.load();
               return a1 === null && a2 === null; } catch (e) { return false; }
           })());
+          // เฟส C · พิมพ์รวมทั้งโครงการ (ปก + สารบัญ + ทุกคาน page-break)
+          const _preAll = _CCP.activeId;
+          const _allHTML = _CCP.buildAllHTML();
+          A('โปรเจกต์: พิมพ์รวม — เล่มมีปก+สารบัญ+ทุกคาน (page-break/คาน)',
+            /pd-cover/.test(_allHTML) && /pd-toc/.test(_allHTML) && (_allHTML.match(/cc-sheet/g) || []).length === _CCP.data.beams.length,
+            'sheets=' + (_allHTML.match(/cc-sheet/g) || []).length + '/' + _CCP.data.beams.length);
+          A('โปรเจกต์: พิมพ์รวม → active beam คืนสภาพ (ไม่ค้างคานอื่น)', _CCP.activeId === _preAll, 'active=' + _CCP.activeId + ' pre=' + _preAll);
         } finally {
           _CCP.data = _ccSave; _CCP.activeId = _ccA; _CCP._seq = _ccS;   // กันคานทดสอบรั่วเข้าโปรเจกต์ user
           try { if (_rawBak == null) localStorage.removeItem(_CCP._STORE_KEY); else localStorage.setItem(_CCP._STORE_KEY, _rawBak); } catch (e) {}   // คืน localStorage เดิม
