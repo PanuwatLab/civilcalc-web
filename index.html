@@ -166,6 +166,16 @@
     #cc-print-doc .pd-sign .r{ font-size:9px; color:#94a3b8; margin-top:2px; }
     #cc-print-doc .pd-foot{ margin-top:6px; font-size:8.5px; color:#94a3b8; border-top:1px dashed #e2e8f0; padding-top:4px; }
     #cc-print-doc .wstep,#cc-print-doc .print-block{ break-inside:avoid; }
+    /* §2 ยุบช่อง + จัด 2 คอลัมน์ซ้าย-ขวา (pi 2026-06-23) — ลดจำนวนหน้า · ดูเป็นรายการคำนวณวิศวกร */
+    #cc-print-doc .pd-steps2{ column-count:2; column-gap:6mm; }
+    #cc-print-doc .pd-steps2 .wstep{ padding:5px 8px; border-radius:5px; border-color:#e2e8f0; margin:0 0 4.5px; }
+    #cc-print-doc .pd-steps2 .whd{ margin-bottom:2px; gap:5px; flex-wrap:wrap; }
+    #cc-print-doc .pd-steps2 .wn{ min-width:17px; height:17px; padding:0 4px; font-size:9px; border-radius:4px; }
+    #cc-print-doc .pd-steps2 .wt{ font-size:9.5px; }
+    #cc-print-doc .pd-steps2 .badge-code{ font-size:7.5px; padding:1px 5px; }
+    #cc-print-doc .pd-steps2 .wbody{ font-size:8.5px; line-height:1.5; padding-left:0; }
+    #cc-print-doc .pd-steps2 .wnote{ font-size:8px; line-height:1.4; padding-left:0; margin-top:2px; }
+    #cc-print-doc .pd-steps2 .wsub{ font-size:8px; }
     #cc-print-doc .page-break{ break-before:page; }
     /* เฟส C · เล่มรวมทั้งโครงการ: ปก + สารบัญ */
     #cc-print-doc .pd-cover{ text-align:center; padding:34mm 0 14mm; border-bottom:1px solid #e2e8f0; }
@@ -4198,9 +4208,9 @@
       : '';
     const sec1 = `<div class="pd-sec"><div class="pd-st">§1 รูปวิเคราะห์ — กริดไลน์ · แรงเฉือน · โมเมนต์</div><div class="pd-diag">${planHTML}</div><div class="pd-diag">${diagHTML}</div></div>`;
     const sec2 = `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>`
-      + `<div class="pd-sub" data-pd="flex">ออกแบบรับดัด · ว.ส.ท. 1008/1009</div>${workHTML}`
-      + (shearHTML ? `<div class="pd-sub" data-pd="shear">ออกแบบรับเฉือน · ว.ส.ท. 1007</div>${shearHTML}` : '')
-      + (torHTML ? `<div class="pd-sub" data-pd="torsion">ออกแบบรับแรงบิด · DRMK บท 9</div>${torHTML}` : '')
+      + `<div class="pd-sub" data-pd="flex">ออกแบบรับดัด · ว.ส.ท. 1008/1009</div><div class="pd-steps2">${workHTML}</div>`
+      + (shearHTML ? `<div class="pd-sub" data-pd="shear">ออกแบบรับเฉือน · ว.ส.ท. 1007</div><div class="pd-steps2">${shearHTML}</div>` : '')
+      + (torHTML ? `<div class="pd-sub" data-pd="torsion">ออกแบบรับแรงบิด · DRMK บท 9</div><div class="pd-steps2">${torHTML}</div>` : '')
       + `</div>`;
     const verdictBlock = `<div class="pd-verdict ${vClass}">${vText}${rebar ? (' · <span class="mono">' + rebar + '</span>') : ''}</div>`;
     // ไม่ ready → verdict กลาง (⏳ pending / ⚠ error) ไม่ใช่ ✓/✕ — กันเอกสารโชว์ "ไม่ผ่าน" คู่ placeholder "ยังไม่มีผล" (Codex P2-C #35)
