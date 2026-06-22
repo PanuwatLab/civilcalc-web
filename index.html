@@ -871,6 +871,17 @@
 
         <!-- ░░ TAB A: SHOW-WORK ░░ -->
         <div id="ctab-work" role="tabpanel">
+          <!-- พาอ่านรายการคำนวณ (help-mode · static · renderWork ไม่แตะ · auto-hide บนแท็บ detail) -->
+          <div id="ccCalcGuide" class="cc-help-legend no-print" role="note" aria-label="วิธีอ่านรายการคำนวณ">
+            <div class="cc-hl-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 2h6a2 2 0 0 1 2 2v0h1a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1M9 2a2 2 0 0 0-2 2M9 2a2 2 0 0 1 2 2h2M8 13h8M8 17h5"/></svg> วิธีอ่านรายการคำนวณ <span class="cc-hl-tag">โหมดช่วยเหลือ</span></div>
+            <div class="cc-hl-grid">
+              <div class="cc-hl-item"><span class="cc-hl-k">บรรทัดตัวหนา</span><span class="cc-hl-v">= <b>สูตร</b> ที่ใช้ (เช่น a = As·fy ÷ 0.85f'c·b)</span></div>
+              <div class="cc-hl-item"><span class="cc-hl-k">ส่วนต่อท้าย</span><span class="cc-hl-v">= แทนค่า → <b>ผลลัพธ์</b> (ตัวเลขจริง)</span></div>
+              <div class="cc-hl-item"><span class="cc-hl-k">ป้ายอ้างอิง</span><span class="cc-hl-v"><b>ว.ส.ท. 1008</b> = มาตรฐาน/มาตราที่ใช้</span></div>
+              <div class="cc-hl-item"><span class="cc-hl-k">แถบ D/C</span><span class="cc-hl-v">ใช้กำลังกี่ % · เขียว ≤100 ผ่าน · แดง &gt;100 ไม่ผ่าน</span></div>
+              <div class="cc-hl-item"><span class="cc-hl-k">ลำดับตรวจ</span><span class="cc-hl-v"><b>ดัด → เฉือน → แรงบิด → ตัดเหล็ก</b> (ผ่านครบ = คานใช้ได้)</span></div>
+            </div>
+          </div>
           <!-- Key metric cards -->
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
             <div class="card p-4"><div class="text-[12px] text-ink-muted">+M governing</div><div class="mono text-xl font-semibold mt-1"><span id="km_pm">7,090 kg·m</span></div></div>
@@ -2098,6 +2109,7 @@
     },
     _applyHelp(on) {
       const lg = document.getElementById('ccHelpLegend'); if (lg) lg.classList.toggle('show', !!on);   // คู่มืออ่านผล (element คงที่ · ไม่ inject ต่อผลที่ re-render)
+      const cg = document.getElementById('ccCalcGuide'); if (cg) cg.classList.toggle('show', !!on);    // พาอ่านรายการคำนวณ (ในแท็บ work · auto-hide บนแท็บ detail)
       document.querySelectorAll('.cc-ob-hint').forEach(h => h.remove());
       if (!on) return;
       this.HINTS.forEach(p => {
@@ -8519,9 +8531,12 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           A('onboarding: help hint ไม่แทรกตรงใน <table> (valid markup)', ![...document.querySelectorAll('.cc-ob-hint')].some(h => h.parentNode && h.parentNode.tagName === 'TABLE'));
           A('onboarding: help on → legend อ่านผล แสดง + มี ≥5 รายการ',
             !!document.getElementById('ccHelpLegend') && document.getElementById('ccHelpLegend').classList.contains('show') && document.querySelectorAll('#ccHelpLegend .cc-hl-item').length >= 5);
+          A('onboarding: help on → พาอ่านรายการคำนวณ แสดง (ในแท็บ work · ≥5 รายการ)',
+            !!document.getElementById('ccCalcGuide') && document.getElementById('ccCalcGuide').classList.contains('show') && document.querySelectorAll('#ccCalcGuide .cc-hl-item').length >= 5 && !!document.getElementById('ccCalcGuide').closest('#ctab-work'));
           _O.toggleHelp();
           A('onboarding: help off → hints หาย (idempotent)', document.querySelectorAll('.cc-ob-hint').length === 0);
           A('onboarding: help off → legend อ่านผล ซ่อน', !document.getElementById('ccHelpLegend').classList.contains('show'));
+          A('onboarding: help off → พาอ่านรายการคำนวณ ซ่อน', !document.getElementById('ccCalcGuide').classList.contains('show'));
           A('onboarding: ปุ่ม "ช่วยเหลือ" ในหัวแอป มี + คลิกสลับ help + sync (legend/aria-pressed)', (() => {
             const btn = document.getElementById('helpModeBtn'); if (!btn) return false;
             btn.click();   // → on
