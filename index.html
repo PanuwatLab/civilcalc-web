@@ -223,7 +223,11 @@
     border:1px dashed rgba(47,102,144,.4); border-radius:10px; background:rgba(47,102,144,.05); color:var(--steel); font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; transition:.18s ease; }
   .cc-add:hover{ background:rgba(47,102,144,.11); border-color:var(--steel); }
   .cc-add svg{ width:15px; height:15px; }
-  .cc-foot{ padding:11px 12px; border-top:1px solid var(--border); display:flex; gap:7px; }
+  .cc-savedrow{ padding:8px 14px 0; min-height:14px; }
+  .cc-saved{ font-size:10.5px; font-family:"JetBrains Mono",monospace; letter-spacing:.2px; transition:color .2s ease; }
+  .cc-saved.ok{ color:var(--teal); } .cc-saved.wait{ color:var(--ink-muted); } .cc-saved.err{ color:var(--fail); }
+  .cc-foot{ padding:9px 12px 12px; border-top:1px solid var(--border); display:flex; gap:6px; }
+  .cc-foot .cc-fbtn{ font-size:11.5px; padding:8px 6px; }
   .cc-fbtn{ flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:8px; border:1px solid var(--border); border-radius:9px; background:#fff; color:var(--ink-muted); font-family:inherit; font-size:12px; cursor:pointer; box-shadow:0 1px 2px rgba(20,40,70,.06); transition:.18s ease; }
   .cc-fbtn:hover{ color:var(--ink); border-color:#bdc8d6; transform:translateY(-1px); box-shadow:0 5px 14px -6px rgba(20,40,70,.22); }
   .cc-fbtn.primary{ color:#fff; background:var(--accent-grad); border:none; font-weight:600; box-shadow:0 6px 16px -6px rgba(47,102,144,.5); }
@@ -1652,9 +1656,48 @@
   window.CCProject = {
     data: { name: 'โครงการใหม่', beams: [] },
     activeId: null, _seq: 0, _mobile: false,
+    _STORE_KEY: 'civilcalc.project.v1', _SCHEMA: 1, _saveTimer: null, _savedState: 'idle', _noPersist: false,
     _id() { return 'b' + (++this._seq); },
     active() { return this.data.beams.find(b => b.id === this.activeId) || null; },
     capture() { return ccCaptureInput(); },   // expose สำหรับ audit (คนละ script scope กับ ccCaptureInput)
+
+    /* ── persist (localStorage · schema-versioned · debounced · ห้าม trust storage) ── */
+    persist(immediate) {
+      if (this._noPersist) return;                       // กัน audit เขียนคานทดสอบลง storage
+      const cur = this.active(); if (cur) cur.input = ccCaptureInput();   // เก็บ edits ปัจจุบันก่อนเซฟ
+      const write = () => {
+        try {
+          localStorage.setItem(this._STORE_KEY, JSON.stringify({ v: this._SCHEMA, savedAt: new Date().toISOString(), activeId: this.activeId, project: this.data }));
+          this._setSaved('saved');
+        } catch (e) { this._setSaved('error'); }          // quota/private-mode → ไม่ crash
+      };
+      clearTimeout(this._saveTimer);
+      if (immediate) { write(); return; }
+      this._setSaved('saving');
+      this._saveTimer = setTimeout(write, 600);            // debounce กันเขียนรัวทุกคีย์
+    },
+    load() {
+      let raw; try { raw = localStorage.getItem(this._STORE_KEY); } catch (e) { return null; }
+      if (!raw) return null;
+      let o; try { o = JSON.parse(raw); } catch (e) { return null; }                 // corrupt → ทิ้ง
+      if (!o || o.v !== this._SCHEMA || !o.project || !Array.isArray(o.project.beams) || !o.project.beams.length) return null;  // schema ไม่ตรง → ทิ้ง
+      const ok = o.project.beams.every(b => b && b.id && b.input && b.input.P &&
+        typeof b.input.P.b === 'number' && typeof b.input.P.h === 'number' && b.input.st && Array.isArray(b.input.loads));
+      return ok ? o : null;                                                          // validate ไม่ผ่าน → ทิ้ง (เริ่มใหม่)
+    },
+    newProject() {
+      if (!confirm('เริ่มโปรเจกต์ใหม่? (โปรเจกต์ปัจจุบันที่บันทึกไว้จะถูกแทนที่)')) return;
+      this.data = { name: 'โครงการใหม่', beams: [] }; this._seq = 0;
+      const b = { id: this._id(), label: 'B1', group: 'ชั้น 1', input: ccCaptureInput(), summary: this.summaryNow() };
+      this.data.beams.push(b); this.activeId = b.id;
+      this.renderRail(); this.updateCrumb(); this.persist(true);
+    },
+    _setSaved(s) {
+      this._savedState = s;
+      const el = document.querySelector('#ccSaved'); if (!el) return;
+      const map = { saved: ['● บันทึกแล้ว', 'ok'], saving: ['◌ กำลังบันทึก…', 'wait'], error: ['⚠ บันทึกไม่ได้', 'err'], idle: ['', ''] };
+      const m = map[s] || map.idle; el.textContent = m[0]; el.className = 'cc-saved ' + m[1];
+    },
     nextLabel() { let n = 1; const used = new Set(this.data.beams.map(b => b.label)); while (used.has('B' + n)) n++; return 'B' + n; },
     summaryNow() {
       const r = state.res || {};
@@ -1665,12 +1708,23 @@
       if (this._mounted) return; this._mounted = true;
       this._mobile = window.matchMedia('(max-width:900px)').matches;
       this.mount();
-      // คานแรก = state ปัจจุบัน
-      const b = { id: this._id(), label: 'B1', group: 'ชั้น 1', input: ccCaptureInput(), summary: this.summaryNow() };
-      this.data.beams.push(b); this.activeId = b.id;
+      const saved = this.load();
+      if (saved) {
+        // กู้คืนโปรเจกต์ที่บันทึกไว้ (validate ผ่านแล้ว) → โหลดคานที่ active เข้า calculator
+        this.data = saved.project;
+        this._seq = saved.project.beams.reduce((m, b) => Math.max(m, parseInt(String(b.id || 'b0').slice(1)) || 0), 0);
+        this.activeId = (saved.activeId && saved.project.beams.some(b => b.id === saved.activeId)) ? saved.activeId : saved.project.beams[0].id;
+        ccApplyInput(this.active().input);   // engine ยังไม่พร้อมก็ apply input ได้ · คำนวณตอน __civilRefresh
+        this._setSaved('saved');
+      } else {
+        // ไม่มีของบันทึก/ข้อมูลเสีย → คานแรกจาก state ปัจจุบัน
+        const b = { id: this._id(), label: 'B1', group: 'ชั้น 1', input: ccCaptureInput(), summary: this.summaryNow() };
+        this.data.beams.push(b); this.activeId = b.id;
+      }
       document.body.classList.toggle('cc-mobile', this._mobile);
       if (!this._mobile) document.body.classList.add('cc-open');
       this.renderRail(); this.updateCrumb();
+      if (!saved) this.persist(true);   // เซฟครั้งแรก
       window.addEventListener('resize', () => { const m = window.matchMedia('(max-width:900px)').matches; if (m !== this._mobile) { this._mobile = m; document.body.classList.toggle('cc-mobile', m); } });
     },
     mount() {
@@ -1775,12 +1829,16 @@
           `<div class="cc-pmeta">${this.data.beams.length} คาน · ${r.pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ค้าง' : ''}</div></div>` +
           `<div class="cc-ring" title="${r.pass}/${r.tot} คานผ่าน"><svg width="40" height="40"><circle cx="20" cy="20" r="16" fill="none" stroke="rgba(34,66,92,.1)" stroke-width="3.5"/><circle id="ccRingArc" cx="20" cy="20" r="16" fill="none" stroke="url(#ccRingG)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="${r.off}" style="transition:stroke-dashoffset .9s cubic-bezier(.16,1,.3,1)"/><defs><linearGradient id="ccRingG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#356897"/><stop offset="1" stop-color="#0f766e"/></linearGradient></defs></svg><div class="v">${r.pass}/${r.tot}</div></div></div>` +
         `<div class="cc-tree">${tree}<button class="cc-add" data-ccact="addBeam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>เพิ่มคาน</button></div>` +
-        `<div class="cc-foot"><button class="cc-fbtn" data-ccact="exportJSON" title="ส่งออกไฟล์โครงการ (.json)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>ส่งออก</button>` +
-          `<button class="cc-fbtn primary" data-ccact="printAll" title="พิมพ์รวมทั้งโครงการ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>พิมพ์รวม</button></div>`;
+        `<div class="cc-savedrow"><span class="cc-saved" id="ccSaved"></span></div>` +
+        `<div class="cc-foot"><button class="cc-fbtn" data-ccact="newProject" title="เริ่มโปรเจกต์ใหม่"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 12v6M9 15h6"/></svg>ใหม่</button>` +
+          `<button class="cc-fbtn" data-ccact="exportJSON" title="ส่งออกไฟล์โครงการ (.json)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>ส่งออก</button>` +
+          `<button class="cc-fbtn primary" data-ccact="printAll" title="พิมพ์รวมทั้งโครงการ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>พิมพ์</button></div>`;
+      this._setSaved(this._savedState);   // คืนสถานะบันทึกหลัง rebuild
       // keyboard: ลูกศร/Enter บน beam
       rail.querySelectorAll('.cc-beam').forEach(el => el.addEventListener('keydown', ev => {
         if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.select(el.dataset.ccid); }
       }));
+      this.persist();   // autosave โครงสร้าง (เพิ่ม/ลบ/เปลี่ยนชื่อ) · debounced
     },
     renameActive() { this.rename(this.activeId); },
     dupActive() { this.duplicate(this.activeId); },
@@ -1812,6 +1870,7 @@
       const fail = this.data.beams.filter(x => x.summary && x.summary.status === 'bad').length;
       const idle = this.data.beams.filter(x => !x.summary || x.summary.status === 'idle').length;
       if (meta) meta.textContent = `${this.data.beams.length} คาน · ${r.pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ค้าง' : ''}`;
+      this.persist();   // autosave (debounced) — ครอบการแก้ section/โหลด
     }
   };
 
@@ -7161,6 +7220,8 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       const _CCP = window.CCProject;
       if (_CCP && _CCP.data) {
         const _ccSave = JSON.parse(JSON.stringify(_CCP.data)), _ccA = _CCP.activeId, _ccS = _CCP._seq;
+        let _rawBak = null; try { _rawBak = localStorage.getItem(_CCP._STORE_KEY); } catch (e) {}
+        _CCP._noPersist = true;   // กัน autosave เขียนคานทดสอบลง storage ระหว่าง audit
         try {
           A('โปรเจกต์: rail mount + คานเริ่มต้น ≥1', !!document.querySelector('#ccRail') && _CCP.data.beams.length >= 1, 'beams=' + _CCP.data.beams.length);
           TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().render();
@@ -7177,8 +7238,19 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           const _b2 = _CCP.capture();
           A('โปรเจกต์: คานที่ 2 เก็บค่าแยกอิสระ (35×65)', _b2.P.b === 35 && _b2.P.h === 65, _b2.P.b + '×' + _b2.P.h);
           A('โปรเจกต์: สถานะต่อคานคำนวณ (ผ่าน/ไม่ผ่าน/ค้าง)', _CCP.data.beams.every(b => b.summary && b.summary.status), _CCP.data.beams.map(b => b.summary && b.summary.status).join(','));
+          // เฟส B · persist → load round-trip (localStorage · schema v1) + validate-or-discard
+          _CCP._noPersist = false; _CCP.persist(true); const _ld = _CCP.load(); _CCP._noPersist = true;
+          A('โปรเจกต์: persist→load round-trip (localStorage · schema v1)',
+            !!_ld && _ld.v === 1 && _ld.project.beams.length === _CCP.data.beams.length, _ld ? ('beams=' + _ld.project.beams.length) : 'null');
+          A('โปรเจกต์: load ทิ้งข้อมูลเสีย/เวอร์ชันผิด (ห้าม trust storage)', (() => {
+            try { localStorage.setItem(_CCP._STORE_KEY, '{bad'); const a1 = _CCP.load();
+              localStorage.setItem(_CCP._STORE_KEY, JSON.stringify({ v: 99, project: { beams: [] } })); const a2 = _CCP.load();
+              return a1 === null && a2 === null; } catch (e) { return false; }
+          })());
         } finally {
           _CCP.data = _ccSave; _CCP.activeId = _ccA; _CCP._seq = _ccS;   // กันคานทดสอบรั่วเข้าโปรเจกต์ user
+          try { if (_rawBak == null) localStorage.removeItem(_CCP._STORE_KEY); else localStorage.setItem(_CCP._STORE_KEY, _rawBak); } catch (e) {}   // คืน localStorage เดิม
+          _CCP._noPersist = false;
           if (_CCP.renderRail) _CCP.renderRail();
         }
       }
