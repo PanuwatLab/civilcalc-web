@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Civil Calc — คำนวณคานคอนกรีตเสริมเหล็ก (วิธี SDM/USD)
+  Panuwat Civil Calc — คำนวณคานคอนกรีตเสริมเหล็ก (วิธี SDM/USD)
   Visual mockup · self-contained · Tailwind CDN + Vanilla JS + inline SVG
   ห้ามคำนวณจริง — ใช้ mock data (ภาคผนวก A/B) · engine จริงต่อ Pyodide ภายหลัง
   โครงสร้าง:  [Design tokens] [App shell] [Stepper+Summary] [Step1] [Step2] [Step3] [ccDraw] [States] [Print] [JS]
@@ -9,12 +9,12 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Civil Calc — ออกแบบคานคอนกรีตเสริมเหล็ก (วิธีกำลัง วสท.)</title>
+<title>Panuwat Civil Calc — ออกแบบคานคอนกรีตเสริมเหล็ก (วิธีกำลัง วสท.)</title>
 <meta name="description" content="เครื่องมือออกแบบคานคอนกรีตเสริมเหล็ก (RC) วิธีกำลัง (SDM · วสท.) — คานช่วงเดียว/ต่อเนื่อง/ยื่น · ดัด เฉือน แรงบิด ตัดเหล็ก · รายการคำนวณ ก.ว.-ready พิมพ์ PDF" />
 <meta name="theme-color" content="#2f6690" />
 <!-- Social share (Open Graph) -->
 <meta property="og:type" content="website" />
-<meta property="og:title" content="Civil Calc — ออกแบบคานคอนกรีตเสริมเหล็ก (วสท.)" />
+<meta property="og:title" content="Panuwat Civil Calc — ออกแบบคานคอนกรีตเสริมเหล็ก (วสท.)" />
 <meta property="og:description" content="ออกแบบคาน RC วิธีกำลัง · ช่วงเดียว/ต่อเนื่อง/ยื่น · ดัด-เฉือน-แรงบิด · รายการคำนวณ ก.ว. พิมพ์ PDF" />
 <meta property="og:locale" content="th_TH" />
 <meta property="og:url" content="https://panuwatlab.github.io/civilcalc-web/" />
@@ -79,6 +79,7 @@
   html,body{ background:var(--bg); color:var(--ink); font-family:"Sarabun","IBM Plex Sans Thai",system-ui,sans-serif; }
   body{ background:linear-gradient(180deg,#eaf2f9 0%,#f4f7fa 26%,#f4f4f5 70%); background-attachment:fixed; }
   body{ font-feature-settings:"liga" 1; }
+  fieldset{ min-width:0; }   /* override default min-width:min-content ของ <fieldset> → ยอมหดบนมือถือ (กัน card ล้นแนวนอน) */
   .mono{ font-family:"JetBrains Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums; }
 
   /* motion ≤200ms · reduced-motion ปิด */
@@ -123,7 +124,7 @@
   @media print{
     @page{ size:A4 portrait; margin:12mm 11mm 16mm;
       @bottom-right{ content:"แผ่นที่ " counter(page) " / " counter(pages); font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; font-size:9px; color:#94a3b8; }
-      @bottom-left{ content:"Civil Calc · รายการคำนวณ ก.ว."; font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; font-size:9px; color:#cbd5e1; }
+      @bottom-left{ content:"Panuwat Civil Calc · รายการคำนวณ ก.ว."; font-family:'Sarabun','IBM Plex Sans Thai',sans-serif; font-size:9px; color:#cbd5e1; }
     }
     body{ background:#fff !important; }
     body > *:not(#cc-print-doc){ display:none !important; }   /* ซ่อนแอปบนจอ · โชว์เฉพาะเอกสารพิมพ์ */
@@ -295,7 +296,7 @@
   .cc-fbtn svg{ width:14px; height:14px; }
 
   /* active-beam breadcrumb strip injected into app header area */
-  #ccCrumb{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-muted); padding:8px 0 0; }
+  #ccCrumb{ display:flex; align-items:center; flex-wrap:wrap; gap:7px; font-size:12.5px; color:var(--ink-muted); padding:8px 0 0; }
   #ccCrumb b{ color:var(--ink); font-weight:600; }
   #ccCrumb svg{ width:13px; height:13px; opacity:.55; }
   .cc-cacts{ display:inline-flex; gap:4px; margin-left:8px; }
@@ -307,7 +308,7 @@
   @media (max-width:900px){ body.cc-open #app{ margin-left:0; } }
 
   /* ╔══════════ Onboarding / นำทาง (CCOnboard) ══════════╗ */
-  .cc-ob-back{ position:fixed; inset:0; z-index:1200; display:none; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto;
+  .cc-ob-back{ position:fixed; inset:0; z-index:1200; display:none; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto; overflow-x:hidden;
     background:radial-gradient(120% 100% at 50% 0%, rgba(20,40,70,.32), rgba(20,40,70,.5)); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
   .cc-ob-back.show{ display:flex; animation:ccObFade .3s ease both; }
   @keyframes ccObFade{ from{opacity:0} to{opacity:1} }
@@ -424,7 +425,7 @@
 <div id="bootScreen" class="fixed inset-0 z-40 bg-bg flex flex-col items-center justify-center gap-5">
   <div class="flex items-center gap-3 text-ink">
     <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2F6690" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2F6690" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <div class="text-xl font-semibold">Civil Calc</div>
+    <div class="text-xl font-semibold">Panuwat Civil Calc</div>
   </div>
   <div class="flex items-center gap-3 text-ink-muted">
     <span class="inline-block w-4 h-4 border-2 border-border border-t-accent rounded-full spin"></span>
@@ -446,7 +447,7 @@
       <div class="h-14 flex items-center gap-4">
         <div class="flex items-center gap-2 shrink-0">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2F6690" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2F6690" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <h1 class="text-[17px] font-bold tracking-tight">Civil&nbsp;Calc</h1>
+          <h1 class="text-[17px] font-bold tracking-tight">Panuwat&nbsp;Civil&nbsp;Calc</h1>
         </div>
 
         <div class="hidden md:block w-px h-7 bg-border"></div>
@@ -461,7 +462,7 @@
           <button class="reg-btn reg-off" data-tip="เร็วๆนี้" disabled>ฐานราก</button>
         </nav>
 
-        <div class="ml-auto flex items-center gap-3">
+        <div class="ml-auto flex items-center gap-2 sm:gap-3">
           <span class="badge-code mono hidden sm:inline">SDM / USD</span>
           <!-- หน่วยแรง toggle (kg | T) — ใช้ร่วมทั้งแอปผ่าน ccUnits -->
           <div class="inline-flex rounded-ctrl border border-border overflow-hidden text-[13px]" role="group" aria-label="หน่วยแรง">
@@ -543,7 +544,7 @@
 
     <!-- ╔═══════════ STEP ① PARAMETERS ═══════════╗ -->
     <section id="step1" class="step-panel" role="tabpanel" aria-label="ขั้นพารามิเตอร์">
-      <div class="grid lg:grid-cols-[1fr_360px] gap-6 items-start">
+      <div class="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
 
         <!-- LEFT: form -->
         <div class="card p-5 sm:p-6 space-y-7">
@@ -2156,7 +2157,7 @@
         '<div class="cc-ob-stage"><div class="cc-ob-aura"><i></i><i></i></div><div class="cc-ob-card">' +
         '<button class="cc-ob-x" id="ccObX" aria-label="ปิด"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>' +
         '<div class="cc-ob-hd"><div class="cc-ob-logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg></div>' +
-        '<div><h2 id="ccObH">ยินดีต้อนรับสู่ Civil Calc</h2><div class="s">ออกแบบคานคอนกรีตเสริมเหล็ก · วิธีกำลัง (วสท.) — ครบ จบ ในที่เดียว</div></div></div>' +
+        '<div><h2 id="ccObH">ยินดีต้อนรับสู่ Panuwat Civil Calc</h2><div class="s">ออกแบบคานคอนกรีตเสริมเหล็ก · วิธีกำลัง (วสท.) — ครบ จบ ในที่เดียว</div></div></div>' +
         '<div class="cc-ob-caps">' + caps + '</div>' +
         '<div class="cc-ob-q"><span class="st">เริ่มที่นี่</span> อยากออกแบบคานแบบไหนก่อน?</div>' +
         '<div class="cc-ob-modes">' +
@@ -2471,7 +2472,7 @@
       const cover = `<div class="pd-cover"><div class="t">${esc(this.data.name)}</div>` +
         `<div class="s">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก · วิธีกำลัง (ว.ส.ท.)</div>` +
         `<div class="s">${parts.length} คาน · ${pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ยังไม่คำนวณ' : ''}</div>` +
-        `<div class="s">${esc(dstr)}</div><div class="s" style="margin-top:10px;color:#94a3b8">Civil Calc · Panuwat Lab</div></div>`;
+        `<div class="s">${esc(dstr)}</div><div class="s" style="margin-top:10px;color:#94a3b8">Panuwat Civil Calc</div></div>`;
       const toc = `<div class="pd-toc"><div class="pd-st">สารบัญคาน (${parts.length})</div><table>` +
         `<thead><tr><th style="width:7%">ลำดับ</th><th>เบอร์คาน</th><th>กริดไลน์</th><th>ตำแหน่งที่เลือกใช้ออกแบบ</th><th>ขนาดคาน (ซม.)</th><th>อัตราส่วน D/C<br><span style="font-weight:400;font-size:9px;">(Demand-to-Capacity)</span></th></tr></thead><tbody>` +
         parts.map((p, i) => `<tr><td>${i + 1}</td><td><b>คาน ${esc(p.b.label)}</b></td><td class="mono">${esc(p.grid || '—')}</td><td>${esc(p.floor || p.b.group || '')}</td><td class="mono">${esc(p.bh)}</td><td>${esc(p.status)}${p.dc != null ? (' · ' + p.dc + '%') : ''}</td></tr>`).join('') +
@@ -4128,7 +4129,7 @@
       : (`<div class="pd-sec"><div class="pd-st">§ สรุปผล</div>${notReadyVerdict}<div class="pd-pending">ยังไม่มีผลคำนวณจริง — กด “คำนวณ” บนหน้าจอก่อนพิมพ์ · เอกสารนี้ยังไม่พร้อมใช้งาน</div></div>`);
     doc.innerHTML =
       '<div class="pd-head"><div><div class="pd-h1">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก</div>' +
-      '<div class="pd-h2">วิธีกำลัง (SDM) · มาตรฐาน ว.ส.ท. 1008/1009</div></div><div class="pd-hr">Civil Calc · Panuwat Lab</div></div>' +
+      '<div class="pd-h2">วิธีกำลัง (SDM) · มาตรฐาน ว.ส.ท. 1008/1009</div></div><div class="pd-hr">Panuwat Civil Calc</div></div>' +
       '<table class="pd-tb"><tbody>' +
       `<tr><td class="k">โครงการ</td><td>${esc(proj)}</td><td class="k">มาตรฐาน</td><td>ว.ส.ท. (SDM/USD)</td></tr>` +
       `<tr><td class="k">องค์อาคาร</td><td>${esc(member)}</td><td class="k">b × h</td><td class="mono">${P.b}×${P.h} ซม.</td></tr>` +
@@ -4137,7 +4138,7 @@
       '</tbody></table>' +
       calcBody +
       '<div class="pd-sign"><div class="s"><div class="l">ผู้คำนวณ</div></div><div class="s"><div class="l">วิศวกรผู้ออกแบบ (ก.ว.)</div><div class="r">เลขทะเบียน ภย. __________</div></div></div>' +
-      `<div class="pd-foot">ผลคำนวณเบื้องต้น · ต้องตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง · Civil Calc · พิมพ์ ${esc(dstr)}</div>`;
+      `<div class="pd-foot">ผลคำนวณเบื้องต้น · ต้องตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง · Panuwat Civil Calc · พิมพ์ ${esc(dstr)}</div>`;
   }
 
   function render() {
