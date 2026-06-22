@@ -354,6 +354,15 @@
   .cc-ob-mode:hover .bm{ animation:ccObSag 1.1s var(--ease,cubic-bezier(.16,1,.3,1)) infinite; }
   @keyframes ccObDrop{ 0%,100%{transform:translateY(0);opacity:.5} 50%{transform:translateY(3px);opacity:1} }
   @keyframes ccObSag{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(1.4px)} }
+  .cc-ob-proj{ margin-top:14px; background:linear-gradient(180deg,var(--accent-soft),rgba(231,239,246,.4)); border:1px solid rgba(47,102,144,.16); border-radius:14px; padding:12px 15px; }
+  .cc-ob-proj-hd{ font-size:13.5px; font-weight:600; color:var(--steel); display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+  .cc-ob-proj-hd svg{ width:17px; height:17px; flex:none; }
+  .cc-ob-proj-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .cc-ob-pf{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:9px; padding:6px 10px; }
+  .cc-ob-pf svg{ width:15px; height:15px; flex:none; color:var(--steel); }
+  .cc-ob-proj-ft{ font-size:11.5px; color:var(--ink-muted); margin-top:9px; }
+  .cc-ob-proj-ft b{ color:var(--steel); font-weight:600; }
+  @media (max-width:620px){ .cc-ob-pf{ flex:1 1 100%; } }
   .cc-ob-acts{ display:flex; align-items:center; gap:13px; margin-top:20px; flex-wrap:wrap; }
   .cc-ob-cta{ font-family:inherit; font-size:15px; font-weight:600; color:#fff; border:none; cursor:pointer; background:var(--accent-grad); border-radius:11px; padding:11px 24px; box-shadow:0 8px 20px rgba(47,102,144,.28); display:inline-flex; align-items:center; gap:8px; transition:.25s var(--ease,cubic-bezier(.16,1,.3,1)); }
   .cc-ob-cta:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; filter:grayscale(.3); }
@@ -385,7 +394,7 @@
   .cc-ob-ex .d{ font-size:11px; color:var(--ink-muted); line-height:1.35; }
   .cc-ob-ex .l{ font-size:10.5px; color:var(--teal); margin-top:5px; font-weight:500; }
   /* floating ? reopen button */
-  .cc-ob-fab{ position:fixed; right:18px; bottom:78px; z-index:1100; width:46px; height:46px; border-radius:50%; border:none; cursor:pointer; background:var(--accent-grad); color:#fff; box-shadow:0 8px 20px rgba(47,102,144,.36); display:grid; place-items:center; transition:.25s var(--ease,cubic-bezier(.16,1,.3,1)); }
+  .cc-ob-fab{ position:fixed; right:18px; bottom:18px; z-index:1100; width:46px; height:46px; border-radius:50%; border:none; cursor:pointer; background:var(--accent-grad); color:#fff; box-shadow:0 8px 20px rgba(47,102,144,.36); display:grid; place-items:center; transition:.25s var(--ease,cubic-bezier(.16,1,.3,1)); }
   .cc-ob-fab:hover{ transform:translateY(-3px) scale(1.05); box-shadow:0 12px 26px rgba(47,102,144,.44); }
   .cc-ob-fab svg{ width:22px; height:22px; }
   /* inline help hints (help mode) */
@@ -398,22 +407,6 @@
 
 <body class="min-h-screen text-[15px] leading-relaxed">
 
-<!-- ════════════════ DEV: State toggle (no-print) ════════════════ -->
-<div class="no-print fixed bottom-4 right-4 z-50">
-  <details class="card shadow-lift text-[13px]">
-    <summary class="cursor-pointer select-none px-3 py-2 font-semibold text-ink-muted flex items-center gap-2">
-      <span class="inline-block w-2 h-2 rounded-full bg-accent"></span> สลับ State (เดโม)
-    </summary>
-    <div class="px-3 pb-3 pt-1 grid grid-cols-2 gap-1.5 w-[230px]">
-      <button class="state-btn" data-state="boot">boot</button>
-      <button class="state-btn" data-state="ready">ready/empty</button>
-      <button class="state-btn" data-state="calculating">calculating</button>
-      <button class="state-btn" data-state="pass">result-pass</button>
-      <button class="state-btn" data-state="fail">result-fail</button>
-      <button class="state-btn" data-state="error">error</button>
-    </div>
-  </details>
-</div>
 
 <!-- ════════════════ BOOT overlay (Pyodide loading) ════════════════ -->
 <div id="bootScreen" class="fixed inset-0 z-40 bg-bg flex flex-col items-center justify-center gap-5">
@@ -1051,8 +1044,6 @@
 
 <!-- component-specific styles that depend on JS-generated content -->
 <style>
-  .state-btn{ text-align:left; padding:5px 9px; border:1px solid var(--border); border-radius:6px; background:#fff; font-family:"JetBrains Mono",monospace; font-size:12px; }
-  .state-btn[aria-pressed=true]{ border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600; }
 
   .reg-btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:6px; font-size:14px; font-weight:500; color:var(--ink); position:relative; }
   .reg-btn[aria-current=true]{ background:var(--accent-soft); color:var(--accent); }
@@ -1249,7 +1240,6 @@
     initStep1();
     initStep2();
     initStep3();
-    initStateToggle();
     initNav();
     $('#pt_date').textContent = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
     render();
@@ -2119,6 +2109,14 @@
         '<button class="cc-ob-mode" data-ccmode="single" aria-pressed="false">' + tick + diaSingle + '<h4>คานช่วงเดียว</h4><p>คานวางบนเสา 2 ต้น · เริ่มต้นง่ายที่สุด</p><span class="tag">เหมาะกับมือใหม่</span></button>' +
         '<button class="cc-ob-mode" data-ccmode="cont" aria-pressed="false">' + tick + diaCont + '<h4>คานต่อเนื่อง</h4><p>คานพาดหลายช่วง · 2–4 ช่วง</p><span class="tag">+ แรงบิด / เหล็กอัด</span></button>' +
         '</div>' +
+        // ── แนะนำระบบโปรเจกต์ (info-only · ให้ user รู้ว่าออกแบบทั้งบ้านได้ ไม่ใช่แค่คานเดียว) ──
+        '<div class="cc-ob-proj"><div class="cc-ob-proj-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"/></svg> ออกแบบได้ทั้งโครงการ — ไม่ใช่แค่คานเดียว</div>' +
+        '<div class="cc-ob-proj-row">' +
+        '<span class="cc-ob-pf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg> หลายคานในโปรเจกต์เดียว</span>' +
+        '<span class="cc-ob-pf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V8m12 13V8M3 8l9-5 9 5"/></svg> แยกชั้น + กริดไลน์</span>' +
+        '<span class="cc-ob-pf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-5h16v5h-2M8 13h8v8H8z"/></svg> พิมพ์รวมเป็นเล่ม ก.ว.</span>' +
+        '</div>' +
+        '<div class="cc-ob-proj-ft">จัดการคานทั้งหมดได้ที่ <b>แถบด้านซ้าย</b> — เพิ่มคาน · เปลี่ยนชื่อ · จัดชั้นได้</div></div>' +
         '<div class="cc-ob-acts"><button class="cc-ob-cta" id="ccObCta" disabled>เริ่มออกแบบ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>' +
         '<button class="cc-ob-link" id="ccObExToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg> ไม่แน่ใจ? ดูตัวอย่างก่อน</button></div>' +
         '<div class="cc-ob-exwrap" id="ccObExWrap"><div class="cc-ob-exhd"><span class="p">ตัวอย่าง</span>เปิดดูเคสจริง → กรอกค่าให้ครบ + คำนวณ แล้วแก้ต่อได้เลย</div><div class="cc-ob-exgrid">' + exs + '</div></div>' +
@@ -3975,62 +3973,6 @@
       p.setAttribute('aria-pressed', 'true'); state.legs = +p.dataset.leg;
       render();   // recompute engine (stirrup_legs เปลี่ยน → เฉือน/D-C/verdict ใหม่) + redraw ครบ
     }));
-  }
-
-  /* ╔══════════════ STATE TOGGLE (demo) ══════════════╗ */
-  function initStateToggle() {
-    $$('.state-btn').forEach(b => b.addEventListener('click', () => {
-      $$('.state-btn').forEach(x => x.setAttribute('aria-pressed', 'false'));
-      b.setAttribute('aria-pressed', 'true');
-      applyDisplayState(b.dataset.state);
-    }));
-    $('.state-btn[data-state="pass"]').setAttribute('aria-pressed', 'true');
-  }
-
-  function applyDisplayState(s) {
-    state.display = s;
-    if (s === 'boot') {
-      $('#bootScreen').style.display = 'flex'; $('#bootScreen').style.opacity = '1';
-      setTimeout(() => { $('#bootScreen').style.opacity = '0'; setTimeout(() => $('#bootScreen').style.display = 'none', 260); }, reduce ? 200 : 1100);
-      return;
-    }
-    if (s === 'ready') {
-      goStep(1);
-      // blank base values
-      ['#bv_d', '#bv_b1', '#bv_rmin', '#bv_rmax', '#bv_sw'].forEach(id => $(id).textContent = '—');
-      ['#ls_d', '#ls_wu', '#ls_mu', '#ls_dc'].forEach(id => $(id).textContent = '—');
-      $('#ls_verdict').className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/15 text-white/70 font-sans text-[11px]';
-      $('#ls_verdict').textContent = 'รอข้อมูล';
-      return;
-    }
-    // anything else restores live values
-    recalcBase();
-    if (s === 'calculating') {
-      goStep(3);
-      $('#calcOverlay').classList.remove('step-hidden');
-      $('#calcResult').classList.add('step-hidden');
-      $('#errorPanel').classList.add('step-hidden');
-      return;
-    }
-    if (s === 'error') {
-      goStep(3);
-      $('#calcOverlay').classList.add('step-hidden');
-      $('#calcResult').classList.add('step-hidden');
-      $('#errorPanel').classList.remove('step-hidden');
-      return;
-    }
-    // pass / fail
-    goStep(3);
-    $('#calcOverlay').classList.add('step-hidden');
-    $('#errorPanel').classList.add('step-hidden');
-    $('#calcResult').classList.remove('step-hidden');
-    const fail = s === 'fail';
-    $('#verdictPass').classList.toggle('step-hidden', fail);
-    $('#verdictFail').classList.toggle('step-hidden', !fail);
-    // summary bar verdict
-    const v = $('#ls_verdict');
-    if (fail) { v.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-sans text-[11px]'; v.style.background = 'rgba(220,38,38,.25)'; v.style.color = '#fca5a5'; v.textContent = '✕ ไม่ผ่าน'; $('#ls_dc').textContent = '123%'; }
-    else { v.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-sans text-[11px]'; v.style.background = 'rgba(22,163,74,.22)'; v.style.color = '#86efac'; v.textContent = '✓ ผ่าน'; $('#ls_dc').textContent = '78%'; }
   }
 
   /* ╔══════════════ master render ══════════════╗ */
@@ -8511,6 +8453,8 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
             document.querySelectorAll('#ccObBack .cc-ob-mode').length === 2 &&
             document.querySelectorAll('#ccObBack .cc-ob-ex').length === 6 &&
             document.querySelectorAll('#ccObBack .cc-ob-cap').length === 8);
+          A('onboarding: แนะนำระบบโปรเจกต์ (strip + 3 feature: หลายคาน/แยกชั้น/พิมพ์รวม)',
+            !!document.querySelector('#ccObBack .cc-ob-proj') && document.querySelectorAll('#ccObBack .cc-ob-pf').length === 3);
           _O.show();
           A('onboarding: show → overlay + พื้นหลัง inert (aria-modal · focus-trap)',
             document.getElementById('ccObBack').classList.contains('show') && document.getElementById('ccObBack').getAttribute('role') === 'dialog' && (!_app || _app.hasAttribute('inert')));
