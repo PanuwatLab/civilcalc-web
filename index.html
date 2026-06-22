@@ -922,6 +922,17 @@
             <div id="torsionSteps" class="space-y-2.5"></div>
           </div>
 
+          <!-- ปรับขนาดเหล็กหลังคำนวณ (single · เปลี่ยนขนาด → engine จัดเหล็กใหม่ให้ As ถึง realtime) -->
+          <div id="rebarPicker" data-mode-single class="card p-4 mt-7 flex flex-wrap items-center gap-x-5 gap-y-2.5">
+            <span class="text-[13px] font-semibold flex items-center gap-1.5"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--accent)"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.1 2.1-2-2 2.1-2.1z"/></svg>ปรับขนาดเหล็ก</span>
+            <label class="flex items-center gap-2 text-[13px]">เหล็กเมน
+              <select id="pickMain" class="num-field !font-sans" aria-label="เลือกขนาดเหล็กเมน"><option>DB12</option><option>DB16</option><option>DB20</option><option>DB25</option></select></label>
+            <label class="flex items-center gap-2 text-[13px]">เหล็กปลอก
+              <select id="pickStir" class="num-field !font-sans" aria-label="เลือกขนาดเหล็กปลอก"><option>RB6</option><option>RB9</option><option>DB10</option></select></label>
+            <button id="pickAuto" type="button" class="text-[12px] text-accent hover:underline">↺ ให้ระบบเลือก (auto)</button>
+            <span id="pickWarn" class="step-hidden text-[12px] font-medium w-full" style="color:var(--fail)">⚠ ขนาดเหล็กที่เลือกอาจไม่พอ — ลองขนาดใหญ่ขึ้น หรือกด “ให้ระบบเลือก”</span>
+          </div>
+
           <!-- หน้าตัด + ตารางสรุป -->
           <div class="grid lg:grid-cols-[300px_1fr] gap-6 mt-7 items-start">
             <div class="card p-5">
@@ -1240,6 +1251,9 @@
     get total() { return this.nodes.at(-1); },
     grid(i) { return this.gridNames[i] != null ? this.gridNames[i] : String.fromCharCode(65 + i); },
     gridNames: {},                                      // i -> ชื่อกริดที่ผู้ใช้แก้ (ตัวหนังสือ)
+    forceMain: '',                                      // บังคับขนาดเหล็กเมน (user เลือกหลังคำนวณ · '' = auto · 'DB20' = engine จัด count ใหม่ให้ As ถึง) · single mode
+    forceStir: '',                                      // บังคับขนาดเหล็กปลอก (user เลือก · '' = auto RB9/DB10 · 'RB6'/'DB10' = engine คิด spacing ใหม่จาก Av)
+
     get Wu() { const L = sumLoads(); return 1.4 * L.DL + 1.7 * L.LL; },   // kg/m (factored · 1.4D+1.7L · จาก load list จริง)
     points: [{ id: 1, x: 2.0, P: 5000, kind: 'LL' }],   // P in kg
     partials: [],                                       // { id, x0, x1, w(kg/m) }
@@ -1344,6 +1358,7 @@
       $$('.mode-btn').forEach(x => x.setAttribute('aria-checked', 'false'));
       b.setAttribute('aria-checked', 'true');
       state.mode = b.dataset.mode;
+      ccModel.forceMain = ''; ccModel.forceStir = '';   // สลับโหมด → ล้างการบังคับขนาดเหล็ก (กัน stale · picker = single เท่านั้น)
       applyMode();
       render();
     }));
@@ -1491,6 +1506,10 @@
     $('#in_grade').addEventListener('change', e => { P.grade = e.target.value; render(); });
     $('#in_db').addEventListener('change', e => { P.db = e.target.value; render(); });
     $('#in_ds').addEventListener('change', e => { P.dstir = e.target.value; render(); });
+    // ── ปรับขนาดเหล็กหลังคำนวณ (post-calc picker · single) — เปลี่ยนขนาด → engine จัดเหล็กใหม่ realtime ──
+    $('#pickMain') && $('#pickMain').addEventListener('change', e => { ccModel.forceMain = e.target.value; P.db = e.target.value; const s = $('#in_db'); if (s) s.value = e.target.value; render(); });
+    $('#pickStir') && $('#pickStir').addEventListener('change', e => { ccModel.forceStir = e.target.value; P.dstir = e.target.value; const s = $('#in_ds'); if (s) s.value = e.target.value; render(); });
+    $('#pickAuto') && $('#pickAuto').addEventListener('click', () => { ccModel.forceMain = ''; ccModel.forceStir = ''; render(); });
     // cover pills
     $$('#coverPills .pill').forEach(p => p.addEventListener('click', () => {
       $$('#coverPills .pill').forEach(x => x.setAttribute('aria-pressed', 'false'));
@@ -1896,6 +1915,8 @@
       const inp = {
         b: P.b, h: P.h, L: ccModel.total, fc: P.fc, fy, cover: P.cover,
         db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir),
+        main_bar_force: ccModel.forceMain || '',   // user บังคับขนาดเหล็กเมน → engine จัด count ใหม่ (parity · '' = auto)
+        stirrup_force: ccModel.forceStir || '',     // user บังคับขนาดเหล็กปลอก → engine คิด spacing ใหม่จาก Av (parity · '' = auto)
         DL: sumLoads().DL / K, LL: sumLoads().LL / K, load_combo: '1.4D+1.7L',
         stirrup_legs: state.legs === 2 ? 4 : 2,
         point_loads: ccModel.points.map(p => ({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: p.P / K, x: Math.min(ccModel.total, p.x) })),
@@ -3516,7 +3537,7 @@
     };
   };
   // stirrup symbol incl. leg count: e.g. 1ป-RB9@.15 / 2ป-RB9@.20
-  function stirText(spacing) { return state.legs + 'ป-RB9@' + spacing; }
+  function stirText(spacing) { const m = liveData(); return state.legs + 'ป-' + (m.stirBar || 'RB9') + '@' + spacing; }   // ขนาดปลอกจริงจาก engine (เดิม hardcode RB9 · pi 2026-06-23)
 
   // build ONE elevation SVG for a span list — shared by full view + per-span tiles
   function buildElevationSVG(c, opts) {
@@ -4233,6 +4254,20 @@
       `<div class="pd-foot">ผลคำนวณเบื้องต้น · ต้องตรวจสอบโดยวิศวกร ก.ว. ก่อนใช้งานจริง · Panuwat Civil Calc · พิมพ์ ${esc(dstr)}</div>`;
   }
 
+  /* sync dropdown ปรับขนาดเหล็ก (post-calc) + honest-warn — ค่า main = forced หรือ ขนาดที่ engine เลือกจริง */
+  function syncRebarPicker() {
+    const pm = $('#pickMain'), ps = $('#pickStir'), pw = $('#pickWarn');
+    if (!pm) return;
+    const m = liveData();
+    let mainSize = ccModel.forceMain;
+    if (!mainSize) { const mm = (m.rebarMain || '').match(/DB\d+/); mainSize = mm ? mm[0] : P.db; }   // auto → โชว์ขนาดที่ engine เลือก
+    if ([...pm.options].some(o => o.value === mainSize)) pm.value = mainSize;
+    let stirSize = ccModel.forceStir || m.stirBar || P.dstir;   // auto → โชว์ขนาดปลอกที่ engine เลือกจริง
+    if (ps && [...ps.options].some(o => o.value === stirSize)) ps.value = stirSize;
+    const failed = !!(state.res && state.res.pass === false);
+    if (pw) pw.classList.toggle('step-hidden', !((ccModel.forceMain || ccModel.forceStir) && failed));   // บังคับขนาด + ไม่ผ่าน → เตือน
+  }
+
   function render() {
     applyMode();
     updateSelfWeightRow();  // อัป self-weight ตาม b/h ก่อน recompute อ่าน sumLoads (Codex P2 · กันผลค้าง 1 render)
@@ -4243,6 +4278,7 @@
     renderWork();
     syncVerdict();
     if (state.step === 3) { drawMainSections(); if (state.ctab === 'detail') drawDetailing(); }
+    syncRebarPicker();    // sync dropdown ขนาดเหล็ก + honest-warn (post-calc picker)
     // continuous live summary tweaks (b×h via JS; Wu/Mu set inside drawStep2 via ccUnits)
     // b×h = live P ทั้ง 2 โหมด (section card ใช้ร่วมกัน · ตรงกับ engine input)
     $('#ls_bh').textContent = P.b + '×' + P.h;
@@ -4448,6 +4484,7 @@ class BeamInput:
     d_stirrup: float = 0.9            # stirrup diameter (cm · RB9 typical)
     db_assume: float = 1.6            # assumed main bar diameter for d-calc (cm · DB16 typical)
     main_bar_force: str = ""          # บังคับขนาดเหล็กเมน (user เลือกหลังคำนวณ · "" = auto เลือก optimal · "DB16"/"DB20"/... = เฉพาะขนาดนี้)
+    stirrup_force: str = ""           # บังคับขนาดเหล็กปลอก (user เลือก · "" = auto RB9/DB10 · "RB6"/"RB9"/"DB10")
     load_combo: LoadCombo = LoadCombo.ACI_MODERN
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
     stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
@@ -5208,6 +5245,7 @@ def design_shear(
     vu_design_override_kN: float | None = None,
     n_legs: int = 2,
     partials: list | None = None,
+    force_stirrup_bar: str = None,
 ) -> dict:
     """End-to-end shear design · returns a structured dict.
 
@@ -5275,7 +5313,7 @@ def design_shear(
     if Vu_at_d_kN <= half_phi_Vc + FLOAT_TOL:
         # No stirrup theoretically required · recommend minimum for detailing
         branch = "NO_STIRRUP"
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         s_final_S1 = 30.0   # constructability default
         s_final_S2 = 30.0
@@ -5291,7 +5329,7 @@ def design_shear(
     elif Vu_at_d_kN <= phi_Vc_kN + FLOAT_TOL:
         # Minimum stirrup required · Vs ≈ 0 · use A_v,min spacing limit
         branch = "MIN_STIRRUP"
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         s_min_av = _s_max_av_min(fc_ksc, b_cm, fyt_ksc, A_v)
         s_max_code = min(d_cm / 2.0, 60.0)
@@ -5333,7 +5371,7 @@ def design_shear(
             s_max_code = min(d_cm / 2.0, 60.0)
 
         # Try RB9 first (Thai default), fallback DB10 if spacing < 5 cm
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         # s_S1 from Vs equation (close zone · governed by Vu_at_d)
         # s = A_v · fyt · d / Vs_req   (Vs in kg · units balance: cm² · ksc · cm / kg = cm)
@@ -5347,8 +5385,10 @@ def design_shear(
         # Floor to practical (round DOWN · conservative)
         s_S1_final = _floor_to_practical_spacing(s_S1_capped)
         s_S2_final = _floor_to_practical_spacing(s_S2_capped)
-        # Fallback DB10 if spacing tighter than 5 cm
-        if s_S1_final < 5.0 - FLOAT_TOL:
+        # Fallback DB10 if spacing tighter than 5 cm (เฉพาะ auto · ถ้า user บังคับขนาด → เคารพ + เตือนถ้าแน่น)
+        if force_stirrup_bar and s_S1_final < 5.0 - FLOAT_TOL:
+            notes.append(f"⚠ ปลอก {bar} ระยะ {s_S1_final:.1f} ซม. แน่นมาก (<5 ซม.) — ควรเลือกขนาดใหญ่กว่า")
+        if (not force_stirrup_bar) and s_S1_final < 5.0 - FLOAT_TOL:
             bar = "DB10"
             A_v = _av_legs(bar, n_legs)
             s_req_S1_cm = A_v * fyt_ksc * d_cm / Vs_req_kg if Vs_req_kg > 0 else s_max_code
@@ -6336,6 +6376,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 phi=PHI_SHEAR,
                 n_legs=inp.stirrup_legs,
                 partials=factored_partials,
+                force_stirrup_bar=(inp.stirrup_force or None),
             )
             out.passes_shear = bool(out.stirrup_design.get("passes", False))
             # Merge shear citations into main list
@@ -8533,6 +8574,17 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('print·ต่อเนื่อง: §3 ตารางสรุปมีเหล็กบนหัวเสา (Codex P2-A #35)',
         !!_sum && /\(บน\)/.test(_sum.textContent || '') && _pdc.querySelectorAll('.pd-sum tbody tr').length >= 3,
         _sum ? ('top=' + /\(บน\)/.test(_sum.textContent) + ' rows=' + _pdc.querySelectorAll('.pd-sum tbody tr').length) : 'no-sum');
+
+      // ── ปรับขนาดเหล็กหลังคำนวณ (post-calc picker · main + stirrup force · pi 2026-06-23) ──
+      TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().recompute(); TT().render();
+      const _pkRow = document.querySelector('#rebarPicker'), _pkM = document.querySelector('#pickMain'), _pkS = document.querySelector('#pickStir');
+      A('picker: แถบปรับขนาดเหล็ก (single) + dropdown เมน + ปลอก',
+        !!_pkRow && !!_pkM && !!_pkS, 'row=' + !!_pkRow + ' main=' + !!_pkM + ' stir=' + !!_pkS);
+      if (_pkM) { _pkM.value = 'DB20'; _pkM.dispatchEvent(new Event('change')); }
+      A('picker: บังคับเหล็กเมน DB20 → engine จัดเหล็กใหม่ (rebarMain มี DB20 · parity)',
+        /DB20/.test((TT().res() || {}).rebarMain || ''), 'rebar=' + ((TT().res() || {}).rebarMain));
+      const _pkA = document.querySelector('#pickAuto'); if (_pkA) _pkA.click();   // reset force (กัน leak เข้า guard ถัดไป)
+      TT().setSection(25, 50, 240, 'SD40'); TT().recompute(); TT().render();
 
       // ── โปรเจกต์ (Phase A · หลายคาน) · mount + round-trip lossless + per-beam status + เก็บ ≥1 คาน ──
       const _CCP = window.CCProject;

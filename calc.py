@@ -184,6 +184,7 @@ class BeamInput:
     d_stirrup: float = 0.9            # stirrup diameter (cm · RB9 typical)
     db_assume: float = 1.6            # assumed main bar diameter for d-calc (cm · DB16 typical)
     main_bar_force: str = ""          # บังคับขนาดเหล็กเมน (user เลือกหลังคำนวณ · "" = auto เลือก optimal · "DB16"/"DB20"/... = เฉพาะขนาดนี้)
+    stirrup_force: str = ""           # บังคับขนาดเหล็กปลอก (user เลือก · "" = auto RB9/DB10 · "RB6"/"RB9"/"DB10")
     load_combo: LoadCombo = LoadCombo.ACI_MODERN
     point_loads: list[PointLoad] = field(default_factory=list)   # Session 2 · up to 5
     stirrup_legs: int = 2             # APPENDED (keep positional order stable) · 2=1ป · 4=2ป double
@@ -944,6 +945,7 @@ def design_shear(
     vu_design_override_kN: float | None = None,
     n_legs: int = 2,
     partials: list | None = None,
+    force_stirrup_bar: str = None,
 ) -> dict:
     """End-to-end shear design · returns a structured dict.
 
@@ -1011,7 +1013,7 @@ def design_shear(
     if Vu_at_d_kN <= half_phi_Vc + FLOAT_TOL:
         # No stirrup theoretically required · recommend minimum for detailing
         branch = "NO_STIRRUP"
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         s_final_S1 = 30.0   # constructability default
         s_final_S2 = 30.0
@@ -1027,7 +1029,7 @@ def design_shear(
     elif Vu_at_d_kN <= phi_Vc_kN + FLOAT_TOL:
         # Minimum stirrup required · Vs ≈ 0 · use A_v,min spacing limit
         branch = "MIN_STIRRUP"
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         s_min_av = _s_max_av_min(fc_ksc, b_cm, fyt_ksc, A_v)
         s_max_code = min(d_cm / 2.0, 60.0)
@@ -1069,7 +1071,7 @@ def design_shear(
             s_max_code = min(d_cm / 2.0, 60.0)
 
         # Try RB9 first (Thai default), fallback DB10 if spacing < 5 cm
-        bar = "RB9"
+        bar = force_stirrup_bar or "RB9"   # user บังคับขนาดปลอกได้ ('' = auto RB9)
         A_v = _av_legs(bar, n_legs)
         # s_S1 from Vs equation (close zone · governed by Vu_at_d)
         # s = A_v · fyt · d / Vs_req   (Vs in kg · units balance: cm² · ksc · cm / kg = cm)
@@ -1083,8 +1085,10 @@ def design_shear(
         # Floor to practical (round DOWN · conservative)
         s_S1_final = _floor_to_practical_spacing(s_S1_capped)
         s_S2_final = _floor_to_practical_spacing(s_S2_capped)
-        # Fallback DB10 if spacing tighter than 5 cm
-        if s_S1_final < 5.0 - FLOAT_TOL:
+        # Fallback DB10 if spacing tighter than 5 cm (เฉพาะ auto · ถ้า user บังคับขนาด → เคารพ + เตือนถ้าแน่น)
+        if force_stirrup_bar and s_S1_final < 5.0 - FLOAT_TOL:
+            notes.append(f"⚠ ปลอก {bar} ระยะ {s_S1_final:.1f} ซม. แน่นมาก (<5 ซม.) — ควรเลือกขนาดใหญ่กว่า")
+        if (not force_stirrup_bar) and s_S1_final < 5.0 - FLOAT_TOL:
             bar = "DB10"
             A_v = _av_legs(bar, n_legs)
             s_req_S1_cm = A_v * fyt_ksc * d_cm / Vs_req_kg if Vs_req_kg > 0 else s_max_code
@@ -2072,6 +2076,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 phi=PHI_SHEAR,
                 n_legs=inp.stirrup_legs,
                 partials=factored_partials,
+                force_stirrup_bar=(inp.stirrup_force or None),
             )
             out.passes_shear = bool(out.stirrup_design.get("passes", False))
             # Merge shear citations into main list
