@@ -79,6 +79,7 @@
   html,body{ background:var(--bg); color:var(--ink); font-family:"Sarabun","IBM Plex Sans Thai",system-ui,sans-serif; }
   body{ background:linear-gradient(180deg,#eaf2f9 0%,#f4f7fa 26%,#f4f4f5 70%); background-attachment:fixed; }
   body{ font-feature-settings:"liga" 1; }
+  fieldset{ min-width:0; }   /* override default min-width:min-content ของ <fieldset> → ยอมหดบนมือถือ (กัน card ล้นแนวนอน) */
   .mono{ font-family:"JetBrains Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums; }
 
   /* motion ≤200ms · reduced-motion ปิด */
@@ -295,7 +296,7 @@
   .cc-fbtn svg{ width:14px; height:14px; }
 
   /* active-beam breadcrumb strip injected into app header area */
-  #ccCrumb{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-muted); padding:8px 0 0; }
+  #ccCrumb{ display:flex; align-items:center; flex-wrap:wrap; gap:7px; font-size:12.5px; color:var(--ink-muted); padding:8px 0 0; }
   #ccCrumb b{ color:var(--ink); font-weight:600; }
   #ccCrumb svg{ width:13px; height:13px; opacity:.55; }
   .cc-cacts{ display:inline-flex; gap:4px; margin-left:8px; }
@@ -307,7 +308,7 @@
   @media (max-width:900px){ body.cc-open #app{ margin-left:0; } }
 
   /* ╔══════════ Onboarding / นำทาง (CCOnboard) ══════════╗ */
-  .cc-ob-back{ position:fixed; inset:0; z-index:1200; display:none; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto;
+  .cc-ob-back{ position:fixed; inset:0; z-index:1200; display:none; align-items:flex-start; justify-content:center; padding:30px 16px; overflow-y:auto; overflow-x:hidden;
     background:radial-gradient(120% 100% at 50% 0%, rgba(20,40,70,.32), rgba(20,40,70,.5)); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
   .cc-ob-back.show{ display:flex; animation:ccObFade .3s ease both; }
   @keyframes ccObFade{ from{opacity:0} to{opacity:1} }
@@ -543,7 +544,7 @@
 
     <!-- ╔═══════════ STEP ① PARAMETERS ═══════════╗ -->
     <section id="step1" class="step-panel" role="tabpanel" aria-label="ขั้นพารามิเตอร์">
-      <div class="grid lg:grid-cols-[1fr_360px] gap-6 items-start">
+      <div class="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
 
         <!-- LEFT: form -->
         <div class="card p-5 sm:p-6 space-y-7">
