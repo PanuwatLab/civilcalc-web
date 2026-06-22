@@ -400,6 +400,18 @@
   /* inline help hints (help mode) */
   .cc-ob-hint{ display:block; font-size:11px; color:#b45309; background:rgba(217,119,6,.07); border-left:2px solid rgba(217,119,6,.4); border-radius:0 5px 5px 0; padding:3px 8px; margin:3px 0 6px; line-height:1.4; animation:ccObHintIn .3s var(--ease,cubic-bezier(.16,1,.3,1)) both; }
   @keyframes ccObHintIn{ from{opacity:0;transform:translateY(-3px)} to{opacity:1;transform:none} }
+  /* คู่มืออ่านผล (help-mode legend · element คงที่ · ซ่อน default) */
+  .cc-help-legend{ display:none; margin:0 0 14px; background:#fff; border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:0 12px 12px 0; padding:12px 16px; box-shadow:0 2px 10px rgba(20,40,70,.05); }
+  .cc-help-legend.show{ display:block; animation:ccObHintIn .3s var(--ease,cubic-bezier(.16,1,.3,1)) both; }
+  .cc-hl-hd{ font-size:13.5px; font-weight:600; color:var(--accent); display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .cc-hl-hd svg{ width:17px; height:17px; flex:none; }
+  .cc-hl-tag{ font-size:10.5px; font-weight:600; color:#b45309; background:rgba(217,119,6,.1); border-radius:6px; padding:2px 8px; }
+  .cc-hl-grid{ display:grid; grid-template-columns:1fr 1fr; gap:7px 18px; }
+  .cc-hl-item{ display:flex; gap:9px; align-items:baseline; font-size:12px; line-height:1.45; }
+  .cc-hl-k{ flex:none; min-width:78px; font-weight:600; color:var(--ink); }
+  .cc-hl-v{ color:var(--ink-muted); }
+  .cc-hl-v b{ color:var(--ink); font-weight:600; font-family:"JetBrains Mono",monospace; }
+  @media (max-width:760px){ .cc-hl-grid{ grid-template-columns:1fr; } }
   @media (max-width:620px){ .cc-ob-modes,.cc-ob-exgrid{ grid-template-columns:1fr; } .cc-ob-card{ padding:24px 20px; } }
   @media (prefers-reduced-motion:reduce){ .cc-ob-back *{ animation:none !important; transition-duration:.01ms !important; } }
 </style>
@@ -456,6 +468,10 @@
             <button class="unit-btn" data-unit="kg" aria-pressed="true">kg</button>
             <button class="unit-btn" data-unit="T" aria-pressed="false">T</button>
           </div>
+          <button id="helpModeBtn" class="cc-help-btn anim" aria-pressed="false" aria-label="โหมดช่วยเหลือ — แสดงคำอธิบายช่องกรอกและผลลัพธ์" title="โหมดช่วยเหลือ — แสดงคำอธิบาย">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+            <span class="hidden sm:inline">ช่วยเหลือ</span>
+          </button>
           <button class="w-9 h-9 grid place-items-center rounded-ctrl border border-border text-ink-muted hover:bg-bg anim" aria-label="เมนู">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
           </button>
@@ -1058,6 +1074,10 @@
   .unit-btn{ padding:5px 12px; background:#fff; color:var(--ink-muted); font-family:"JetBrains Mono",monospace; }
   .unit-btn[aria-pressed=true]{ background:var(--accent); color:#fff; font-weight:600; }
   .unit-btn:first-child{ border-right:1px solid var(--border); }
+  .cc-help-btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border:1px solid var(--border); border-radius:10px; background:#fff; color:var(--ink-muted); font-size:13px; font-weight:500; cursor:pointer; }
+  .cc-help-btn:hover{ border-color:#bdc8d6; color:var(--ink); }
+  .cc-help-btn.on{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .cc-help-btn svg{ flex:none; }
 
   .step-tab{ display:flex; align-items:center; gap:8px; padding:6px 4px; border-bottom:2px solid transparent; color:var(--ink-muted); font-size:14px; white-space:nowrap; }
   .step-tab .sl{ white-space:nowrap; }
@@ -2023,6 +2043,7 @@
     init() {
       this._build();
       this._applyHelp(this.helpOn());
+      this._syncHelpUI(this.helpOn());                       // ตั้งสถานะปุ่มช่วยเหลือ (header + welcome) ตาม localStorage
       const fresh = !this._ls(this._K_DONE);
       const beams = (window.CCProject && CCProject.data && CCProject.data.beams) ? CCProject.data.beams.length : 0;
       if (fresh && beams <= 1) this.show();                 // first-visit only · ไม่เด้งซ้ำ ถ้ามีโปรเจกต์แล้ว
@@ -2069,10 +2090,14 @@
       this.hide();
     },
     toggleHelp() {
-      const on = !this.helpOn(); this._set(this._K_HELP, on ? '1' : '0'); this._applyHelp(on);
-      const el = $('#ccObHelp'); if (el) { el.classList.toggle('on', on); el.setAttribute('aria-checked', String(on)); }
+      const on = !this.helpOn(); this._set(this._K_HELP, on ? '1' : '0'); this._applyHelp(on); this._syncHelpUI(on);
+    },
+    _syncHelpUI(on) {   // sync ทั้งสวิตช์ใน welcome + ปุ่ม 'ช่วยเหลือ' ในหัวแอป (state เดียวกัน)
+      const sw = document.getElementById('ccObHelp'); if (sw) { sw.classList.toggle('on', on); sw.setAttribute('aria-checked', String(on)); }
+      const btn = document.getElementById('helpModeBtn'); if (btn) { btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on)); }
     },
     _applyHelp(on) {
+      const lg = document.getElementById('ccHelpLegend'); if (lg) lg.classList.toggle('show', !!on);   // คู่มืออ่านผล (element คงที่ · ไม่ inject ต่อผลที่ re-render)
       document.querySelectorAll('.cc-ob-hint').forEach(h => h.remove());
       if (!on) return;
       this.HINTS.forEach(p => {
@@ -2081,6 +2106,22 @@
         if (anchor.parentNode) { const h = document.createElement('span'); h.className = 'cc-ob-hint'; h.textContent = '💡 ' + p[1]; anchor.parentNode.insertBefore(h, anchor.nextSibling); }
       });
     },
+    _buildLegend() {
+      if (document.getElementById('ccHelpLegend')) return;
+      const main = document.querySelector('main'); if (!main) return;
+      const ITEMS = [
+        ['เหล็กเสริม', '<b>3-DB25</b> = เหล็ก 3 เส้น · ขนาด Ø25 มม. (DB = เหล็กข้ออ้อย)'],
+        ['D/C ใช้กำลัง', '<b>87%</b> = ใช้กำลังไป 87% เหลือเผื่อ 13% · <b>เกิน 100% = ไม่ผ่าน</b>'],
+        ['ผ่าน / ไม่ผ่าน', 'หน้าตัด + เหล็ก พอ/ไม่พอ ต่อโหลดที่ใส่'],
+        ['กราฟ', '<b>V</b> = แรงเฉือน · <b>M</b> = โมเมนต์ดัด · <b>TMD</b> = แรงบิด'],
+        ['ปลอก', '<b>RB9@0.15</b> = เหล็กปลอก Ø9 มม. ทุกระยะ 0.15 ม.']
+      ];
+      const el = document.createElement('div'); el.id = 'ccHelpLegend'; el.className = 'cc-help-legend no-print'; el.setAttribute('role', 'note'); el.setAttribute('aria-label', 'คู่มืออ่านผลลัพธ์');
+      el.innerHTML = '<div class="cc-hl-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h7a3 3 0 0 1 3 3v13a2.5 2.5 0 0 0-2.5-2.5H2zM22 4h-7a3 3 0 0 0-3 3v13a2.5 2.5 0 0 1 2.5-2.5H22z"/></svg> อ่านผลยังไง <span class="cc-hl-tag">โหมดช่วยเหลือ</span></div>' +
+        '<div class="cc-hl-grid">' + ITEMS.map(i => '<div class="cc-hl-item"><span class="cc-hl-k">' + i[0] + '</span><span class="cc-hl-v">' + i[1] + '</span></div>').join('') + '</div>';
+      const crumb = document.getElementById('ccCrumb');
+      if (crumb) main.insertBefore(el, crumb.nextSibling); else main.insertBefore(el, main.firstChild);
+    },
     _build() {
       if (this._built) return; this._built = true;
       const fab = document.createElement('button'); fab.className = 'cc-ob-fab'; fab.id = 'ccObFab';
@@ -2088,6 +2129,7 @@
       fab.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.2a2.5 2.5 0 1 1 3.4 2.3c-.8.4-1.1.9-1.1 1.6M12 17h.01"/></svg>';
       fab.addEventListener('click', () => this.show());
       document.body.appendChild(fab);
+      this._buildLegend();   // คู่มืออ่านผล (ซ่อนไว้ · แสดงเมื่อเปิดโหมดช่วยเหลือ)
 
       const tick = '<span class="cc-ob-tick"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>';
       const diaSingle = '<div class="cc-ob-dia"><svg viewBox="0 0 180 70" preserveAspectRatio="xMidYMid meet"><g class="ld" stroke="#2f6690" stroke-width="1.6" stroke-linecap="round"><line x1="45" y1="13" x2="45" y2="24"/><line x1="45" y1="24" x2="41" y2="19"/><line x1="45" y1="24" x2="49" y2="19"/><line x1="75" y1="13" x2="75" y2="24"/><line x1="75" y1="24" x2="71" y2="19"/><line x1="75" y1="24" x2="79" y2="19"/><line x1="105" y1="13" x2="105" y2="24"/><line x1="105" y1="24" x2="101" y2="19"/><line x1="105" y1="24" x2="109" y2="19"/><line x1="135" y1="13" x2="135" y2="24"/><line x1="135" y1="24" x2="131" y2="19"/><line x1="135" y1="24" x2="139" y2="19"/></g><rect class="bm" x="35" y="28" width="110" height="9" rx="2" fill="#2f6690"/><path d="M35 37 L28 49 L42 49 Z" fill="#0f766e"/><path d="M145 37 L138 49 L152 49 Z" fill="#0f766e"/><line x1="20" y1="49" x2="50" y2="49" stroke="#9aa6b4" stroke-width="1.4"/><line x1="130" y1="49" x2="160" y2="49" stroke="#9aa6b4" stroke-width="1.4"/></svg></div>';
@@ -2135,7 +2177,7 @@
       const hp = $('#ccObHelp');
       hp.addEventListener('click', () => this.toggleHelp());
       hp.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.toggleHelp(); } });   // role=switch (ไม่ใช่ <button>) → ต้อง keydown
-      if (this.helpOn()) { hp.classList.add('on'); hp.setAttribute('aria-checked', 'true'); }
+      const hmb = document.getElementById('helpModeBtn'); if (hmb) hmb.addEventListener('click', () => this.toggleHelp());   // ปุ่มในหัวแอป (เห็นชัด · sync state เดียวกัน)
       // a11y: focus-trap (Tab/Shift+Tab วนใน dialog) + Esc ปิด
       back.addEventListener('keydown', e => {
         if (e.key === 'Escape') { this.hide(); return; }
@@ -8475,8 +8517,19 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           _O._set(_O._K_HELP, '0'); _O.toggleHelp();
           A('onboarding: help on → hints รายช่องโผล่', document.querySelectorAll('.cc-ob-hint').length >= 1);
           A('onboarding: help hint ไม่แทรกตรงใน <table> (valid markup)', ![...document.querySelectorAll('.cc-ob-hint')].some(h => h.parentNode && h.parentNode.tagName === 'TABLE'));
+          A('onboarding: help on → legend อ่านผล แสดง + มี ≥5 รายการ',
+            !!document.getElementById('ccHelpLegend') && document.getElementById('ccHelpLegend').classList.contains('show') && document.querySelectorAll('#ccHelpLegend .cc-hl-item').length >= 5);
           _O.toggleHelp();
           A('onboarding: help off → hints หาย (idempotent)', document.querySelectorAll('.cc-ob-hint').length === 0);
+          A('onboarding: help off → legend อ่านผล ซ่อน', !document.getElementById('ccHelpLegend').classList.contains('show'));
+          A('onboarding: ปุ่ม "ช่วยเหลือ" ในหัวแอป มี + คลิกสลับ help + sync (legend/aria-pressed)', (() => {
+            const btn = document.getElementById('helpModeBtn'); if (!btn) return false;
+            btn.click();   // → on
+            const onOk = _O.helpOn() && btn.getAttribute('aria-pressed') === 'true' && btn.classList.contains('on') && document.getElementById('ccHelpLegend').classList.contains('show');
+            btn.click();   // → off
+            const offOk = !_O.helpOn() && btn.getAttribute('aria-pressed') === 'false' && !document.getElementById('ccHelpLegend').classList.contains('show');
+            return onOk && offOk;
+          })());
         } finally {
           _O.hide();
           _CCP.data.beams = _obBeams; _CCP.activeId = _obActive; _CCP._seq = _obSeq;   // คืนคานทดสอบ (loadExample addBeam)
@@ -8484,7 +8537,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           try { if (_obRaw == null) localStorage.removeItem(_CCP._STORE_KEY); else localStorage.setItem(_CCP._STORE_KEY, _obRaw); } catch (e) {}
           try { if (_obDone == null) localStorage.removeItem(_O._K_DONE); else _O._set(_O._K_DONE, _obDone); } catch (e) {}
           try { if (_obHelp == null) localStorage.removeItem(_O._K_HELP); else _O._set(_O._K_HELP, _obHelp); } catch (e) {}
-          _O._applyHelp(_O.helpOn());
+          _O._applyHelp(_O.helpOn()); _O._syncHelpUI(_O.helpOn());   // P3 review: คืน UI ปุ่ม/สวิตช์ help ให้ตรง state ด้วย (ไม่ใช่แค่ legend)
           _CCP.restoreLive(_obLive);
           if (_CCP.renderRail) _CCP.renderRail();
         }
