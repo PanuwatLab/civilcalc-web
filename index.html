@@ -23,20 +23,23 @@
     theme: {
       extend: {
         colors: {
-          bg:        '#F8FAFC',
+          /* Panuwat Lab design system (จาก RebarStudio · pi 2026-06-22) — ตรงกับ CSS :root */
+          bg:        '#F4F4F5',
           surface:   '#FFFFFF',
-          border:    '#E2E8F0',
-          ink:       '#1F2937',
-          'ink-muted': '#64748B',
-          accent:    '#2563EB',
-          'accent-soft': '#EEF2FF',
-          pass:      '#16A34A',
-          fail:      '#DC2626',
-          rebar:     '#1D4ED8',
+          border:    '#E3E7EC',
+          ink:       '#22425C',
+          'ink-muted': '#5D6B7B',
+          accent:    '#2F6690',
+          'accent-soft': '#E7EFF6',
+          steel:     '#2F6690',
+          teal:      '#0F766E',
+          pass:      '#059669',
+          fail:      '#E11D48',
+          rebar:     '#2F6690',
           concrete:  '#CBD5E1',
         },
         fontFamily: {
-          sans: ['"IBM Plex Sans Thai"', 'system-ui', 'sans-serif'],
+          sans: ['"Sarabun"', '"IBM Plex Sans Thai"', 'system-ui', 'sans-serif'],
           mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
         },
         borderRadius: { card: '8px', ctrl: '6px' },
@@ -84,7 +87,7 @@
   input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.2); }
   input[type=range]::-moz-range-thumb{ width:16px; height:16px; border:none; border-radius:50%; background:var(--accent); cursor:pointer; }
   .num-field{ width:100%; border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:15px; background:#fff; }
-  .num-field:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  .num-field:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(47,102,144,.12); }
   .num-field.invalid{ border-color:var(--fail); box-shadow:0 0 0 3px rgba(220,38,38,.10); }
 
   .badge-code{ background:var(--code-badge-bg); color:var(--accent); border:1px solid #DBE3FF; font-size:11px; padding:1px 7px; border-radius:5px; white-space:nowrap; }
@@ -306,7 +309,7 @@
 <!-- ════════════════ BOOT overlay (Pyodide loading) ════════════════ -->
 <div id="bootScreen" class="fixed inset-0 z-40 bg-bg flex flex-col items-center justify-center gap-5">
   <div class="flex items-center gap-3 text-ink">
-    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2563EB" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2F6690" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2F6690" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <div class="text-xl font-semibold">Civil Calc</div>
   </div>
   <div class="flex items-center gap-3 text-ink-muted">
@@ -328,7 +331,7 @@
       <!-- row 1: brand · registry · menu -->
       <div class="h-14 flex items-center gap-4">
         <div class="flex items-center gap-2 shrink-0">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2563EB" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2F6690" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2F6690" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <h1 class="text-[17px] font-bold tracking-tight">Civil&nbsp;Calc</h1>
         </div>
 
@@ -1667,6 +1670,7 @@
   function ccSyncControls() {
     document.querySelectorAll('[data-sync="b"]').forEach(el => el.value = P.b);
     document.querySelectorAll('[data-sync="h"]').forEach(el => el.value = P.h);
+    document.querySelectorAll('[data-sync="L"]').forEach(el => el.value = P.L);   // A1-P2: ช่วงเดียว L (กันช่องค้างค่าเก่า → แก้ทับ P.L)
     const g = document.querySelector('#in_grade'); if (g) g.value = P.grade;
     const db = document.querySelector('#in_db'); if (db) db.value = P.db;
     const ds = document.querySelector('#in_ds'); if (ds) ds.value = P.dstir;
@@ -1697,6 +1701,7 @@
     _id() { return 'b' + (++this._seq); },
     active() { return this.data.beams.find(b => b.id === this.activeId) || null; },
     capture() { return ccCaptureInput(); },   // expose สำหรับ audit (คนละ script scope กับ ccCaptureInput)
+    restoreLive(s) { if (s) ccApplyInput(s); },   // A1-P3: คืน live input เต็ม (ให้ audit ไม่ทิ้งสถานะ user เพี้ยน)
 
     /* ── persist (localStorage · schema-versioned · debounced · ห้าม trust storage) ── */
     persist(immediate) {
@@ -1731,7 +1736,7 @@
     _migrateV1toV2(o) { o.project.floors = this._deriveFloors(o.project.beams); o.project.collapsed = {}; o.v = 2; return o; },
     newProject() {
       if (!confirm('เริ่มโปรเจกต์ใหม่? (โปรเจกต์ปัจจุบันที่บันทึกไว้จะถูกแทนที่)')) return;
-      this.data = { name: 'โครงการใหม่', beams: [] }; this._seq = 0;
+      this.data = { name: 'โครงการใหม่', beams: [], floors: ['ชั้น 1'], collapsed: {} }; this._seq = 0;   // A1-P3: shape ครบ
       const b = { id: this._id(), label: 'B1', group: 'ชั้น 1', input: ccCaptureInput(), summary: this.summaryNow() };
       this.data.beams.push(b); this.activeId = b.id;
       this.renderRail(); this.updateCrumb(); this.persist(true);
@@ -1744,9 +1749,12 @@
     },
     nextLabel() { let n = 1; const used = new Set(this.data.beams.map(b => b.label)); while (used.has('B' + n)) n++; return 'B' + n; },
     summaryNow() {
-      const r = state.res || {};
-      const ok = r._err ? null : !!r.pass;
-      return { status: r._err ? 'idle' : (r.pass ? 'ok' : 'bad'), dc: r.dc || null, dims: P.b + '×' + P.h, computed: !r._err };
+      // A1-P2: ยังไม่คำนวณ/engine ไม่พร้อม → idle (state.res ว่าง) · engine reject (หน้าตัดเล็กเกินออกแบบไม่ได้) → bad (ไม่ใช่ idle)
+      const dims = P.b + '×' + P.h;
+      if (!state.res) return { status: 'idle', dc: null, dims, computed: false };
+      const r = state.res;
+      if (r._err) return { status: 'bad', dc: null, dims, computed: true, err: true };   // ออกแบบไม่ผ่าน (engine reject) — ห้ามโชว์ "ยังไม่คำนวณ"
+      return { status: r.pass ? 'ok' : 'bad', dc: r.dc || null, dims, computed: true };
     },
     init() {
       if (this._mounted) return; this._mounted = true;
@@ -1776,10 +1784,10 @@
       document.body.appendChild(rail);
       const bd = document.createElement('div'); bd.id = 'ccBackdrop'; document.body.appendChild(bd);
       bd.addEventListener('click', () => document.body.classList.remove('cc-open'));
-      const tg = document.createElement('button'); tg.id = 'ccToggle'; tg.setAttribute('aria-label', 'เปิด/ปิด รายการคาน');
+      const tg = document.createElement('button'); tg.id = 'ccToggle'; tg.setAttribute('aria-label', 'เปิด/ปิด รายการคาน'); tg.setAttribute('aria-expanded', String(document.body.classList.contains('cc-open')));
       tg.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span class="cc-tg-txt">คาน</span>';
       document.body.appendChild(tg);
-      tg.addEventListener('click', () => document.body.classList.toggle('cc-open'));
+      tg.addEventListener('click', () => { const open = document.body.classList.toggle('cc-open'); tg.setAttribute('aria-expanded', String(open)); });
       // breadcrumb เข้าหัว main
       const main = document.querySelector('main');
       if (main) {
@@ -1788,6 +1796,8 @@
         c.addEventListener('change', e => { const s = e.target.closest('[data-cc-floor]'); if (s) this.moveBeamToFloor(this.activeId, s.value); });
       }
       rail.addEventListener('click', e => this._onRailClick(e));
+      // A2-P2: คีย์บอร์ดเรียกแก้ชื่อ (cc-pname/cc-grp-name เป็น div/span · ปุ่มอื่นเป็น <button> รับ Enter เองอยู่แล้ว)
+      rail.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-fl-edit],.cc-pname')) { e.preventDefault(); this._onRailClick(e); } });
     },
     _onRailClick(e) {
       const tog = e.target.closest('[data-fl-tog]'); if (tog) { this.toggleFloor(tog.dataset.flTog); return; }
@@ -1854,7 +1864,7 @@
     toggleFloor(name) {
       this.data.collapsed = this.data.collapsed || {}; this.data.collapsed[name] = !this.data.collapsed[name];
       const el = [...document.querySelectorAll('#ccRail .cc-grp')].find(g => g.dataset.floor === name);
-      if (el) el.classList.toggle('col', !!this.data.collapsed[name]);   // toggle in-place (animation นุ่ม · ไม่ rebuild)
+      if (el) { el.classList.toggle('col', !!this.data.collapsed[name]); const tog = el.querySelector('.cc-grp-tog'); if (tog) tog.setAttribute('aria-expanded', String(!this.data.collapsed[name])); }   // toggle in-place (animation นุ่ม)
       this.persist();
     },
     editFloor(name) {
@@ -1900,9 +1910,11 @@
         ccApplyInput(b.input);                          // → render() คำนวณ + วาด + populate
         const mem = document.querySelector('#pt_member'); if (mem) mem.textContent = 'คาน ' + b.label + (b.group ? ' · ' + b.group : '');
         ccPopulatePrintDoc();                           // repopulate ให้หัวเอกสารมีชื่อคานถูก
-        const r = state.res || {};
+        const r = state.res;
+        // A1-P2: ไม่ ready → "ยังไม่คำนวณ" · engine reject (_err) หรือ passes:false → "ไม่ผ่าน" (ห้ามซ่อน fail ในเอกสาร ก.ว.)
+        const st = !r ? 'ยังไม่คำนวณ' : (r._err ? 'ไม่ผ่าน' : (r.pass ? 'ผ่าน' : 'ไม่ผ่าน'));
         parts.push({ b, html: document.querySelector('#cc-print-doc').innerHTML, bh: P.b + '×' + P.h,
-          status: (!r._err && state.res) ? (r.pass ? 'ผ่าน' : 'ไม่ผ่าน') : 'ยังไม่คำนวณ', dc: (r.dc != null) ? r.dc : null });
+          status: st, dc: (r && r.dc != null) ? r.dc : null });
       });
       const html = this._buildCombinedDoc(parts);
       // คืนสภาพ: step + projName + คานที่ active เดิม
@@ -1974,8 +1986,8 @@
         const bad = fb.filter(b => b.summary && b.summary.status === 'bad').length;
         const metaTxt = fb.length ? (fb.length + ' คาน' + (pass ? ' · ' + pass + '✓' : '') + (bad ? ' · ' + bad + '✗' : '')) : 'ว่าง';
         return `<div class="cc-grp${col}" data-floor="${ccEsc(fname)}">` +
-          `<div class="cc-grp-h"><button class="cc-grp-tog" data-fl-tog="${ccEsc(fname)}" aria-label="พับ/กางชั้น">${chev}</button>` +
-            `<span class="cc-grp-name" data-fl-edit="${ccEsc(fname)}" title="คลิกเพื่อเปลี่ยนชื่อชั้น">${ccEsc(fname)}</span>` +
+          `<div class="cc-grp-h"><button class="cc-grp-tog" data-fl-tog="${ccEsc(fname)}" aria-label="พับ/กางชั้น ${ccEsc(fname)}" aria-expanded="${!col}">${chev}</button>` +
+            `<span class="cc-grp-name" data-fl-edit="${ccEsc(fname)}" role="button" tabindex="0" title="คลิก/Enter เพื่อเปลี่ยนชื่อชั้น" aria-label="เปลี่ยนชื่อชั้น ${ccEsc(fname)}">${ccEsc(fname)}</span>` +
             `<span class="cc-grp-meta">${metaTxt}</span>` +
             `<span class="cc-grp-acts">` +
               `<button class="cc-ga" data-fl-add="${ccEsc(fname)}" aria-label="เพิ่มคานในชั้นนี้" title="เพิ่มคานในชั้นนี้"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>` +
@@ -1987,7 +1999,7 @@
       }).join('');
       rail.innerHTML =
         `<div class="cc-head"><div class="cc-logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg></div>` +
-          `<div style="min-width:0"><div class="cc-pname" title="คลิกเพื่อเปลี่ยนชื่อโครงการ" data-ccact="renameProject">${ccEsc(this.data.name)}</div>` +
+          `<div style="min-width:0"><div class="cc-pname" role="button" tabindex="0" title="คลิก/Enter เพื่อเปลี่ยนชื่อโครงการ" aria-label="เปลี่ยนชื่อโครงการ" data-ccact="renameProject">${ccEsc(this.data.name)}</div>` +
           `<div class="cc-pmeta">${this.data.beams.length} คาน · ${r.pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ค้าง' : ''}</div></div>` +
           `<div class="cc-ring" title="${r.pass}/${r.tot} คานผ่าน"><svg width="40" height="40"><circle cx="20" cy="20" r="16" fill="none" stroke="rgba(34,66,92,.1)" stroke-width="3.5"/><circle id="ccRingArc" cx="20" cy="20" r="16" fill="none" stroke="url(#ccRingG)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="${r.off}" style="transition:stroke-dashoffset .9s cubic-bezier(.16,1,.3,1)"/><defs><linearGradient id="ccRingG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#356897"/><stop offset="1" stop-color="#0f766e"/></linearGradient></defs></svg><div class="v">${r.pass}/${r.tot}</div></div></div>` +
         `<div class="cc-tree">${tree}<div class="cc-addrow">` +
@@ -2030,6 +2042,7 @@
     },
     // เรียกจาก render() ทุกครั้ง — อัปสถานะคานที่เปิดอยู่ (in-place · ไม่ rebuild rail · กัน animation ซ้ำ)
     onRender() {
+      if (this._noPersist || this._printingAll) return;   // A1-P3: batch ภายใน (build/print/audit) render คานที่ ≠ active → อย่าเขียน summary ผิดคาน
       const b = this.active(); if (!b) return;
       b.summary = this.summaryNow();
       const el = document.querySelector(`#ccRail .cc-beam[data-ccid="${b.id}"]`);
@@ -2167,13 +2180,13 @@
       // partial UDLs — shaded band + draggable end handles + draggable body
       ccModel.partials.forEach((q, i) => {
         const xa = X(q.x0), xb = X(q.x1), bandY = beamY - 34, bandH = 18;
-        svg.appendChild(svgEl('rect', { x: xa, y: bandY, width: Math.max(2, xb - xa), height: bandH, fill: 'rgba(37,99,235,.10)', stroke: '#2563EB', 'stroke-width': 1 }));
-        const lbl = svgEl('text', { x: (xa + xb) / 2, y: bandY - 3, 'font-size': 9.5, fill: '#2563EB', 'text-anchor': 'middle', 'font-weight': 600 }); lbl.textContent = 'w' + (i + 1) + ' ' + ccUnits.W(q.w); svg.appendChild(lbl);
+        svg.appendChild(svgEl('rect', { x: xa, y: bandY, width: Math.max(2, xb - xa), height: bandH, fill: 'rgba(47,102,144,.10)', stroke: '#2F6690', 'stroke-width': 1 }));
+        const lbl = svgEl('text', { x: (xa + xb) / 2, y: bandY - 3, 'font-size': 9.5, fill: '#2F6690', 'text-anchor': 'middle', 'font-weight': 600 }); lbl.textContent = 'w' + (i + 1) + ' ' + ccUnits.W(q.w); svg.appendChild(lbl);
         // body drag
         const body = svgEl('rect', { x: xa, y: bandY, width: Math.max(2, xb - xa), height: bandH, fill: 'transparent', cursor: 'move' });
         this._dragPartial(body, host, i, 'move'); svg.appendChild(body);
         // end handles
-        [['x0', xa], ['x1', xb]].forEach(([k, hx]) => { const hnd = svgEl('rect', { x: hx - 4, y: bandY - 2, width: 8, height: bandH + 4, rx: 2, fill: '#2563EB', cursor: 'ew-resize' }); this._dragPartial(hnd, host, i, k); svg.appendChild(hnd); });
+        [['x0', xa], ['x1', xb]].forEach(([k, hx]) => { const hnd = svgEl('rect', { x: hx - 4, y: bandY - 2, width: 8, height: bandH + 4, rx: 2, fill: '#2F6690', cursor: 'ew-resize' }); this._dragPartial(hnd, host, i, k); svg.appendChild(hnd); });
       });
 
       // point loads — draggable arrow glyphs
@@ -2294,14 +2307,14 @@
       const x1 = X(lo), x2 = X(hi), y = dd.y;
       if (x2 - x1 < 1) {
         // zero-length: show a small tick + 0.00 so user still gets feedback at the grid
-        svg.appendChild(svgEl('line', { x1, y1: y - 5, x2: x1, y2: y + 5, stroke: '#2563EB', 'stroke-width': 1.2 }));
+        svg.appendChild(svgEl('line', { x1, y1: y - 5, x2: x1, y2: y + 5, stroke: '#2F6690', 'stroke-width': 1.2 }));
         return;
       }
-      svg.appendChild(svgEl('line', { x1, y1: y, x2, y2: y, stroke: '#2563EB', 'stroke-width': 1.2 }));
-      [x1, x2].forEach(xx => svg.appendChild(svgEl('line', { x1: xx, y1: y - 5, x2: xx, y2: y + 5, stroke: '#2563EB', 'stroke-width': 1.2 })));
-      svg.appendChild(svgEl('path', { d: `M${x1 + 6},${y - 3} L${x1},${y} L${x1 + 6},${y + 3}`, stroke: '#2563EB', 'stroke-width': 1.2, fill: 'none' }));
-      svg.appendChild(svgEl('path', { d: `M${x2 - 6},${y - 3} L${x2},${y} L${x2 - 6},${y + 3}`, stroke: '#2563EB', 'stroke-width': 1.2, fill: 'none' }));
-      const t = svgEl('text', { x: (x1 + x2) / 2, y: y - 4, 'font-size': 10, fill: '#2563EB', 'text-anchor': 'middle', 'font-weight': 700, stroke: '#fff', 'stroke-width': 3, 'paint-order': 'stroke', 'stroke-linejoin': 'round' });
+      svg.appendChild(svgEl('line', { x1, y1: y, x2, y2: y, stroke: '#2F6690', 'stroke-width': 1.2 }));
+      [x1, x2].forEach(xx => svg.appendChild(svgEl('line', { x1: xx, y1: y - 5, x2: xx, y2: y + 5, stroke: '#2F6690', 'stroke-width': 1.2 })));
+      svg.appendChild(svgEl('path', { d: `M${x1 + 6},${y - 3} L${x1},${y} L${x1 + 6},${y + 3}`, stroke: '#2F6690', 'stroke-width': 1.2, fill: 'none' }));
+      svg.appendChild(svgEl('path', { d: `M${x2 - 6},${y - 3} L${x2},${y} L${x2 - 6},${y + 3}`, stroke: '#2F6690', 'stroke-width': 1.2, fill: 'none' }));
+      const t = svgEl('text', { x: (x1 + x2) / 2, y: y - 4, 'font-size': 10, fill: '#2F6690', 'text-anchor': 'middle', 'font-weight': 700, stroke: '#fff', 'stroke-width': 3, 'paint-order': 'stroke', 'stroke-linejoin': 'round' });
       t.textContent = (hi - lo).toFixed(2); svg.appendChild(t);
     });
   }
@@ -2840,7 +2853,7 @@
     const botDash = curtAppx && !(curt && curt.bottomExact);
     const yBot = beamBot - inset, yBotX = yBot - 7;
     rebar(svg, X(x0), X(xN), yBot, 'up');
-    if (!compact) labelBar(svg, X(x0) + 6, yBot + 13, `${mainN}-${botSize} หลักล่าง`, '#1D4ED8', 'start');
+    if (!compact) labelBar(svg, X(x0) + 6, yBot + 13, `${mainN}-${botSize} หลักล่าง`, '#2F6690', 'start');
     c.spans.forEach((sp, si) => {
       const xA = c.nodes[si], xB = c.nodes[si + 1];
       const gM = (bars && bars.spanBot[si]) ? extraBarGroups(bars.spanBot[si].list) : [];   // คงขนาดผสม (Codex P2)
@@ -2857,16 +2870,16 @@
         if (!compact) {
           const where = isEnv ? 'จาก moment envelope จริง' : 'ที่ L/8';
           const lbl = cb.cut_bars ? `ตัด ${cb.cut_bars} ${where}${nContExtra > 0 ? ` · +${nContExtra} วิ่งเต็ม` : ''}` : `+${fmtBars(gM)} เสริมกลาง`;
-          labelBar(svg, X((xA + xB) / 2), yBotX - (nContExtra > 0 ? 14 : 4), lbl, '#2563EB', 'middle', 9);
+          labelBar(svg, X((xA + xB) / 2), yBotX - (nContExtra > 0 ? 14 : 4), lbl, '#2F6690', 'middle', 9);
           // ความยาวเหล็กเสริมที่ตัด เป็นเส้น dim มีลูกศร ใต้คาน (pi 2026-06-11 · เดิมเป็นตัวหนังสือ "ตัด X/Y")
           dim(svg, X(aB), X(bB), beamBot + 18, (bB - aB).toFixed(2));
         }
       } else if (cb) {   // single ไม่ตัด → เสริมวิ่งเต็มหมด
         rebar(svg, X(x0), X(xN), yBotX, 'none', true, botDash);
-        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} วิ่งเต็ม (ไม่ตัด)`, '#2563EB', 'middle', 9);
+        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} วิ่งเต็ม (ไม่ตัด)`, '#2F6690', 'middle', 9);
       } else {           // ไม่มี curt data → fallback schematic L/6
         rebar(svg, X(xA + sp / 6), X(xB - sp / 6), yBotX, 'none', true, botDash);
-        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2563EB', 'middle', 9);
+        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2F6690', 'middle', 9);
       }
     });
 
@@ -2874,7 +2887,7 @@
     const yTop = beamTop + inset, yTopX = yTop + 7;
     const halfCol = (c.col || 0.4) / 2;
     rebar(svg, X(x0), X(xN), yTop, 'down');
-    if (!compact) labelBar(svg, X(x0) + 4, beamTop - 5, `${mainN}-${topSize} หลักบน`, '#1D4ED8', 'start');
+    if (!compact) labelBar(svg, X(x0) + 4, beamTop - 5, `${mainN}-${topSize} หลักบน`, '#2F6690', 'start');
     const isCont = state.mode === 'cont';
     c.nodes.forEach((nx, i) => {
       const isL = i === 0, isR = i === c.nodes.length - 1, isEnd = isL || isR;
@@ -2900,7 +2913,7 @@
         aO = Math.max(x0, aO); bO = Math.min(xN, bO);
         rebar(svg, X(aO), X(bO), yTopX, 'none', true, curtAppx);   // เส้นเดียว หยุดเรียบ (ไม่มีตะขอ · ไม่ซ้อนกล่อง)
         if (!compact) {
-          labelBar(svg, X((aO + bO) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
+          labelBar(svg, X((aO + bO) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2F6690', 'middle', 9);
           // ระยะยื่นเป็นเส้น dim มีลูกศร — ซ้าย/ขวา จากหน้าเสา (เห็น asymmetric ชัด · ยื่นเข้าช่วงในมากกว่าช่วงริม · pi 2026-06-11 · เดิมเป็นตัวหนังสือลอย)
           const yDimT = beamTop - 28;
           if (X(faceL) - X(aO) > 10) dim(svg, X(aO), X(faceL), yDimT, extL.toFixed(2));
@@ -2913,7 +2926,7 @@
         let a = isL ? nx : nx - spL / 3, b = isR ? nx : nx + spR / 3;
         a = Math.max(x0, a); b = Math.min(xN, b);
         rebar(svg, X(a), X(b), yTopX, 'none', true);   // nominal ปลาย = หยุดเรียบเช่นกัน
-        if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
+        if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2F6690', 'middle', 9);
         if (showDim && !compact) dim(svg, X(a), X(b), beamTop - 24, (b - a).toFixed(2));
       }
     });
@@ -3018,13 +3031,13 @@
   // rebar line with end hooks
   function rebar(svg, x1, x2, y, hook, thin, dashed) {
     const w = thin ? 1.6 : 2.4;
-    const ln = { x1, y1: y, x2, y2: y, stroke: '#1D4ED8', 'stroke-width': w, 'stroke-linecap': 'round' };
+    const ln = { x1, y1: y, x2, y2: y, stroke: '#2F6690', 'stroke-width': w, 'stroke-linecap': 'round' };
     if (dashed) ln['stroke-dasharray'] = '6 4';   // ค่าประมาณ (applicable=false · มีจุดโหลด/ช่วงไม่เท่า) → เส้นประ
     svg.appendChild(svgEl('line', ln));
     if (hook === 'none') return;                   // เหล็กตัด (cutoff) = หยุดเรียบ ไม่มีตะขอ (มาตรฐาน DRMK รูป 8.32 · A2 · ตะขอเหลือเฉพาะปลายคานจริง)
     const hk = hook === 'down' ? 8 : -8;
-    svg.appendChild(svgEl('line', { x1, y1: y, x2: x1, y2: y + hk, stroke: '#1D4ED8', 'stroke-width': w }));
-    svg.appendChild(svgEl('line', { x1: x2, y1: y, x2: x2, y2: y + hk, stroke: '#1D4ED8', 'stroke-width': w }));
+    svg.appendChild(svgEl('line', { x1, y1: y, x2: x1, y2: y + hk, stroke: '#2F6690', 'stroke-width': w }));
+    svg.appendChild(svgEl('line', { x1: x2, y1: y, x2: x2, y2: y + hk, stroke: '#2F6690', 'stroke-width': w }));
   }
   function labelBar(svg, x, y, txt, fill, anchor, size) {
     const t = svgEl('text', { x, y, 'font-size': size || 10, fill, 'text-anchor': anchor || 'middle', 'font-weight': 600 }); t.textContent = txt; svg.appendChild(t);
@@ -3167,7 +3180,7 @@
         ord.forEach((pos, kk) => {
           const r = Math.max(1.3, natR[kk] * f);
           const cx = cnt === 1 ? (x0 + x1) / 2 : x0 + (pos / (cnt - 1)) * (x1 - x0);
-          svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#1D4ED8', 'data-bar': tag }));
+          svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#2F6690', 'data-bar': tag }));
         });
         placed += cnt;
         if (placed >= n) break;
@@ -7394,6 +7407,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       const _CCP = window.CCProject;
       if (_CCP && _CCP.data) {
         const _ccSave = JSON.parse(JSON.stringify(_CCP.data)), _ccA = _CCP.activeId, _ccS = _CCP._seq;
+        const _liveB4 = _CCP.capture();   // A1-P3: full live input ก่อนบล็อกนี้แตะ → คืนใน finally (ไม่ทิ้ง state user เพี้ยน)
         let _rawBak = null; try { _rawBak = localStorage.getItem(_CCP._STORE_KEY); } catch (e) {}
         _CCP._noPersist = true;   // กัน autosave เขียนคานทดสอบลง storage ระหว่าง audit
         try {
@@ -7446,6 +7460,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           _CCP.data = _ccSave; _CCP.activeId = _ccA; _CCP._seq = _ccS;   // กันคานทดสอบรั่วเข้าโปรเจกต์ user
           try { if (_rawBak == null) localStorage.removeItem(_CCP._STORE_KEY); else localStorage.setItem(_CCP._STORE_KEY, _rawBak); } catch (e) {}   // คืน localStorage เดิม
           _CCP._noPersist = false;
+          _CCP.restoreLive(_liveB4);   // A1-P3: คืน live calculator เต็ม(L/cover/legs/loadRows/...) ที่ TT.snapshot ไม่ครอบ
           if (_CCP.renderRail) _CCP.renderRail();
         }
       }
