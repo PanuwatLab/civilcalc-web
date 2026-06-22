@@ -468,6 +468,10 @@
             <button class="unit-btn" data-unit="kg" aria-pressed="true">kg</button>
             <button class="unit-btn" data-unit="T" aria-pressed="false">T</button>
           </div>
+          <button id="helpModeBtn" class="cc-help-btn anim" aria-pressed="false" aria-label="โหมดช่วยเหลือ — แสดงคำอธิบายช่องกรอกและผลลัพธ์" title="โหมดช่วยเหลือ — แสดงคำอธิบาย">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.3h6c0-1 .4-1.8 1-2.3A7 7 0 0 0 12 2z"/></svg>
+            <span class="hidden sm:inline">ช่วยเหลือ</span>
+          </button>
           <button class="w-9 h-9 grid place-items-center rounded-ctrl border border-border text-ink-muted hover:bg-bg anim" aria-label="เมนู">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
           </button>
@@ -1070,6 +1074,10 @@
   .unit-btn{ padding:5px 12px; background:#fff; color:var(--ink-muted); font-family:"JetBrains Mono",monospace; }
   .unit-btn[aria-pressed=true]{ background:var(--accent); color:#fff; font-weight:600; }
   .unit-btn:first-child{ border-right:1px solid var(--border); }
+  .cc-help-btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 11px; border:1px solid var(--border); border-radius:10px; background:#fff; color:var(--ink-muted); font-size:13px; font-weight:500; cursor:pointer; }
+  .cc-help-btn:hover{ border-color:#bdc8d6; color:var(--ink); }
+  .cc-help-btn.on{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .cc-help-btn svg{ flex:none; }
 
   .step-tab{ display:flex; align-items:center; gap:8px; padding:6px 4px; border-bottom:2px solid transparent; color:var(--ink-muted); font-size:14px; white-space:nowrap; }
   .step-tab .sl{ white-space:nowrap; }
@@ -2035,6 +2043,7 @@
     init() {
       this._build();
       this._applyHelp(this.helpOn());
+      this._syncHelpUI(this.helpOn());                       // ตั้งสถานะปุ่มช่วยเหลือ (header + welcome) ตาม localStorage
       const fresh = !this._ls(this._K_DONE);
       const beams = (window.CCProject && CCProject.data && CCProject.data.beams) ? CCProject.data.beams.length : 0;
       if (fresh && beams <= 1) this.show();                 // first-visit only · ไม่เด้งซ้ำ ถ้ามีโปรเจกต์แล้ว
@@ -2081,8 +2090,11 @@
       this.hide();
     },
     toggleHelp() {
-      const on = !this.helpOn(); this._set(this._K_HELP, on ? '1' : '0'); this._applyHelp(on);
-      const el = $('#ccObHelp'); if (el) { el.classList.toggle('on', on); el.setAttribute('aria-checked', String(on)); }
+      const on = !this.helpOn(); this._set(this._K_HELP, on ? '1' : '0'); this._applyHelp(on); this._syncHelpUI(on);
+    },
+    _syncHelpUI(on) {   // sync ทั้งสวิตช์ใน welcome + ปุ่ม 'ช่วยเหลือ' ในหัวแอป (state เดียวกัน)
+      const sw = document.getElementById('ccObHelp'); if (sw) { sw.classList.toggle('on', on); sw.setAttribute('aria-checked', String(on)); }
+      const btn = document.getElementById('helpModeBtn'); if (btn) { btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on)); }
     },
     _applyHelp(on) {
       const lg = document.getElementById('ccHelpLegend'); if (lg) lg.classList.toggle('show', !!on);   // คู่มืออ่านผล (element คงที่ · ไม่ inject ต่อผลที่ re-render)
@@ -2165,7 +2177,7 @@
       const hp = $('#ccObHelp');
       hp.addEventListener('click', () => this.toggleHelp());
       hp.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.toggleHelp(); } });   // role=switch (ไม่ใช่ <button>) → ต้อง keydown
-      if (this.helpOn()) { hp.classList.add('on'); hp.setAttribute('aria-checked', 'true'); }
+      const hmb = document.getElementById('helpModeBtn'); if (hmb) hmb.addEventListener('click', () => this.toggleHelp());   // ปุ่มในหัวแอป (เห็นชัด · sync state เดียวกัน)
       // a11y: focus-trap (Tab/Shift+Tab วนใน dialog) + Esc ปิด
       back.addEventListener('keydown', e => {
         if (e.key === 'Escape') { this.hide(); return; }
@@ -8510,6 +8522,14 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           _O.toggleHelp();
           A('onboarding: help off → hints หาย (idempotent)', document.querySelectorAll('.cc-ob-hint').length === 0);
           A('onboarding: help off → legend อ่านผล ซ่อน', !document.getElementById('ccHelpLegend').classList.contains('show'));
+          A('onboarding: ปุ่ม "ช่วยเหลือ" ในหัวแอป มี + คลิกสลับ help + sync (legend/aria-pressed)', (() => {
+            const btn = document.getElementById('helpModeBtn'); if (!btn) return false;
+            btn.click();   // → on
+            const onOk = _O.helpOn() && btn.getAttribute('aria-pressed') === 'true' && btn.classList.contains('on') && document.getElementById('ccHelpLegend').classList.contains('show');
+            btn.click();   // → off
+            const offOk = !_O.helpOn() && btn.getAttribute('aria-pressed') === 'false' && !document.getElementById('ccHelpLegend').classList.contains('show');
+            return onOk && offOk;
+          })());
         } finally {
           _O.hide();
           _CCP.data.beams = _obBeams; _CCP.activeId = _obActive; _CCP._seq = _obSeq;   // คืนคานทดสอบ (loadExample addBeam)
