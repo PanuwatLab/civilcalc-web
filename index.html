@@ -146,6 +146,13 @@
     #cc-print-doc .pd-sum td:first-child{ text-align:left; }
     #cc-print-doc .pd-pending{ font-size:11px; color:#b45309; background:#fffbeb; border:0.5px solid #fde68a; padding:9px 11px; border-radius:4px; margin-top:6px; }   /* P2-B: engine ไม่พร้อม → ไม่พิมพ์ค่า mock */
     #cc-print-doc .pd-flextype{ font-size:10px; color:#334155; margin:5px 0 2px; }   /* ชนิดเสริมเหล็กรับดัด เดี่ยว/คู่ (plan A) */
+    /* §3 รูปหน้าตัดคาน (clone #sectionMain) — constrain SVG กว้างคงที่ สเกลเท่ากัน 2 โหมด (gotcha #4 #6) · ไม่ฉีกข้ามหน้า */
+    #cc-print-doc .pd-secfig{ display:flex; flex-wrap:wrap; gap:14mm; justify-content:center; align-items:flex-start; margin:6px 0 3px; break-inside:avoid; }
+    #cc-print-doc .pd-secfig > div{ display:flex; flex-direction:column; align-items:center; }   /* แต่ละหน้าตัด (wrap) */
+    #cc-print-doc .pd-secfig > div > div:first-child{ width:34mm; max-width:34mm; }   /* กล่อง SVG → กว้างคงที่ (≈128px = ขนาดเดียวกับบนจอ · parity) */
+    #cc-print-doc .pd-secfig svg{ width:100%; height:auto; }
+    #cc-print-doc .pd-secfig > div > div:last-child{ font-size:9px; line-height:1.45; text-align:center; color:#334155; margin-top:3px; }   /* คำบรรยายใต้รูป (label + เหล็กบน/ล่าง + ปลอก) */
+    #cc-print-doc .pd-secfig .mono{ font-family:'JetBrains Mono','IBM Plex Mono',monospace; color:#1e293b; }
     #cc-print-doc .pd-diag{ margin:3px 0; break-inside:avoid; }   /* แต่ละกราฟไม่ฉีกข้ามหน้า */
     #cc-print-doc .pd-diag svg{ width:100%; height:auto; max-height:74mm; }
     #cc-print-doc .pd-verdict{ font-size:13px; font-weight:600; padding:6px 10px; border-radius:4px; }
@@ -1113,7 +1120,7 @@
   /* show-work step block */
   .wstep{ border:1px solid var(--border); border-radius:8px; padding:14px 16px; background:#fff; }
   .wstep .whd{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-  .wstep .wn{ width:22px; height:22px; display:grid; place-items:center; border-radius:6px; background:var(--accent-soft); color:var(--accent); font-size:12px; font-weight:700; font-family:"JetBrains Mono",monospace; }
+  .wstep .wn{ min-width:22px; height:22px; padding:0 5px; display:grid; place-items:center; border-radius:6px; background:var(--accent-soft); color:var(--accent); font-size:12px; font-weight:700; font-family:"JetBrains Mono",monospace; white-space:nowrap; }   /* min-width+padding → เลขขั้นหลายตัว (5–6 · 10–11) อยู่บรรทัดเดียว ไม่ตัด */
   .wstep .wt{ font-weight:600; font-size:14px; }
   .wstep .wbody{ font-family:"JetBrains Mono",monospace; font-size:13.5px; line-height:1.85; padding-left:32px; }
   .wstep .wf{ color:var(--ink); }
@@ -4182,6 +4189,13 @@
     const summaryTable = summaryRowsHTML
       ? `<table class="pd-sum"><thead><tr><th>ตำแหน่ง</th><th>+M / −M</th><th>เหล็กหลัก</th><th>Vu</th><th>ปลอก</th></tr></thead><tbody>${summaryRowsHTML}</tbody></table>`
       : '';
+    // §3 รูปหน้าตัดคาน = clone #sectionMain (engine วาดจริงผ่าน buildSection · 2 จุด กลาง+หัวเสา/ปลาย · parity-safe · ว่าง→ไม่พิมพ์)
+    let sectionMainHTML = ($('#sectionMain') && $('#sectionMain').innerHTML) || '';
+    // bulletproof: ถ้า populate ตอนไม่ได้อยู่ step 3 (#sectionMain ยังว่าง) แต่ผลพร้อม → วาดก่อน clone (กัน printAll/beforeprint ขาดหน้าตัด)
+    if (!sectionMainHTML && ready) { try { drawMainSections(); sectionMainHTML = ($('#sectionMain') && $('#sectionMain').innerHTML) || ''; } catch (e) {} }
+    const secFig = sectionMainHTML
+      ? `<div class="pd-sub" data-pd="section">หน้าตัดและรายละเอียดเหล็กเสริม</div><div class="pd-secfig">${sectionMainHTML}</div>`
+      : '';
     const sec1 = `<div class="pd-sec"><div class="pd-st">§1 รูปวิเคราะห์ — กริดไลน์ · แรงเฉือน · โมเมนต์</div><div class="pd-diag">${planHTML}</div><div class="pd-diag">${diagHTML}</div></div>`;
     const sec2 = `<div class="pd-sec"><div class="pd-st">§2 รายการคำนวณ (แสดงวิธีทำ)</div>`
       + `<div class="pd-sub" data-pd="flex">ออกแบบรับดัด · ว.ส.ท. 1008/1009</div>${workHTML}`
@@ -4193,7 +4207,7 @@
     const notReadyVerdict = `<div class="pd-verdict pd-warn">${pending ? '⏳ ยังไม่ได้คำนวณ' : '⚠ เกิดข้อผิดพลาดในการคำนวณ'}</div>`;
     // P2-B (#35): engine ไม่พร้อม (boot/offline/_err) → §1+§2+ตาราง เป็นค่า MOCK → แทนด้วย placeholder · ห้ามพิมพ์ตัวเลขปลอมในเอกสาร ก.ว.
     const calcBody = ready
-      ? (sec1 + sec2 + `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div>${verdictBlock}${flexType ? `<div class="pd-flextype">ชนิดเสริมเหล็กรับดัด: <b>${esc(flexType)}</b></div>` : ''}${summaryTable}${mdWarn}</div>`)
+      ? (sec1 + sec2 + `<div class="pd-sec"><div class="pd-st">§3 สรุปผล</div>${verdictBlock}${flexType ? `<div class="pd-flextype">ชนิดเสริมเหล็กรับดัด: <b>${esc(flexType)}</b></div>` : ''}${secFig}${summaryTable}${mdWarn}</div>`)
       : (`<div class="pd-sec"><div class="pd-st">§ สรุปผล</div>${notReadyVerdict}<div class="pd-pending">ยังไม่มีผลคำนวณจริง — กด “คำนวณ” บนหน้าจอก่อนพิมพ์ · เอกสารนี้ยังไม่พร้อมใช้งาน</div></div>`);
     doc.innerHTML =
       '<div class="pd-head"><div><div class="pd-h1">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก</div>' +
@@ -8492,6 +8506,10 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('print: §3 มีตารางสรุปเหล็ก (.pd-sum) + ไม่มี placeholder ตอน ready (Codex P2-B #35)',
         !!_pd && !!_pd.querySelector('.pd-sum') && _pd.querySelectorAll('.pd-sum tbody tr').length >= 1 && !_pd.querySelector('.pd-pending'),
         _pd && _pd.querySelector('.pd-sum') ? ('rows=' + _pd.querySelectorAll('.pd-sum tbody tr').length + ' pending=' + !!_pd.querySelector('.pd-pending')) : 'no-sum');
+      // §3 รูปหน้าตัดคาน (clone #sectionMain · 2 จุด กลาง+ปลาย/หัวเสา · engine วาดจริง · pi 2026-06-23)
+      A('print: §3 มีรูปหน้าตัดคาน (.pd-secfig · 2 svg · clone #sectionMain)',
+        !!_pd && !!_pd.querySelector('[data-pd="section"]') && _pd.querySelectorAll('.pd-secfig svg').length >= 2,
+        _pd ? ('secfig=' + !!_pd.querySelector('.pd-secfig') + ' svgs=' + _pd.querySelectorAll('.pd-secfig svg').length) : 'no-doc');
       // P2-A (#35): ต่อเนื่อง §3 ตารางสรุปต้องมี "เหล็กบน" หัวเสา (เดิมตก · โชว์แค่ rebarMain ล่าง)
       TT().setMode('cont'); TT().recompute(); TT().render();
       const _pdc = document.querySelector('#cc-print-doc'), _sum = _pdc && _pdc.querySelector('.pd-sum');
