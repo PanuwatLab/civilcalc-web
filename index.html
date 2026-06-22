@@ -14,7 +14,7 @@
 <!-- ── Fonts: IBM Plex Sans Thai (เนื้อหา) + JetBrains Mono (สูตร/ตัวเลข) ── -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
 <!-- ── Tailwind via CDN (no build step) ── -->
 <script src="https://cdn.tailwindcss.com"></script>
@@ -23,20 +23,23 @@
     theme: {
       extend: {
         colors: {
-          bg:        '#F8FAFC',
+          /* Panuwat Lab design system (จาก RebarStudio · pi 2026-06-22) — ตรงกับ CSS :root */
+          bg:        '#F4F4F5',
           surface:   '#FFFFFF',
-          border:    '#E2E8F0',
-          ink:       '#1F2937',
-          'ink-muted': '#64748B',
-          accent:    '#2563EB',
-          'accent-soft': '#EEF2FF',
-          pass:      '#16A34A',
-          fail:      '#DC2626',
-          rebar:     '#1D4ED8',
+          border:    '#E3E7EC',
+          ink:       '#22425C',
+          'ink-muted': '#5D6B7B',
+          accent:    '#2F6690',
+          'accent-soft': '#E7EFF6',
+          steel:     '#2F6690',
+          teal:      '#0F766E',
+          pass:      '#059669',
+          fail:      '#E11D48',
+          rebar:     '#2F6690',
           concrete:  '#CBD5E1',
         },
         fontFamily: {
-          sans: ['"IBM Plex Sans Thai"', 'system-ui', 'sans-serif'],
+          sans: ['"Sarabun"', '"IBM Plex Sans Thai"', 'system-ui', 'sans-serif'],
           mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
         },
         borderRadius: { card: '8px', ctrl: '6px' },
@@ -53,14 +56,17 @@
 <!-- ── Design tokens + base + motion ── -->
 <style>
   :root{
-    --bg:#F8FAFC; --surface:#FFFFFF; --border:#E2E8F0;
-    --ink:#1F2937; --ink-muted:#64748B; --accent:#2563EB;
-    --accent-soft:#EEF2FF;
-    --pass:#16A34A; --fail:#DC2626; --rebar:#1D4ED8; --concrete:#CBD5E1;
-    --code-badge-bg:#EEF2FF;
+    --bg:#F4F4F5; --surface:#FFFFFF; --border:#E3E7EC;
+    --ink:#22425C; --ink-muted:#5D6B7B; --accent:#2F6690;
+    --accent-soft:#E7EFF6;
+    /* Panuwat Lab design system (จาก RebarStudio · pi 2026-06-22) */
+    --accent-grad:linear-gradient(105deg,#356897,#2F6690 52%,#0F766E); --steel:#2F6690; --teal:#0F766E;
+    --pass:#059669; --fail:#E11D48; --rebar:#2F6690; --concrete:#CBD5E1;
+    --code-badge-bg:#E7EFF6;
   }
   *{ -webkit-tap-highlight-color:transparent; }
-  html,body{ background:var(--bg); color:var(--ink); font-family:"IBM Plex Sans Thai",system-ui,sans-serif; }
+  html,body{ background:var(--bg); color:var(--ink); font-family:"Sarabun","IBM Plex Sans Thai",system-ui,sans-serif; }
+  body{ background:linear-gradient(180deg,#eaf2f9 0%,#f4f7fa 26%,#f4f4f5 70%); background-attachment:fixed; }
   body{ font-feature-settings:"liga" 1; }
   .mono{ font-family:"JetBrains Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums; }
 
@@ -81,7 +87,7 @@
   input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.2); }
   input[type=range]::-moz-range-thumb{ width:16px; height:16px; border:none; border-radius:50%; background:var(--accent); cursor:pointer; }
   .num-field{ width:100%; border:1px solid var(--border); border-radius:6px; padding:8px 10px; font-size:15px; background:#fff; }
-  .num-field:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  .num-field:focus{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(47,102,144,.12); }
   .num-field.invalid{ border-color:var(--fail); box-shadow:0 0 0 3px rgba(220,38,38,.10); }
 
   .badge-code{ background:var(--code-badge-bg); color:var(--accent); border:1px solid #DBE3FF; font-size:11px; padding:1px 7px; border-radius:5px; white-space:nowrap; }
@@ -142,6 +148,15 @@
     #cc-print-doc .pd-foot{ margin-top:6px; font-size:8.5px; color:#94a3b8; border-top:1px dashed #e2e8f0; padding-top:4px; }
     #cc-print-doc .wstep,#cc-print-doc .print-block{ break-inside:avoid; }
     #cc-print-doc .page-break{ break-before:page; }
+    /* เฟส C · เล่มรวมทั้งโครงการ: ปก + สารบัญ */
+    #cc-print-doc .pd-cover{ text-align:center; padding:34mm 0 14mm; border-bottom:1px solid #e2e8f0; }
+    #cc-print-doc .pd-cover .t{ font-size:24px; font-weight:700; color:#0f2742; }
+    #cc-print-doc .pd-cover .s{ font-size:11.5px; color:#475569; margin-top:6px; }
+    #cc-print-doc .pd-toc{ margin:12mm 4mm 0; }
+    #cc-print-doc .pd-toc table{ width:100%; border-collapse:collapse; font-size:11px; margin-top:6px; }
+    #cc-print-doc .pd-toc th{ border-bottom:1.2px solid #0f2742; padding:5px 8px; text-align:left; font-weight:600; color:#0f2742; font-size:10.5px; }
+    #cc-print-doc .pd-toc td{ border-bottom:0.5px solid #e2e8f0; padding:6px 8px; }
+    #cc-print-doc .cc-sheet{ break-before:page; }
   }
   #cc-print-doc{ display:none; }
   .print-only{ display:none; }
@@ -149,6 +164,136 @@
   .card{ background:var(--surface); border:1px solid var(--border); border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,.04); }
   .hairline{ border-top:1px solid var(--border); }
   .step-hidden{ display:none !important; }
+</style>
+<style id="cc-project-css">
+  /* ══════════ Project Workspace rail (Phase A · Panuwat Lab premium-light) ══════════ */
+  :root{ --cc-rail-w:266px; }
+  #app{ transition:margin-left .34s cubic-bezier(.16,1,.3,1); }
+  body.cc-open #app{ margin-left:var(--cc-rail-w); }
+  #ccRail{ position:fixed; left:0; top:0; bottom:0; width:var(--cc-rail-w); z-index:45; display:flex; flex-direction:column;
+    background:rgba(255,255,255,.84); backdrop-filter:blur(22px) saturate(1.5); -webkit-backdrop-filter:blur(22px) saturate(1.5);
+    border-right:1px solid var(--border); box-shadow:8px 0 34px -18px rgba(20,40,70,.3);
+    transform:translateX(-100%); transition:transform .34s cubic-bezier(.16,1,.3,1); font-size:14px; }
+  body.cc-open #ccRail{ transform:none; }
+  #ccBackdrop{ position:fixed; inset:0; z-index:44; background:rgba(20,40,70,.18); opacity:0; pointer-events:none; transition:opacity .3s ease; backdrop-filter:blur(1px); }
+  body.cc-open.cc-mobile #ccBackdrop{ opacity:1; pointer-events:auto; }
+  @media (prefers-reduced-motion:reduce){ #ccRail,#app,#ccBackdrop{ transition:none !important; } }
+
+  /* toggle tab */
+  #ccToggle{ position:fixed; left:0; top:96px; z-index:46; display:flex; align-items:center; gap:6px;
+    background:var(--accent-grad); color:#fff; border:none; padding:9px 11px 9px 9px; cursor:pointer;
+    border-radius:0 12px 12px 0; box-shadow:0 6px 18px -6px rgba(47,102,144,.5); font-family:inherit; font-size:12.5px; font-weight:600;
+    transition:transform .34s cubic-bezier(.16,1,.3,1), box-shadow .2s ease; }
+  #ccToggle:hover{ box-shadow:0 10px 24px -6px rgba(47,102,144,.65); }
+  body.cc-open #ccToggle{ transform:translateX(var(--cc-rail-w)); }
+  #ccToggle svg{ width:17px; height:17px; }
+  #ccToggle .cc-tg-txt{ max-width:60px; overflow:hidden; white-space:nowrap; }
+  body.cc-open #ccToggle .cc-tg-txt{ display:none; }
+
+  /* rail header */
+  .cc-head{ padding:14px 14px 12px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
+  .cc-logo{ width:34px; height:34px; border-radius:10px; background:var(--accent-grad); display:grid; place-items:center; flex:none;
+    box-shadow:0 6px 16px -6px rgba(47,102,144,.5), inset 0 1px 0 rgba(255,255,255,.35); }
+  .cc-logo svg{ width:18px; height:18px; }
+  .cc-pname{ font-weight:600; font-size:14.5px; color:var(--ink); line-height:1.2; cursor:text; border-radius:5px; padding:1px 4px; margin:-1px -4px; }
+  .cc-pname:hover{ background:var(--accent-soft); }
+  .cc-pmeta{ font-size:11px; color:var(--ink-muted); font-family:"JetBrains Mono",monospace; margin-top:2px; }
+  .cc-ring{ position:relative; width:40px; height:40px; flex:none; margin-left:auto; }
+  .cc-ring svg{ transform:rotate(-90deg); }
+  .cc-ring .v{ position:absolute; inset:0; display:grid; place-items:center; font-family:"JetBrains Mono",monospace; font-size:10.5px; font-weight:600; color:var(--teal); }
+
+  /* beam tree */
+  .cc-tree{ flex:1; overflow-y:auto; padding:12px 10px; }
+  .cc-grp{ margin-bottom:8px; }
+  .cc-grp-h{ display:flex; align-items:center; gap:5px; padding:5px 6px 5px 2px; border-radius:8px; }
+  .cc-grp-h:hover{ background:var(--surface); }
+  .cc-grp-tog{ width:22px; height:22px; display:grid; place-items:center; border:none; background:none; cursor:pointer; color:var(--ink-muted); flex:none; }
+  .cc-grp-tog svg{ width:14px; height:14px; transition:transform .25s cubic-bezier(.16,1,.3,1); }
+  .cc-grp:not(.col) .cc-grp-tog svg{ transform:rotate(90deg); }
+  .cc-grp-name{ font-size:12px; font-weight:600; color:var(--ink); letter-spacing:.2px; border-radius:5px; padding:1px 5px; margin:0 -1px; cursor:text; white-space:nowrap; }
+  .cc-grp-name:hover{ background:var(--accent-soft); }
+  .cc-grp-name:focus{ outline:2px solid var(--steel); outline-offset:1px; background:#fff; }
+  .cc-grp-meta{ font-size:10px; color:var(--ink-muted); font-family:"JetBrains Mono",monospace; white-space:nowrap; }
+  .cc-grp-acts{ margin-left:auto; display:flex; gap:1px; opacity:0; transition:opacity .15s ease; flex:none; }
+  .cc-grp-h:hover .cc-grp-acts, .cc-grp-h:focus-within .cc-grp-acts{ opacity:1; }
+  .cc-ga{ width:21px; height:21px; display:grid; place-items:center; border:none; background:none; cursor:pointer; color:var(--ink-muted); border-radius:6px; }
+  .cc-ga svg{ width:13px; height:13px; }
+  .cc-ga:hover{ background:var(--accent-soft); color:var(--steel); }
+  .cc-ga-del:hover{ background:rgba(225,29,72,.1); color:var(--fail); }
+  .cc-grp-body{ overflow:hidden; max-height:1600px; transition:max-height .32s cubic-bezier(.16,1,.3,1), opacity .2s ease; opacity:1; }
+  .cc-grp.col .cc-grp-body{ max-height:0; opacity:0; }
+  .cc-grp-body.over{ box-shadow:inset 0 0 0 1.5px rgba(47,102,144,.45); border-radius:9px; background:linear-gradient(90deg,rgba(47,102,144,.09),rgba(15,118,110,.03)); }
+  .cc-empty{ font-size:11px; color:#9aa6b4; text-align:center; padding:11px 8px; }
+  .cc-grip{ display:grid; place-items:center; color:#c2cdda; cursor:grab; flex:none; width:13px; opacity:0; transition:opacity .15s ease; }
+  .cc-grip svg{ width:13px; height:13px; }
+  .cc-beam:hover .cc-grip{ opacity:1; }
+  .cc-beam.dragging{ opacity:.4; }
+  .cc-addrow{ display:flex; gap:6px; margin-top:4px; }
+  .cc-add{ flex:1; }
+  .cc-addfloor{ color:var(--teal); border-color:rgba(15,118,110,.4); background:rgba(15,118,110,.05); }
+  .cc-addfloor:hover{ background:rgba(15,118,110,.11); border-color:var(--teal); }
+  .cc-crumb-floor{ font-family:inherit; font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:7px; padding:2px 6px; cursor:pointer; height:26px; }
+  .cc-crumb-floor:hover{ border-color:var(--steel); }
+  .cc-crumb-pos,.cc-crumb-grid{ display:inline-flex; align-items:center; gap:5px; }
+  .cc-pos-lbl{ font-size:11px; color:var(--ink-muted); }
+  .cc-grid-val{ font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:7px; padding:2px 8px; min-width:42px; height:26px; display:inline-flex; align-items:center; cursor:text; font-family:"JetBrains Mono",monospace; }
+  .cc-grid-val:hover{ border-color:var(--steel); }
+  .cc-grid-val.ph{ color:#9aa6b4; font-style:italic; font-family:inherit; }
+  .cc-grid-val:focus{ outline:2px solid var(--steel); outline-offset:1px; }
+  .cc-legend{ display:flex; align-items:center; gap:6px; margin:0 12px 8px; padding:6px 10px; border-radius:8px; background:var(--accent-soft); color:var(--steel); font-size:11px; line-height:1.3; }
+  .cc-legend svg{ width:14px; height:14px; flex:none; }
+  .cc-legend b{ font-weight:600; }
+  @media (prefers-reduced-motion:reduce){ .cc-grp-tog svg,.cc-grp-body{ transition:none !important; } }
+  .cc-beam{ display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:9px; cursor:pointer; position:relative;
+    border:1px solid transparent; transition:background .18s ease, border-color .18s ease, transform .18s cubic-bezier(.16,1,.3,1);
+    opacity:0; transform:translateX(-8px); animation:ccSlide .42s cubic-bezier(.16,1,.3,1) forwards; }
+  @keyframes ccSlide{ to{ opacity:1; transform:none; } }
+  .cc-beam:hover{ background:var(--surface); border-color:var(--border); transform:translateX(2px); }
+  .cc-beam.sel{ background:linear-gradient(90deg,rgba(47,102,144,.12),rgba(15,118,110,.04)); border-color:rgba(47,102,144,.32); box-shadow:0 4px 14px -7px rgba(47,102,144,.35); }
+  .cc-beam.sel::before{ content:""; position:absolute; left:-1px; top:7px; bottom:7px; width:3px; border-radius:3px; background:var(--accent-grad); box-shadow:0 0 11px rgba(47,102,144,.55); animation:ccBar .4s cubic-bezier(.16,1,.3,1); }
+  @keyframes ccBar{ from{ transform:scaleY(0); } to{ transform:scaleY(1); } }
+  @media (prefers-reduced-motion:reduce){ .cc-beam{ opacity:1; transform:none; animation:none; } .cc-beam.sel::before{ animation:none; } }
+  .cc-dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+  .cc-dot.ok{ background:var(--pass); box-shadow:0 0 0 3px rgba(5,150,105,.14); }
+  .cc-dot.ok.live{ animation:ccPulse 2.4s ease-out infinite; }
+  .cc-dot.bad{ background:var(--fail); box-shadow:0 0 0 3px rgba(225,29,72,.15); animation:ccPulseBad 2s ease-in-out infinite; }
+  .cc-dot.idle{ background:#c2cdda; }
+  @keyframes ccPulse{ 0%{ box-shadow:0 0 0 0 rgba(5,150,105,.4);} 70%{ box-shadow:0 0 0 7px rgba(5,150,105,0);} 100%{ box-shadow:0 0 0 0 rgba(5,150,105,0);} }
+  @keyframes ccPulseBad{ 0%,100%{ opacity:1;} 50%{ opacity:.5;} }
+  @media (prefers-reduced-motion:reduce){ .cc-dot.ok.live,.cc-dot.bad{ animation:none; } }
+  .cc-beam-lbl{ font-size:13.5px; font-weight:500; color:var(--ink); }
+  .cc-beam:not(.sel) .cc-beam-lbl{ color:var(--ink-muted); }
+  .cc-beam-dim{ margin-left:auto; font-family:"JetBrains Mono",monospace; font-size:10.5px; color:var(--ink-muted); }
+  .cc-beam-x{ opacity:0; color:var(--ink-muted); border:none; background:none; cursor:pointer; padding:2px 4px; border-radius:4px; font-size:13px; line-height:1; transition:opacity .15s ease, color .15s ease, background .15s ease; }
+  .cc-beam:hover .cc-beam-x{ opacity:.7; }
+  .cc-beam-x:hover{ opacity:1 !important; color:var(--fail); background:rgba(225,29,72,.1); }
+
+  /* footer actions */
+  .cc-add{ width:100%; display:flex; align-items:center; justify-content:center; gap:7px; padding:9px; margin-top:2px;
+    border:1px dashed rgba(47,102,144,.4); border-radius:10px; background:rgba(47,102,144,.05); color:var(--steel); font-family:inherit; font-size:13px; font-weight:500; cursor:pointer; transition:.18s ease; }
+  .cc-add:hover{ background:rgba(47,102,144,.11); border-color:var(--steel); }
+  .cc-add svg{ width:15px; height:15px; }
+  .cc-savedrow{ padding:8px 14px 0; min-height:14px; }
+  .cc-saved{ font-size:10.5px; font-family:"JetBrains Mono",monospace; letter-spacing:.2px; transition:color .2s ease; }
+  .cc-saved.ok{ color:var(--teal); } .cc-saved.wait{ color:var(--ink-muted); } .cc-saved.err{ color:var(--fail); }
+  .cc-foot{ padding:9px 12px 12px; border-top:1px solid var(--border); display:flex; gap:6px; }
+  .cc-foot .cc-fbtn{ font-size:11.5px; padding:8px 6px; }
+  .cc-fbtn{ flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:8px; border:1px solid var(--border); border-radius:9px; background:#fff; color:var(--ink-muted); font-family:inherit; font-size:12px; cursor:pointer; box-shadow:0 1px 2px rgba(20,40,70,.06); transition:.18s ease; }
+  .cc-fbtn:hover{ color:var(--ink); border-color:#bdc8d6; transform:translateY(-1px); box-shadow:0 5px 14px -6px rgba(20,40,70,.22); }
+  .cc-fbtn.primary{ color:#fff; background:var(--accent-grad); border:none; font-weight:600; box-shadow:0 6px 16px -6px rgba(47,102,144,.5); }
+  .cc-fbtn svg{ width:14px; height:14px; }
+
+  /* active-beam breadcrumb strip injected into app header area */
+  #ccCrumb{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-muted); padding:8px 0 0; }
+  #ccCrumb b{ color:var(--ink); font-weight:600; }
+  #ccCrumb svg{ width:13px; height:13px; opacity:.55; }
+  .cc-cacts{ display:inline-flex; gap:4px; margin-left:8px; }
+  .cc-cact{ width:28px; height:28px; display:grid; place-items:center; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--ink-muted); cursor:pointer; box-shadow:0 1px 2px rgba(20,40,70,.06); transition:.16s ease; }
+  .cc-cact svg{ width:14px; height:14px; opacity:.85; }
+  .cc-cact:hover{ color:var(--ink); border-color:#bdc8d6; transform:translateY(-1px); }
+  .cc-cact[data-ccact="delActive"]:hover{ color:var(--fail); border-color:rgba(225,29,72,.4); background:rgba(225,29,72,.06); }
+
+  @media (max-width:900px){ body.cc-open #app{ margin-left:0; } }
 </style>
 </head>
 
@@ -174,7 +319,7 @@
 <!-- ════════════════ BOOT overlay (Pyodide loading) ════════════════ -->
 <div id="bootScreen" class="fixed inset-0 z-40 bg-bg flex flex-col items-center justify-center gap-5">
   <div class="flex items-center gap-3 text-ink">
-    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2563EB" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2F6690" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2F6690" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <div class="text-xl font-semibold">Civil Calc</div>
   </div>
   <div class="flex items-center gap-3 text-ink-muted">
@@ -196,7 +341,7 @@
       <!-- row 1: brand · registry · menu -->
       <div class="h-14 flex items-center gap-4">
         <div class="flex items-center gap-2 shrink-0">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2563EB" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" stroke="#2F6690" stroke-width="1.6"/><path d="M7 15l3-4 2.5 3L17 9" stroke="#2F6690" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <h1 class="text-[17px] font-bold tracking-tight">Civil&nbsp;Calc</h1>
         </div>
 
@@ -1009,6 +1154,8 @@
     initNav();
     $('#pt_date').textContent = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
     render();
+    { const _lr = document.querySelector('#loadRows'); if (_lr) window.__ccBaseLoadRows = _lr.innerHTML; }   // เก็บ default load rows ก่อน CCProject restore (audit reset deterministic)
+    if (window.CCProject) CCProject.init();   // Phase A · ระบบโปรเจกต์หลายคาน (mount rail · เก็บคานแรกจาก state ปัจจุบัน)
   }
 
   /* ── unit toggle (kg | T) — drives ccUnits, then refresh every force display ── */
@@ -1685,6 +1832,477 @@
   // live = engine result ทับ MOCK (คีย์ที่ยังไม่ map → fallback mock · graceful)
   function liveData() { const base = state.mode === 'cont' ? MOCK.cont : MOCK.single; return state.res && !state.res._err ? Object.assign({}, base, state.res) : base; }
 
+  /* ════════════════════════════════════════════════════════════════════════
+     PROJECT WORKSPACE (Phase A · หลายคานในโปรเจกต์เดียว · index-only · in-memory)
+     1 คาน = สแน็ปช็อต input ครบชุด (P + state + ccModel + ตารางโหลด) → สลับคานได้
+     เก็บ input อย่างเดียว · คำนวณใหม่ตอนเปิด (parity-safe) · สถานะ cache จากผลล่าสุด
+     ════════════════════════════════════════════════════════════════════════ */
+  function ccEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  // re-wire เซลล์ตารางโหลดที่สร้างใหม่ (mirror initLoadList wireCell · กัน focus หลุด)
+  function ccWireLoadCell(td) {
+    td.contentEditable = 'true'; td.inputMode = 'decimal'; td.classList.add('editable-load');
+    td.addEventListener('focus', () => { td.textContent = String(ccUnits.force === 'T' ? (+td.dataset.kg / 1000) : +td.dataset.kg); });
+    td.addEventListener('input', () => { const raw = parseFloat(td.textContent.replace(/[^\d.]/g, '')) || 0; td.dataset.kg = ccUnits.force === 'T' ? raw * 1000 : raw; refreshResults(); });
+    td.addEventListener('blur', () => { td.textContent = ccUnits.Wn(+td.dataset.kg); });
+  }
+  // สร้างแถวตารางโหลดใหม่จากสแน็ปช็อต (delegation ลบ/เพิ่ม ผูกที่ tbody อยู่แล้ว → คงอยู่)
+  function ccRebuildLoadRows(rows) {
+    const tb = document.querySelector('#loadRows'); if (!tb) return;
+    tb.innerHTML = (rows || []).map(r => {
+      const sw = r.sw ? ' data-selfweight="1"' : '';
+      const kindAttr = r.kind ? ` data-kind="${r.kind}"` : '';
+      const last = r.sw ? '<td class="px-2 text-right text-ink-muted/40">—</td>' : '<td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td>';
+      return `<tr${sw}${kindAttr}><td class="px-3 py-2.5">${ccEsc(r.name)}</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">${ccEsc(r.source)}</td><td class="px-3 py-2.5 text-right load-val" data-kg="${+r.kg || 0}">${ccUnits.Wn(+r.kg || 0)}</td>${last}</tr>`;
+    }).join('');
+    tb.querySelectorAll('tr:not([data-selfweight]) .load-val').forEach(ccWireLoadCell);
+  }
+
+  // จับ input ปัจจุบันทั้งหมดเป็นสแน็ปช็อต (lossless) · TODO: เพิ่ม torsion เมื่อ merge เข้า dev
+  function ccCaptureInput() {
+    return {
+      P: { b: P.b, h: P.h, cover: P.cover, db: P.db, dstir: P.dstir, L: P.L, fc: P.fc, grade: P.grade },
+      st: { mode: state.mode, nspan: state.nspan, spanLens: state.spanLens.slice(), legs: state.legs },
+      points: JSON.parse(JSON.stringify(ccModel.points)),
+      partials: JSON.parse(JSON.stringify(ccModel.partials)),
+      gridNames: JSON.parse(JSON.stringify(ccModel.gridNames || {})),
+      loads: [...document.querySelectorAll('#loadRows tr')].map(tr => {
+        const c = tr.querySelector('.load-val'), tds = tr.querySelectorAll('td');
+        return { name: (tds[0] || {}).textContent || '', source: (tds[1] || {}).textContent || '',
+          kg: c ? (+c.dataset.kg || 0) : 0, kind: tr.dataset.kind || (/\(LL\)/.test(tr.textContent) ? 'LL' : 'DL'), sw: tr.hasAttribute('data-selfweight') };
+      })
+    };
+  }
+  // ดัน P/state กลับเข้าคอนโทรล DOM (slider/select/pill/mode) ให้ตรงสแน็ปช็อต
+  function ccSyncControls() {
+    document.querySelectorAll('[data-sync="b"]').forEach(el => el.value = P.b);
+    document.querySelectorAll('[data-sync="h"]').forEach(el => el.value = P.h);
+    document.querySelectorAll('[data-sync="L"]').forEach(el => el.value = P.L);   // A1-P2: ช่วงเดียว L (กันช่องค้างค่าเก่า → แก้ทับ P.L)
+    const g = document.querySelector('#in_grade'); if (g) g.value = P.grade;
+    const db = document.querySelector('#in_db'); if (db) db.value = P.db;
+    const ds = document.querySelector('#in_ds'); if (ds) ds.value = P.dstir;
+    const ns = document.querySelector('#in_nspan'); if (ns) ns.value = state.nspan;
+    document.querySelectorAll('#fcPills .pill').forEach(p => p.setAttribute('aria-pressed', String(+p.dataset.fc === P.fc)));
+    document.querySelectorAll('#coverPills .pill').forEach(p => p.setAttribute('aria-pressed', String(+p.dataset.cover === P.cover)));
+    document.querySelectorAll('#legPills .pill').forEach(p => p.setAttribute('aria-pressed', String(+p.dataset.leg === state.legs)));
+    document.querySelectorAll('.mode-btn').forEach(b => b.setAttribute('aria-checked', String(b.dataset.mode === state.mode)));
+  }
+  // ใช้สแน็ปช็อตเข้า calculator (apply → คำนวณใหม่ · parity-safe)
+  function ccApplyInput(s) {
+    if (!s) return;
+    Object.assign(P, s.P);
+    state.mode = s.st.mode; state.nspan = s.st.nspan; state.spanLens = s.st.spanLens.slice(); state.legs = s.st.legs;
+    ccModel.points = JSON.parse(JSON.stringify(s.points || []));
+    ccModel.partials = JSON.parse(JSON.stringify(s.partials || []));
+    ccModel.gridNames = JSON.parse(JSON.stringify(s.gridNames || {}));
+    ccRebuildLoadRows(s.loads);
+    ccSyncControls();
+    buildSpanLenInputs();   // rebuild ช่องความยาวช่วงตาม nspan/spanLens
+    render();               // applyMode + recompute + re-render เต็ม
+  }
+
+  window.CCProject = {
+    data: { name: 'โครงการใหม่', beams: [], floors: ['ชั้น 1'], collapsed: {} },
+    activeId: null, _seq: 0, _mobile: false, _drag: null,
+    _STORE_KEY: 'civilcalc.project.v1', _SCHEMA: 2, _saveTimer: null, _savedState: 'idle', _noPersist: false, _printingAll: false,
+    _id() { return 'b' + (++this._seq); },
+    active() { return this.data.beams.find(b => b.id === this.activeId) || null; },
+    capture() { return ccCaptureInput(); },   // expose สำหรับ audit (คนละ script scope กับ ccCaptureInput)
+    restoreLive(s) { if (s) ccApplyInput(s); },   // A1-P3: คืน live input เต็ม (ให้ audit ไม่ทิ้งสถานะ user เพี้ยน)
+
+    /* ── persist (localStorage · schema-versioned · debounced · ห้าม trust storage) ── */
+    persist(immediate) {
+      if (this._noPersist) return;                       // กัน audit เขียนคานทดสอบลง storage
+      const cur = this.active(); if (cur) cur.input = ccCaptureInput();   // เก็บ edits ปัจจุบันก่อนเซฟ
+      const write = () => {
+        try {
+          localStorage.setItem(this._STORE_KEY, JSON.stringify({ v: this._SCHEMA, savedAt: new Date().toISOString(), activeId: this.activeId, project: this.data }));
+          this._setSaved('saved');
+        } catch (e) { this._setSaved('error'); }          // quota/private-mode → ไม่ crash
+      };
+      clearTimeout(this._saveTimer);
+      if (immediate) { write(); return; }
+      this._setSaved('saving');
+      this._saveTimer = setTimeout(write, 600);            // debounce กันเขียนรัวทุกคีย์
+    },
+    load() {
+      let raw; try { raw = localStorage.getItem(this._STORE_KEY); } catch (e) { return null; }
+      if (!raw) return null;
+      let o; try { o = JSON.parse(raw); } catch (e) { return null; }                 // corrupt → ทิ้ง
+      if (!o || !o.project || !Array.isArray(o.project.beams) || !o.project.beams.length) return null;
+      if (o.v === 1) o = this._migrateV1toV2(o);                                      // backward-compat (ไม่ทิ้งงานเดิม)
+      if (o.v !== this._SCHEMA) return null;                                          // เวอร์ชันอื่น/ใหม่กว่า → ทิ้ง
+      const ok = o.project.beams.every(b => b && b.id && b.input && b.input.P &&
+        typeof b.input.P.b === 'number' && typeof b.input.P.h === 'number' && b.input.st && Array.isArray(b.input.loads));
+      if (!ok) return null;                                                          // validate ไม่ผ่าน → ทิ้ง
+      if (!Array.isArray(o.project.floors) || !o.project.floors.length) o.project.floors = this._deriveFloors(o.project.beams);
+      if (!o.project.collapsed || typeof o.project.collapsed !== 'object') o.project.collapsed = {};
+      return o;
+    },
+    _deriveFloors(beams) { const f = []; beams.forEach(b => { const g = b.group || 'ชั้น 1'; if (!f.includes(g)) f.push(g); }); return f.length ? f : ['ชั้น 1']; },
+    _migrateV1toV2(o) { o.project.floors = this._deriveFloors(o.project.beams); o.project.collapsed = {}; o.v = 2; return o; },
+    newProject() {
+      if (!confirm('เริ่มโปรเจกต์ใหม่? (โปรเจกต์ปัจจุบันที่บันทึกไว้จะถูกแทนที่)')) return;
+      this.data = { name: 'โครงการใหม่', beams: [], floors: ['ชั้น 1'], collapsed: {} }; this._seq = 0;   // A1-P3: shape ครบ
+      const b = { id: this._id(), label: 'B1', group: 'ชั้น 1', input: ccCaptureInput(), summary: this.summaryNow() };
+      this.data.beams.push(b); this.activeId = b.id;
+      this.renderRail(); this.updateCrumb(); this.persist(true);
+    },
+    _setSaved(s) {
+      this._savedState = s;
+      const el = document.querySelector('#ccSaved'); if (!el) return;
+      const map = { saved: ['● บันทึกแล้ว', 'ok'], saving: ['◌ กำลังบันทึก…', 'wait'], error: ['⚠ บันทึกไม่ได้', 'err'], idle: ['', ''] };
+      const m = map[s] || map.idle; el.textContent = m[0]; el.className = 'cc-saved ' + m[1];
+    },
+    nextLabel() { let n = 1; const used = new Set(this.data.beams.map(b => b.label)); while (used.has('B' + n)) n++; return 'B' + n; },
+    summaryNow() {
+      // A1-P2: ยังไม่คำนวณ/engine ไม่พร้อม → idle (state.res ว่าง) · engine reject (หน้าตัดเล็กเกินออกแบบไม่ได้) → bad (ไม่ใช่ idle)
+      const dims = P.b + '×' + P.h;
+      if (!state.res) return { status: 'idle', dc: null, dims, computed: false };
+      const r = state.res;
+      if (r._err) return { status: 'bad', dc: null, dims, computed: true, err: true };   // ออกแบบไม่ผ่าน (engine reject) — ห้ามโชว์ "ยังไม่คำนวณ"
+      return { status: r.pass ? 'ok' : 'bad', dc: r.dc || null, dims, computed: true };
+    },
+    init() {
+      if (this._mounted) return; this._mounted = true;
+      this._mobile = window.matchMedia('(max-width:900px)').matches;
+      this.mount();
+      const saved = this.load();
+      if (saved) {
+        // กู้คืนโปรเจกต์ที่บันทึกไว้ (validate ผ่านแล้ว) → โหลดคานที่ active เข้า calculator
+        this.data = saved.project;
+        this._seq = saved.project.beams.reduce((m, b) => Math.max(m, parseInt(String(b.id || 'b0').slice(1)) || 0), 0);
+        this.activeId = (saved.activeId && saved.project.beams.some(b => b.id === saved.activeId)) ? saved.activeId : saved.project.beams[0].id;
+        ccApplyInput(this.active().input);   // engine ยังไม่พร้อมก็ apply input ได้ · คำนวณตอน __civilRefresh
+        this._setSaved('saved');
+      } else {
+        // ไม่มีของบันทึก/ข้อมูลเสีย → คานแรกจาก state ปัจจุบัน
+        const b = { id: this._id(), label: 'B1', group: 'ชั้น 1', input: ccCaptureInput(), summary: this.summaryNow() };
+        this.data.beams.push(b); this.activeId = b.id;
+      }
+      document.body.classList.toggle('cc-mobile', this._mobile);
+      if (!this._mobile) document.body.classList.add('cc-open');
+      this.renderRail(); this.updateCrumb();
+      if (!saved) this.persist(true);   // เซฟครั้งแรก
+      window.addEventListener('resize', () => { const m = window.matchMedia('(max-width:900px)').matches; if (m !== this._mobile) { this._mobile = m; document.body.classList.toggle('cc-mobile', m); } });
+    },
+    mount() {
+      const rail = document.createElement('aside'); rail.id = 'ccRail'; rail.setAttribute('role', 'navigation'); rail.setAttribute('aria-label', 'คานในโครงการ');
+      document.body.appendChild(rail);
+      const bd = document.createElement('div'); bd.id = 'ccBackdrop'; document.body.appendChild(bd);
+      bd.addEventListener('click', () => document.body.classList.remove('cc-open'));
+      const tg = document.createElement('button'); tg.id = 'ccToggle'; tg.setAttribute('aria-label', 'เปิด/ปิด รายการคาน'); tg.setAttribute('aria-expanded', String(document.body.classList.contains('cc-open')));
+      tg.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg><span class="cc-tg-txt">คาน</span>';
+      document.body.appendChild(tg);
+      tg.addEventListener('click', () => { const open = document.body.classList.toggle('cc-open'); tg.setAttribute('aria-expanded', String(open)); });
+      // breadcrumb เข้าหัว main
+      const main = document.querySelector('main');
+      if (main) {
+        const c = document.createElement('div'); c.id = 'ccCrumb'; c.className = 'no-print'; main.insertBefore(c, main.firstChild);
+        c.addEventListener('click', e => { const a = e.target.closest('[data-ccact]'); if (a && this[a.dataset.ccact]) this[a.dataset.ccact](); });
+        c.addEventListener('keydown', e => {   // a11y: span role=button (เช่น .cc-grid-val) เปิดแก้ด้วย Enter/Space ได้ (ปุ่ม <button> จริงทำ native อยู่แล้ว · ข้ามกัน double-fire)
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          const a = e.target.closest('[data-ccact]');
+          if (a && a.tagName !== 'BUTTON' && a.getAttribute('contenteditable') !== 'true' && this[a.dataset.ccact]) { e.preventDefault(); this[a.dataset.ccact](); }
+        });
+        c.addEventListener('change', e => { const s = e.target.closest('[data-cc-floor]'); if (s) this.moveBeamToFloor(this.activeId, s.value); });
+      }
+      rail.addEventListener('click', e => this._onRailClick(e));
+      // A2-P2: คีย์บอร์ดเรียกแก้ชื่อ (cc-pname/cc-grp-name เป็น div/span · ปุ่มอื่นเป็น <button> รับ Enter เองอยู่แล้ว)
+      rail.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-fl-edit],.cc-pname')) { e.preventDefault(); this._onRailClick(e); } });
+    },
+    _onRailClick(e) {
+      const tog = e.target.closest('[data-fl-tog]'); if (tog) { this.toggleFloor(tog.dataset.flTog); return; }
+      const fad = e.target.closest('[data-fl-add]'); if (fad) { this.addBeamToFloor(fad.dataset.flAdd); return; }
+      const fup = e.target.closest('[data-fl-up]'); if (fup) { this.moveFloor(fup.dataset.flUp, -1); return; }
+      const fdn = e.target.closest('[data-fl-dn]'); if (fdn) { this.moveFloor(fdn.dataset.flDn, 1); return; }
+      const fdl = e.target.closest('[data-fl-del]'); if (fdl) { this.deleteFloor(fdl.dataset.flDel); return; }
+      const fnm = e.target.closest('[data-fl-edit]'); if (fnm) { this.editFloor(fnm.dataset.flEdit); return; }
+      const x = e.target.closest('[data-ccx]'); if (x) { e.stopPropagation(); this.remove(x.dataset.ccx); return; }
+      const beam = e.target.closest('[data-ccid]'); if (beam) { this.select(beam.dataset.ccid); return; }
+      const act = e.target.closest('[data-ccact]'); if (act) { this[act.dataset.ccact](); }
+    },
+    select(id) {
+      if (id === this.activeId) { if (this._mobile) document.body.classList.remove('cc-open'); return; }
+      const cur = this.active(); if (cur) { cur.input = ccCaptureInput(); cur.summary = this.summaryNow(); }
+      this.activeId = id; const b = this.active(); if (!b) return;
+      ccApplyInput(b.input);            // → render() → onRender อัปสถานะ
+      this.renderRail(); this.updateCrumb();
+      if (this._mobile) document.body.classList.remove('cc-open');
+    },
+    addBeam() {
+      const cur = this.active(); if (cur) { cur.input = ccCaptureInput(); cur.summary = this.summaryNow(); }
+      const src = cur ? cur.input : ccCaptureInput();
+      const b = { id: this._id(), label: this.nextLabel(), group: cur ? cur.group : 'ชั้น 1', input: JSON.parse(JSON.stringify(src)), summary: cur ? Object.assign({}, cur.summary) : this.summaryNow() };
+      this.data.beams.push(b); this.activeId = b.id;   // คานใหม่ = ค่าตั้งต้นจากคานปัจจุบัน (สืบ section/material)
+      this.renderRail(); this.updateCrumb();            // input เท่าเดิม → ไม่ต้อง apply (จอแสดงค่าเดิมอยู่แล้ว)
+    },
+    duplicate(id) {
+      const src = this.data.beams.find(b => b.id === id); if (!src) return;
+      const cur = this.active(); if (cur) cur.input = ccCaptureInput();
+      const b = { id: this._id(), label: this.nextLabel(), group: src.group, input: JSON.parse(JSON.stringify(src.input)), summary: Object.assign({}, src.summary) };
+      const i = this.data.beams.indexOf(src); this.data.beams.splice(i + 1, 0, b); this.activeId = b.id;
+      ccApplyInput(b.input); this.renderRail(); this.updateCrumb();
+    },
+    rename(id) {
+      const b = this.data.beams.find(x => x.id === id) || this.active(); if (!b) return;
+      const v = (prompt('ชื่อ/เบอร์คาน:', b.label) || '').trim(); if (v) { b.label = v; this.renderRail(); this.updateCrumb(); }
+    },
+    remove(id) {
+      if (this.data.beams.length <= 1) { alert('ต้องมีอย่างน้อย 1 คานในโครงการ'); return; }
+      const b = this.data.beams.find(x => x.id === id); if (!b) return;
+      if (!confirm('ลบคาน ' + b.label + '? (รายการคำนวณของคานนี้จะหายไป)')) return;
+      const i = this.data.beams.indexOf(b); this.data.beams.splice(i, 1);
+      if (this.activeId === id) { const nb = this.data.beams[Math.max(0, i - 1)]; this.activeId = nb.id; ccApplyInput(nb.input); }
+      this.renderRail(); this.updateCrumb();
+    },
+    renameProject() {
+      const el = document.querySelector('#ccRail .cc-pname'); if (!el) return;
+      el.contentEditable = 'true'; el.focus(); document.getSelection().selectAllChildren(el);
+      const fin = () => { el.contentEditable = 'false'; this.data.name = (el.textContent || '').trim() || 'โครงการใหม่'; el.textContent = this.data.name; this.updateCrumb(); this.persist(); };
+      el.onblur = fin; el.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); } };
+    },
+
+    /* ── ระบบชั้น (floors · Phase D-ชั้น · pi 2026-06-22) ── */
+    _floorList() { if (!Array.isArray(this.data.floors) || !this.data.floors.length) this.data.floors = this._deriveFloors(this.data.beams); const fs = this.data.floors.slice(); this.data.beams.forEach(b => { const g = b.group || 'ชั้น 1'; if (!fs.includes(g)) fs.push(g); }); this.data.floors = fs; return fs; },
+    addFloor() { const fs = this._floorList(); let n = fs.length + 1; while (fs.includes('ชั้น ' + n)) n++; fs.push('ชั้น ' + n); this.renderRail(); this.persist(); },
+    addBeamToFloor(floorName) {
+      const cur = this.active(); if (cur) { cur.input = ccCaptureInput(); cur.summary = this.summaryNow(); }
+      const src = cur ? cur.input : ccCaptureInput();
+      const b = { id: this._id(), label: this.nextLabel(), group: floorName, input: JSON.parse(JSON.stringify(src)), summary: cur ? Object.assign({}, cur.summary) : this.summaryNow() };
+      this.data.beams.push(b); this.activeId = b.id; this.renderRail(); this.updateCrumb();
+    },
+    // ชั้น = "ตำแหน่งที่เลือกมาออกแบบ" (ค่าวิกฤต) · 1 คาน = 1 ชั้น (ไม่ติ๊กหลายชั้น · pi 2026-06-22)
+    _homeFloor(b) { return b.group || 'ชั้น 1'; },
+    moveBeamToFloor(beamId, floorName) {   // drag/dropdown = ย้ายตำแหน่งที่เลือกออกแบบ
+      const b = this.data.beams.find(x => x.id === beamId); if (!b || b.group === floorName) return;
+      b.group = floorName; if (b.floors) delete b.floors;   // single-floor (เคลียร์ multi เก่า)
+      this.renderRail(); this.updateCrumb();
+    },
+    toggleFloor(name) {
+      this.data.collapsed = this.data.collapsed || {}; this.data.collapsed[name] = !this.data.collapsed[name];
+      const el = [...document.querySelectorAll('#ccRail .cc-grp')].find(g => g.dataset.floor === name);
+      if (el) { el.classList.toggle('col', !!this.data.collapsed[name]); const tog = el.querySelector('.cc-grp-tog'); if (tog) tog.setAttribute('aria-expanded', String(!this.data.collapsed[name])); }   // toggle in-place (animation นุ่ม)
+      this.persist();
+    },
+    editFloor(name) {
+      const el = [...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flEdit === name); if (!el) return;   // FIX: ใช้ data-fl-edit (เดิม fl-name ผิด → rename ไม่ทำงาน)
+      el.contentEditable = 'true'; el.focus(); document.getSelection().selectAllChildren(el);
+      const fin = () => {
+        el.contentEditable = 'false'; const nw = (el.textContent || '').trim();
+        if (!nw || nw === name) { this.renderRail(); return; }
+        const fs = this._floorList(); if (fs.includes(nw)) { alert('มีชั้นชื่อนี้แล้ว'); this.renderRail(); return; }
+        const i = fs.indexOf(name); if (i >= 0) fs[i] = nw;
+        this.data.beams.forEach(b => {
+          if ((b.group || 'ชั้น 1') === name) b.group = nw;
+          if (Array.isArray(b.floors)) b.floors = b.floors.map(f => f === name ? nw : f);   // rename ในชั้นที่ใช้ร่วมด้วย
+        });
+        if (this.data.collapsed) { this.data.collapsed[nw] = this.data.collapsed[name]; delete this.data.collapsed[name]; }
+        this.renderRail(); this.updateCrumb(); this.persist();
+      };
+      el.onblur = fin; el.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); } if (ev.key === 'Escape') { el.textContent = name; el.blur(); } };
+    },
+    deleteFloor(name) {
+      const fs = this._floorList(); if (fs.length <= 1) { alert('ต้องมีอย่างน้อย 1 ชั้น'); return; }
+      const homeHere = this.data.beams.filter(b => (b.group || 'ชั้น 1') === name);
+      const other = fs.find(f => f !== name);
+      if (homeHere.length && !confirm('ลบชั้น "' + name + '"? คาน ' + homeHere.length + ' ตัว (ชั้นออกแบบ) จะย้ายไป "' + other + '"')) return;
+      this.data.beams.forEach(b => {
+        if ((b.group || 'ชั้น 1') === name) b.group = other;                                 // ชั้นออกแบบ → ย้าย
+        if (Array.isArray(b.floors)) b.floors = b.floors.filter(f => f !== name);            // ปลดชั้นที่ใช้ร่วม
+      });
+      this.data.floors = fs.filter(f => f !== name);
+      if (this.data.collapsed) delete this.data.collapsed[name];
+      this.renderRail(); this.updateCrumb(); this.persist();
+    },
+    moveFloor(name, dir) {
+      const fs = this._floorList(); const i = fs.indexOf(name), j = i + dir;
+      if (i < 0 || j < 0 || j >= fs.length) return;
+      fs.splice(i, 1); fs.splice(j, 0, name); this.renderRail(); this.persist();
+    },
+    // เฟส C · ประกอบเอกสารพิมพ์รวมทั้งโครงการ (ปก + สารบัญ + ทุกคาน) — แยกจาก print เพื่อเทสต์ได้
+    buildAllHTML() {
+      const beams = this.data.beams; if (!beams.length) return '';
+      const savedActive = this.activeId, savedStep = state.step, wasNP = this._noPersist;
+      this._noPersist = true;
+      const cur = this.active(); if (cur) cur.input = ccCaptureInput();   // เก็บ edits คานปัจจุบันก่อน loop
+      const pn = document.querySelector('#projName'); const oldProj = pn ? pn.value : null;
+      if (pn) pn.value = this.data.name;
+      state.step = 3;   // ให้ render วาดหน้าตัด/สรุปครบทุกคาน
+      const parts = [];
+      beams.forEach(b => {
+        ccApplyInput(b.input);                          // → render() คำนวณ + วาด + populate
+        const home = this._homeFloor(b);   // ตำแหน่ง/ชั้นที่เลือกมาออกแบบ (ค่าวิกฤต)
+        const mem = document.querySelector('#pt_member'); if (mem) mem.textContent = 'คาน ' + b.label + ' · ตำแหน่งออกแบบ ' + home;
+        let gAuto = ''; try { gAuto = geom().nodes.map((_, i) => ccModel.grid(i)).join('–'); } catch (e) {}   // กริดอัตโนมัติจากผัง
+        const grid = (b.grid || gAuto || '');           // override ต่อคาน > อัตโนมัติ
+        this._docGrid = b.grid || '';                   // ให้ ccPopulatePrintDoc ใช้ override คานนี้ (ไม่ใช่คานที่ active)
+        ccPopulatePrintDoc();                           // repopulate ให้หัวเอกสารมีชื่อคานถูก
+        this._docGrid = null;
+        const r = state.res;
+        // A1-P2: ไม่ ready → "ยังไม่คำนวณ" · engine reject (_err) หรือ passes:false → "ไม่ผ่าน" (ห้ามซ่อน fail ในเอกสาร ก.ว.)
+        const st = !r ? 'ยังไม่คำนวณ' : (r._err ? 'ไม่ผ่าน' : (r.pass ? 'ผ่าน' : 'ไม่ผ่าน'));
+        parts.push({ b, html: document.querySelector('#cc-print-doc').innerHTML, bh: P.b + '×' + P.h,
+          floor: home, grid: grid, status: st, dc: (r && r.dc != null) ? r.dc : null });
+      });
+      const html = this._buildCombinedDoc(parts);
+      // คืนสภาพ: step + projName + คานที่ active เดิม
+      state.step = savedStep; this.activeId = savedActive;
+      if (pn && oldProj != null) pn.value = oldProj;
+      const sa = this.active(); if (sa) ccApplyInput(sa.input);
+      this._noPersist = wasNP;
+      return html;
+    },
+    _buildCombinedDoc(parts) {
+      const esc = ccEsc;
+      const pass = parts.filter(p => p.status === 'ผ่าน').length, fail = parts.filter(p => p.status === 'ไม่ผ่าน').length, idle = parts.length - pass - fail;
+      let dstr = ''; try { dstr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }); } catch (e) {}
+      const cover = `<div class="pd-cover"><div class="t">${esc(this.data.name)}</div>` +
+        `<div class="s">รายการคำนวณโครงสร้าง คอนกรีตเสริมเหล็ก · วิธีกำลัง (ว.ส.ท.)</div>` +
+        `<div class="s">${parts.length} คาน · ${pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ยังไม่คำนวณ' : ''}</div>` +
+        `<div class="s">${esc(dstr)}</div><div class="s" style="margin-top:10px;color:#94a3b8">Civil Calc · Panuwat Lab</div></div>`;
+      const toc = `<div class="pd-toc"><div class="pd-st">สารบัญคาน (${parts.length})</div><table>` +
+        `<thead><tr><th style="width:7%">ลำดับ</th><th>เบอร์คาน</th><th>กริดไลน์</th><th>ตำแหน่งที่เลือกใช้ออกแบบ</th><th>ขนาดคาน (ซม.)</th><th>อัตราส่วน D/C<br><span style="font-weight:400;font-size:9px;">(Demand-to-Capacity)</span></th></tr></thead><tbody>` +
+        parts.map((p, i) => `<tr><td>${i + 1}</td><td><b>คาน ${esc(p.b.label)}</b></td><td class="mono">${esc(p.grid || '—')}</td><td>${esc(p.floor || p.b.group || '')}</td><td class="mono">${esc(p.bh)}</td><td>${esc(p.status)}${p.dc != null ? (' · ' + p.dc + '%') : ''}</td></tr>`).join('') +
+        `</tbody></table></div>`;
+      const sheets = parts.map(p => `<div class="page-break cc-sheet">${p.html}</div>`).join('');
+      return cover + toc + sheets;
+    },
+    printAll() {
+      if (!this.data.beams.length) return;
+      const doc = document.querySelector('#cc-print-doc'); if (!doc) return;
+      const html = this.buildAllHTML();
+      this._printingAll = true; doc.innerHTML = html;            // กัน beforeprint clobber
+      try { window.print(); } catch (e) {}
+      this._printingAll = false; ccPopulatePrintDoc();           // คืนเอกสารคานปัจจุบัน
+    },
+    exportJSON() {
+      const cur = this.active(); if (cur) cur.input = ccCaptureInput();
+      const blob = new Blob([JSON.stringify(this.data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = (this.data.name || 'project').replace(/[^\w฀-๿-]+/g, '_') + '.json'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    },
+    _statusDot(s) { const st = (s && s.status) || 'idle'; const cls = st === 'ok' ? 'ok' : (st === 'bad' ? 'bad' : 'idle'); return `<span class="cc-dot ${cls}"></span>`; },
+    _ring() {
+      const beams = this.data.beams, tot = beams.length;
+      const pass = beams.filter(b => b.summary && b.summary.status === 'ok').length;
+      const C = 100.5, off = tot ? C * (1 - pass / tot) : C;
+      return { pass, tot, off };
+    },
+    renderRail() {
+      const rail = document.querySelector('#ccRail'); if (!rail) return;
+      const r = this._ring();
+      const fail = this.data.beams.filter(b => b.summary && b.summary.status === 'bad').length;
+      const idle = this.data.beams.filter(b => !b.summary || b.summary.status === 'idle').length;
+      // render ตามชั้น (floors · ลำดับกำหนดได้ · collapsible · drag-drop ย้ายคาน)
+      const floors = this._floorList();
+      const beamRow = (b, i) => {
+        const sel = b.id === this.activeId ? ' sel' : '';
+        const live = (b.id === this.activeId && b.summary && b.summary.status === 'ok') ? ' live' : '';
+        const dim = (b.summary && b.summary.computed) ? b.summary.dims : 'ค้าง';
+        const dotcls = (b.summary && b.summary.status === 'ok') ? ('ok' + live) : (b.summary && b.summary.status === 'bad' ? 'bad' : 'idle');
+        return `<div class="cc-beam${sel}" data-ccid="${b.id}" draggable="true" role="button" tabindex="0" aria-label="คาน ${ccEsc(b.label)}" style="animation-delay:${i * 0.04}s">` +
+          `<span class="cc-grip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.4"/><circle cx="15" cy="5" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="19" r="1.4"/><circle cx="15" cy="19" r="1.4"/></svg></span>` +
+          `<span class="cc-dot ${dotcls}"></span><span class="cc-beam-lbl">${ccEsc(b.label)}</span>` +
+          `<span class="cc-beam-dim">${ccEsc(dim)}</span>` +
+          `<button class="cc-beam-x" data-ccx="${b.id}" aria-label="ลบคาน ${ccEsc(b.label)}">✕</button></div>`;
+      };
+      const chev = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg>';
+      const tree = floors.map(fname => {
+        const fb = this.data.beams.filter(b => this._homeFloor(b) === fname);   // คานอยู่ใต้ชั้นออกแบบ (วิกฤต) เดียว · ชั้นที่ใช้ร่วม = โน้ตเฉยๆ
+        const col = (this.data.collapsed && this.data.collapsed[fname]) ? ' col' : '';
+        const pass = fb.filter(b => b.summary && b.summary.status === 'ok').length;
+        const bad = fb.filter(b => b.summary && b.summary.status === 'bad').length;
+        const metaTxt = fb.length ? (fb.length + ' คาน' + (pass ? ' · ' + pass + '✓' : '') + (bad ? ' · ' + bad + '✗' : '')) : 'ว่าง';
+        return `<div class="cc-grp${col}" data-floor="${ccEsc(fname)}">` +
+          `<div class="cc-grp-h"><button class="cc-grp-tog" data-fl-tog="${ccEsc(fname)}" aria-label="พับ/กางชั้น ${ccEsc(fname)}" aria-expanded="${!col}">${chev}</button>` +
+            `<span class="cc-grp-name" data-fl-edit="${ccEsc(fname)}" role="button" tabindex="0" title="คลิก/Enter เพื่อเปลี่ยนชื่อชั้น" aria-label="เปลี่ยนชื่อชั้น ${ccEsc(fname)}">${ccEsc(fname)}</span>` +
+            `<span class="cc-grp-meta">${metaTxt}</span>` +
+            `<span class="cc-grp-acts">` +
+              `<button class="cc-ga" data-fl-edit="${ccEsc(fname)}" aria-label="แก้ชื่อชั้น ${ccEsc(fname)}" title="แก้ชื่อชั้น"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>` +
+              `<button class="cc-ga" data-fl-add="${ccEsc(fname)}" aria-label="เพิ่มคานในชั้นนี้" title="เพิ่มคานในชั้นนี้"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>` +
+              `<button class="cc-ga" data-fl-up="${ccEsc(fname)}" aria-label="เลื่อนชั้นขึ้น"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg></button>` +
+              `<button class="cc-ga" data-fl-dn="${ccEsc(fname)}" aria-label="เลื่อนชั้นลง"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>` +
+              `<button class="cc-ga cc-ga-del" data-fl-del="${ccEsc(fname)}" aria-label="ลบชั้น"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></button>` +
+            `</span></div>` +
+          `<div class="cc-grp-body" data-drop="${ccEsc(fname)}">${fb.length ? fb.map(beamRow).join('') : '<div class="cc-empty">— ลากคานมาที่นี่ หรือกด + —</div>'}</div></div>`;
+      }).join('');
+      rail.innerHTML =
+        `<div class="cc-head"><div class="cc-logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg></div>` +
+          `<div style="min-width:0"><div class="cc-pname" role="button" tabindex="0" title="คลิก/Enter เพื่อเปลี่ยนชื่อโครงการ" aria-label="เปลี่ยนชื่อโครงการ" data-ccact="renameProject">${ccEsc(this.data.name)}</div>` +
+          `<div class="cc-pmeta">${this.data.beams.length} คาน · ${r.pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ค้าง' : ''}</div></div>` +
+          `<div class="cc-ring" title="${r.pass}/${r.tot} คานผ่าน"><svg width="40" height="40"><circle cx="20" cy="20" r="16" fill="none" stroke="rgba(34,66,92,.1)" stroke-width="3.5"/><circle id="ccRingArc" cx="20" cy="20" r="16" fill="none" stroke="url(#ccRingG)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="${r.off}" style="transition:stroke-dashoffset .9s cubic-bezier(.16,1,.3,1)"/><defs><linearGradient id="ccRingG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#356897"/><stop offset="1" stop-color="#0f766e"/></linearGradient></defs></svg><div class="v">${r.pass}/${r.tot}</div></div></div>` +
+        `<div class="cc-legend" title="แต่ละชั้นที่จัดไว้ = ตำแหน่ง/ช่วงคานที่เลือกค่าวิกฤตมาออกแบบ (1 เบอร์ = 1 รายการคำนวณ)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6"/></svg><span>ชั้น = <b>ตำแหน่งที่เลือกมาออกแบบ</b> (ค่าวิกฤต)</span></div>` +
+        `<div class="cc-tree">${tree}<div class="cc-addrow">` +
+          `<button class="cc-add" data-ccact="addBeam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>เพิ่มคาน</button>` +
+          `<button class="cc-add cc-addfloor" data-ccact="addFloor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h18"/></svg>เพิ่มชั้น</button></div></div>` +
+        `<div class="cc-savedrow"><span class="cc-saved" id="ccSaved"></span></div>` +
+        `<div class="cc-foot"><button class="cc-fbtn" data-ccact="newProject" title="เริ่มโปรเจกต์ใหม่"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 12v6M9 15h6"/></svg>ใหม่</button>` +
+          `<button class="cc-fbtn" data-ccact="exportJSON" title="ส่งออกไฟล์โครงการ (.json)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>ส่งออก</button>` +
+          `<button class="cc-fbtn primary" data-ccact="printAll" title="พิมพ์รวมทั้งโครงการ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>พิมพ์</button></div>`;
+      this._setSaved(this._savedState);   // คืนสถานะบันทึกหลัง rebuild
+      // keyboard + drag-drop (ย้ายคานข้ามชั้น) · dropdown ย้ายใน breadcrumb เป็น fallback a11y
+      rail.querySelectorAll('.cc-beam').forEach(el => {
+        el.addEventListener('keydown', ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.select(el.dataset.ccid); } });
+        el.addEventListener('dragstart', ev => { this._drag = el.dataset.ccid; el.classList.add('dragging'); try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', el.dataset.ccid); } catch (e) {} });
+        el.addEventListener('dragend', () => { el.classList.remove('dragging'); this._drag = null; rail.querySelectorAll('.cc-grp-body.over').forEach(b => b.classList.remove('over')); });
+      });
+      rail.querySelectorAll('.cc-grp-body').forEach(zone => {
+        zone.addEventListener('dragover', ev => { ev.preventDefault(); try { ev.dataTransfer.dropEffect = 'move'; } catch (e) {} zone.classList.add('over'); });
+        zone.addEventListener('dragleave', ev => { if (!zone.contains(ev.relatedTarget)) zone.classList.remove('over'); });
+        zone.addEventListener('drop', ev => { ev.preventDefault(); zone.classList.remove('over'); const id = this._drag || (ev.dataTransfer && ev.dataTransfer.getData('text/plain')); if (id) this.moveBeamToFloor(id, zone.dataset.drop); });
+      });
+      this.persist();   // autosave โครงสร้าง · debounced
+    },
+    renameActive() { this.rename(this.activeId); },
+    dupActive() { this.duplicate(this.activeId); },
+    delActive() { this.remove(this.activeId); },
+    updateCrumb() {
+      const c = document.querySelector('#ccCrumb'); if (!c) return;
+      const b = this.active(); if (!b) { c.innerHTML = ''; return; }
+      const arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>';
+      const ren = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+      const cp = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+      const tr = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>';
+      const floors = this._floorList(), home = this._homeFloor(b);
+      // ชั้น = "ตำแหน่งที่เลือกมาออกแบบ" (ค่าวิกฤต) · เลือกชั้นเดียว (ไม่ต้องติ๊กหลายชั้น)
+      const floorSel = `<span class="cc-crumb-pos"><span class="cc-pos-lbl">ตำแหน่งออกแบบ:</span><select class="cc-crumb-floor" data-cc-floor aria-label="ตำแหน่ง/ชั้นที่เลือกมาออกแบบ" title="ตำแหน่ง/ชั้นที่เลือกมาออกแบบ (ค่าวิกฤต)">${floors.map(f => `<option value="${ccEsc(f)}"${f === home ? ' selected' : ''}>${ccEsc(f)}</option>`).join('')}</select></span>`;
+      // กริดไลน์ต่อคาน (b.grid · แก้ได้ · ว่าง = ใช้ค่าจากผังอัตโนมัติ) — ให้คนตรวจรู้ว่าคานอยู่กริดไหน
+      const gv = b.grid || '';
+      const gridField = `<span class="cc-crumb-grid"><span class="cc-pos-lbl">กริด:</span><span class="cc-grid-val${gv ? '' : ' ph'}" role="button" tabindex="0" data-ccact="editBeamGrid" title="คลิกเพื่อใส่/แก้กริดไลน์ (เช่น A–B หรือ 2/A–B)">${ccEsc(gv || 'ใส่กริด')}</span></span>`;
+      c.innerHTML = `${ccEsc(this.data.name)}${arrow}<b>${ccEsc(b.label)}</b>${arrow}${floorSel}${arrow}${gridField}` +
+        `<span class="cc-cacts"><button class="cc-cact" data-ccact="renameActive" aria-label="เปลี่ยนชื่อคาน">${ren}</button>` +
+        `<button class="cc-cact" data-ccact="dupActive" aria-label="ทำสำเนาคาน">${cp}</button>` +
+        `<button class="cc-cact" data-ccact="delActive" aria-label="ลบคาน">${tr}</button></span>`;
+    },
+    editBeamGrid() {
+      const el = document.querySelector('#ccCrumb .cc-grid-val'); const b = this.active(); if (!el || !b) return;
+      if (!b.grid) el.textContent = '';   // เคลียร์ placeholder ก่อนพิมพ์
+      el.classList.remove('ph'); el.contentEditable = 'true'; el.focus(); document.getSelection().selectAllChildren(el);
+      const fin = () => { el.contentEditable = 'false'; b.grid = (el.textContent || '').trim(); this.updateCrumb(); this.persist(); };
+      el.onblur = fin; el.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); } else if (ev.key === 'Escape') { ev.preventDefault(); el.textContent = b.grid || ''; el.blur(); } };
+    },
+    // เรียกจาก render() ทุกครั้ง — อัปสถานะคานที่เปิดอยู่ (in-place · ไม่ rebuild rail · กัน animation ซ้ำ)
+    onRender() {
+      if (this._noPersist || this._printingAll) return;   // A1-P3: batch ภายใน (build/print/audit) render คานที่ ≠ active → อย่าเขียน summary ผิดคาน
+      const b = this.active(); if (!b) return;
+      b.summary = this.summaryNow();
+      const el = document.querySelector(`#ccRail .cc-beam[data-ccid="${b.id}"]`);
+      if (el) {
+        const dot = el.querySelector('.cc-dot'); if (dot) dot.className = 'cc-dot ' + (b.summary.status === 'ok' ? 'ok live' : (b.summary.status === 'bad' ? 'bad' : 'idle'));
+        const dim = el.querySelector('.cc-beam-dim'); if (dim) dim.textContent = b.summary.computed ? b.summary.dims : 'ค้าง';
+      }
+      const r = this._ring(), arc = document.querySelector('#ccRingArc'), v = document.querySelector('#ccRail .cc-ring .v');
+      if (arc) arc.style.strokeDashoffset = r.off; if (v) v.textContent = r.pass + '/' + r.tot;
+      const meta = document.querySelector('#ccRail .cc-pmeta');
+      const fail = this.data.beams.filter(x => x.summary && x.summary.status === 'bad').length;
+      const idle = this.data.beams.filter(x => !x.summary || x.summary.status === 'idle').length;
+      if (meta) meta.textContent = `${this.data.beams.length} คาน · ${r.pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ค้าง' : ''}`;
+      this.persist();   // autosave (debounced) — ครอบการแก้ section/โหลด
+    }
+  };
+
   /* ── test hook (Phase 4A · parity harness) ─────────────────────────────────
      เปิดให้ window.runTests ขับ case + อ่าน engine ที่ recompute ใช้จริง (_lastInp)
      เทียบกับ state.res → ยืนยัน "เลขที่โชว์ == ความจริง engine · ไม่ใช่ MOCK"
@@ -1810,13 +2428,13 @@
       // partial UDLs — shaded band + draggable end handles + draggable body
       ccModel.partials.forEach((q, i) => {
         const xa = X(q.x0), xb = X(q.x1), bandY = beamY - 34, bandH = 18;
-        svg.appendChild(svgEl('rect', { x: xa, y: bandY, width: Math.max(2, xb - xa), height: bandH, fill: 'rgba(37,99,235,.10)', stroke: '#2563EB', 'stroke-width': 1 }));
-        const lbl = svgEl('text', { x: (xa + xb) / 2, y: bandY - 3, 'font-size': 9.5, fill: '#2563EB', 'text-anchor': 'middle', 'font-weight': 600 }); lbl.textContent = 'w' + (i + 1) + ' ' + ccUnits.W(q.w); svg.appendChild(lbl);
+        svg.appendChild(svgEl('rect', { x: xa, y: bandY, width: Math.max(2, xb - xa), height: bandH, fill: 'rgba(47,102,144,.10)', stroke: '#2F6690', 'stroke-width': 1 }));
+        const lbl = svgEl('text', { x: (xa + xb) / 2, y: bandY - 3, 'font-size': 9.5, fill: '#2F6690', 'text-anchor': 'middle', 'font-weight': 600 }); lbl.textContent = 'w' + (i + 1) + ' ' + ccUnits.W(q.w); svg.appendChild(lbl);
         // body drag
         const body = svgEl('rect', { x: xa, y: bandY, width: Math.max(2, xb - xa), height: bandH, fill: 'transparent', cursor: 'move' });
         this._dragPartial(body, host, i, 'move'); svg.appendChild(body);
         // end handles
-        [['x0', xa], ['x1', xb]].forEach(([k, hx]) => { const hnd = svgEl('rect', { x: hx - 4, y: bandY - 2, width: 8, height: bandH + 4, rx: 2, fill: '#2563EB', cursor: 'ew-resize' }); this._dragPartial(hnd, host, i, k); svg.appendChild(hnd); });
+        [['x0', xa], ['x1', xb]].forEach(([k, hx]) => { const hnd = svgEl('rect', { x: hx - 4, y: bandY - 2, width: 8, height: bandH + 4, rx: 2, fill: '#2F6690', cursor: 'ew-resize' }); this._dragPartial(hnd, host, i, k); svg.appendChild(hnd); });
       });
 
       // point loads — draggable arrow glyphs
@@ -1937,14 +2555,14 @@
       const x1 = X(lo), x2 = X(hi), y = dd.y;
       if (x2 - x1 < 1) {
         // zero-length: show a small tick + 0.00 so user still gets feedback at the grid
-        svg.appendChild(svgEl('line', { x1, y1: y - 5, x2: x1, y2: y + 5, stroke: '#2563EB', 'stroke-width': 1.2 }));
+        svg.appendChild(svgEl('line', { x1, y1: y - 5, x2: x1, y2: y + 5, stroke: '#2F6690', 'stroke-width': 1.2 }));
         return;
       }
-      svg.appendChild(svgEl('line', { x1, y1: y, x2, y2: y, stroke: '#2563EB', 'stroke-width': 1.2 }));
-      [x1, x2].forEach(xx => svg.appendChild(svgEl('line', { x1: xx, y1: y - 5, x2: xx, y2: y + 5, stroke: '#2563EB', 'stroke-width': 1.2 })));
-      svg.appendChild(svgEl('path', { d: `M${x1 + 6},${y - 3} L${x1},${y} L${x1 + 6},${y + 3}`, stroke: '#2563EB', 'stroke-width': 1.2, fill: 'none' }));
-      svg.appendChild(svgEl('path', { d: `M${x2 - 6},${y - 3} L${x2},${y} L${x2 - 6},${y + 3}`, stroke: '#2563EB', 'stroke-width': 1.2, fill: 'none' }));
-      const t = svgEl('text', { x: (x1 + x2) / 2, y: y - 4, 'font-size': 10, fill: '#2563EB', 'text-anchor': 'middle', 'font-weight': 700, stroke: '#fff', 'stroke-width': 3, 'paint-order': 'stroke', 'stroke-linejoin': 'round' });
+      svg.appendChild(svgEl('line', { x1, y1: y, x2, y2: y, stroke: '#2F6690', 'stroke-width': 1.2 }));
+      [x1, x2].forEach(xx => svg.appendChild(svgEl('line', { x1: xx, y1: y - 5, x2: xx, y2: y + 5, stroke: '#2F6690', 'stroke-width': 1.2 })));
+      svg.appendChild(svgEl('path', { d: `M${x1 + 6},${y - 3} L${x1},${y} L${x1 + 6},${y + 3}`, stroke: '#2F6690', 'stroke-width': 1.2, fill: 'none' }));
+      svg.appendChild(svgEl('path', { d: `M${x2 - 6},${y - 3} L${x2},${y} L${x2 - 6},${y + 3}`, stroke: '#2F6690', 'stroke-width': 1.2, fill: 'none' }));
+      const t = svgEl('text', { x: (x1 + x2) / 2, y: y - 4, 'font-size': 10, fill: '#2F6690', 'text-anchor': 'middle', 'font-weight': 700, stroke: '#fff', 'stroke-width': 3, 'paint-order': 'stroke', 'stroke-linejoin': 'round' });
       t.textContent = (hi - lo).toFixed(2); svg.appendChild(t);
     });
   }
@@ -2607,7 +3225,7 @@
     const botDash = curtAppx && !(curt && curt.bottomExact);
     const yBot = beamBot - inset, yBotX = yBot - 7;
     rebar(svg, X(x0), X(xN), yBot, 'up');
-    if (!compact) labelBar(svg, X(x0) + 6, yBot + 13, `${mainN}-${botSize} หลักล่าง`, '#1D4ED8', 'start');
+    if (!compact) labelBar(svg, X(x0) + 6, yBot + 13, `${mainN}-${botSize} หลักล่าง`, '#2F6690', 'start');
     c.spans.forEach((sp, si) => {
       const xA = c.nodes[si], xB = c.nodes[si + 1];
       const gM = (bars && bars.spanBot[si]) ? extraBarGroups(bars.spanBot[si].list) : [];   // คงขนาดผสม (Codex P2)
@@ -2624,16 +3242,16 @@
         if (!compact) {
           const where = isEnv ? 'จาก moment envelope จริง' : 'ที่ L/8';
           const lbl = cb.cut_bars ? `ตัด ${cb.cut_bars} ${where}${nContExtra > 0 ? ` · +${nContExtra} วิ่งเต็ม` : ''}` : `+${fmtBars(gM)} เสริมกลาง`;
-          labelBar(svg, X((xA + xB) / 2), yBotX - (nContExtra > 0 ? 14 : 4), lbl, '#2563EB', 'middle', 9);
+          labelBar(svg, X((xA + xB) / 2), yBotX - (nContExtra > 0 ? 14 : 4), lbl, '#2F6690', 'middle', 9);
           // ความยาวเหล็กเสริมที่ตัด เป็นเส้น dim มีลูกศร ใต้คาน (pi 2026-06-11 · เดิมเป็นตัวหนังสือ "ตัด X/Y")
           dim(svg, X(aB), X(bB), beamBot + 18, (bB - aB).toFixed(2));
         }
       } else if (cb) {   // single ไม่ตัด → เสริมวิ่งเต็มหมด
         rebar(svg, X(x0), X(xN), yBotX, 'none', true, botDash);
-        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} วิ่งเต็ม (ไม่ตัด)`, '#2563EB', 'middle', 9);
+        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} วิ่งเต็ม (ไม่ตัด)`, '#2F6690', 'middle', 9);
       } else {           // ไม่มี curt data → fallback schematic L/6
         rebar(svg, X(xA + sp / 6), X(xB - sp / 6), yBotX, 'none', true, botDash);
-        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2563EB', 'middle', 9);
+        if (!compact) labelBar(svg, X((xA + xB) / 2), yBotX - 4, `+${fmtBars(gM)} เสริมกลาง`, '#2F6690', 'middle', 9);
       }
     });
 
@@ -2641,7 +3259,7 @@
     const yTop = beamTop + inset, yTopX = yTop + 7;
     const halfCol = (c.col || 0.4) / 2;
     rebar(svg, X(x0), X(xN), yTop, 'down');
-    if (!compact) labelBar(svg, X(x0) + 4, beamTop - 5, `${mainN}-${topSize} หลักบน`, '#1D4ED8', 'start');
+    if (!compact) labelBar(svg, X(x0) + 4, beamTop - 5, `${mainN}-${topSize} หลักบน`, '#2F6690', 'start');
     const isCont = state.mode === 'cont';
     c.nodes.forEach((nx, i) => {
       const isL = i === 0, isR = i === c.nodes.length - 1, isEnd = isL || isR;
@@ -2667,7 +3285,7 @@
         aO = Math.max(x0, aO); bO = Math.min(xN, bO);
         rebar(svg, X(aO), X(bO), yTopX, 'none', true, curtAppx);   // เส้นเดียว หยุดเรียบ (ไม่มีตะขอ · ไม่ซ้อนกล่อง)
         if (!compact) {
-          labelBar(svg, X((aO + bO) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
+          labelBar(svg, X((aO + bO) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2F6690', 'middle', 9);
           // ระยะยื่นเป็นเส้น dim มีลูกศร — ซ้าย/ขวา จากหน้าเสา (เห็น asymmetric ชัด · ยื่นเข้าช่วงในมากกว่าช่วงริม · pi 2026-06-11 · เดิมเป็นตัวหนังสือลอย)
           const yDimT = beamTop - 28;
           if (X(faceL) - X(aO) > 10) dim(svg, X(aO), X(faceL), yDimT, extL.toFixed(2));
@@ -2680,7 +3298,7 @@
         let a = isL ? nx : nx - spL / 3, b = isR ? nx : nx + spR / 3;
         a = Math.max(x0, a); b = Math.min(xN, b);
         rebar(svg, X(a), X(b), yTopX, 'none', true);   // nominal ปลาย = หยุดเรียบเช่นกัน
-        if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2563EB', 'middle', 9);
+        if (!compact) labelBar(svg, X((a + b) / 2), yTopX + 12, `+${fmtBars(groups)} ${lbl}`, '#2F6690', 'middle', 9);
         if (showDim && !compact) dim(svg, X(a), X(b), beamTop - 24, (b - a).toFixed(2));
       }
     });
@@ -2785,13 +3403,13 @@
   // rebar line with end hooks
   function rebar(svg, x1, x2, y, hook, thin, dashed) {
     const w = thin ? 1.6 : 2.4;
-    const ln = { x1, y1: y, x2, y2: y, stroke: '#1D4ED8', 'stroke-width': w, 'stroke-linecap': 'round' };
+    const ln = { x1, y1: y, x2, y2: y, stroke: '#2F6690', 'stroke-width': w, 'stroke-linecap': 'round' };
     if (dashed) ln['stroke-dasharray'] = '6 4';   // ค่าประมาณ (applicable=false · มีจุดโหลด/ช่วงไม่เท่า) → เส้นประ
     svg.appendChild(svgEl('line', ln));
     if (hook === 'none') return;                   // เหล็กตัด (cutoff) = หยุดเรียบ ไม่มีตะขอ (มาตรฐาน DRMK รูป 8.32 · A2 · ตะขอเหลือเฉพาะปลายคานจริง)
     const hk = hook === 'down' ? 8 : -8;
-    svg.appendChild(svgEl('line', { x1, y1: y, x2: x1, y2: y + hk, stroke: '#1D4ED8', 'stroke-width': w }));
-    svg.appendChild(svgEl('line', { x1: x2, y1: y, x2: x2, y2: y + hk, stroke: '#1D4ED8', 'stroke-width': w }));
+    svg.appendChild(svgEl('line', { x1, y1: y, x2: x1, y2: y + hk, stroke: '#2F6690', 'stroke-width': w }));
+    svg.appendChild(svgEl('line', { x1: x2, y1: y, x2: x2, y2: y + hk, stroke: '#2F6690', 'stroke-width': w }));
   }
   function labelBar(svg, x, y, txt, fill, anchor, size) {
     const t = svgEl('text', { x, y, 'font-size': size || 10, fill, 'text-anchor': anchor || 'middle', 'font-weight': 600 }); t.textContent = txt; svg.appendChild(t);
@@ -2934,7 +3552,7 @@
         ord.forEach((pos, kk) => {
           const r = Math.max(1.3, natR[kk] * f);
           const cx = cnt === 1 ? (x0 + x1) / 2 : x0 + (pos / (cnt - 1)) * (x1 - x0);
-          svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#1D4ED8', 'data-bar': tag }));
+          svg.appendChild(svgEl('circle', { cx, cy: y, r, fill: '#2F6690', 'data-bar': tag }));
         });
         placed += cnt;
         if (placed >= n) break;
@@ -3170,12 +3788,15 @@
      populate จาก node ที่ render แล้ว (clone กราฟ + show-work · ไม่ยุ่งลำดับบนจอ) · display-only */
   function ccPopulatePrintDoc() {
     const doc = $('#cc-print-doc'); if (!doc) return;
+    if (window.CCProject && CCProject._printingAll) return;   // เฟส C · พิมพ์รวมทั้งโครงการ → อย่า clobber เอกสารเล่มรวม
     const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const m = liveData(), r = state.res || {}, cont = state.mode === 'cont';
     const proj = ($('#projName') && $('#projName').value) || '—';
     const member = ($('#pt_member') && $('#pt_member').textContent) || ('คาน (' + (cont ? 'ต่อเนื่อง' : 'ช่วงเดียว') + ')');
     let grid = '';   // ดึงค่ากริดจากในรูป (ccModel.grid ที่วาดในผัง/กราฟ · pi 2026-06-21) → A–B / A–B–C–D
     try { const _gn = geom().nodes; grid = _gn.map((_, i) => ccModel.grid(i)).join('–'); } catch (e) { grid = ''; }
+    // override กริดต่อคาน (b.grid · pi 2026-06-22) — buildAllHTML ตั้ง _docGrid ต่อคาน · live ใช้คานที่เปิดอยู่
+    try { const _ccp = window.CCProject; const _ov = _ccp ? (_ccp._docGrid != null ? _ccp._docGrid : ((_ccp.active() && _ccp.active().grid) || '')) : ''; if (_ov) grid = _ov; } catch (e) {}
     const fy = fyOf(P.grade);
     let dstr = ''; try { dstr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { dstr = ''; }
     const planSvg = $('#ccCanvasHost svg'), diagSvg = $('#ccDiagHost svg');
@@ -3243,6 +3864,7 @@
     { const ptbh = $('#pt_bh'); if (ptbh) ptbh.textContent = P.b + '×' + P.h; }
     updateNav();
     ccPopulatePrintDoc();   // เอกสารพิมพ์ A4 (populate-on-render · gotcha 1 — ไม่พึ่ง beforeprint อย่างเดียว)
+    if (window.CCProject && CCProject.onRender) CCProject.onRender();   // Phase A · อัปสถานะคานที่เปิดอยู่ใน rail (สด)
   }
   window.addEventListener('beforeprint', ccPopulatePrintDoc);   // backup ก่อนพิมพ์ (Ctrl+P)
 
@@ -7223,8 +7845,11 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
     const A = (name, cond, detail) => checks.push({ name, pass: !!cond, detail: detail == null ? '' : String(detail) });
     const snap = TT() && TT().snapshot ? TT().snapshot() : null;
     const origCtab = TT() && TT().ctab ? TT().ctab() : 'work';   // restore แท็บเดิม (Codex P3)
+    const _ccUserLive = (window.CCProject && CCProject.capture) ? CCProject.capture() : null;   // full user state (deterministic restore · กัน audit ทิ้ง loads/L/legs เพี้ยน)
+    const _lrEl = document.querySelector('#loadRows'); const _lrBak = _lrEl ? _lrEl.innerHTML : null;
     try {
       if (!TT()) { console.warn('[design-audit] __civilTest ยังไม่พร้อม'); return null; }
+      if (window.__ccBaseLoadRows && _lrEl) _lrEl.innerHTML = window.__ccBaseLoadRows;   // reset โหลดเป็น default base ให้ guard (เช่น doubly inject บน default) — กัน fail ปลอมเมื่อมีโปรเจกต์เซฟไว้
       if (TT().setTorsion) TT().setTorsion(false, 0, false);   // isolate แรงบิด (global state ใหม่ · กัน user-state รั่วเข้า test อื่น) · guard แรงบิดเปิดเองภายหลัง
 
       // ── A · design tokens (drift guard) ──
@@ -7500,6 +8125,103 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         !!_sum && /\(บน\)/.test(_sum.textContent || '') && _pdc.querySelectorAll('.pd-sum tbody tr').length >= 3,
         _sum ? ('top=' + /\(บน\)/.test(_sum.textContent) + ' rows=' + _pdc.querySelectorAll('.pd-sum tbody tr').length) : 'no-sum');
 
+      // ── โปรเจกต์ (Phase A · หลายคาน) · mount + round-trip lossless + per-beam status + เก็บ ≥1 คาน ──
+      const _CCP = window.CCProject;
+      if (_CCP && _CCP.data) {
+        const _ccSave = JSON.parse(JSON.stringify(_CCP.data)), _ccA = _CCP.activeId, _ccS = _CCP._seq;
+        const _liveB4 = _CCP.capture();   // A1-P3: full live input ก่อนบล็อกนี้แตะ → คืนใน finally (ไม่ทิ้ง state user เพี้ยน)
+        let _rawBak = null; try { _rawBak = localStorage.getItem(_CCP._STORE_KEY); } catch (e) {}
+        _CCP._noPersist = true;   // กัน autosave เขียนคานทดสอบลง storage ระหว่าง audit
+        try {
+          A('โปรเจกต์: rail mount + คานเริ่มต้น ≥1', !!document.querySelector('#ccRail') && _CCP.data.beams.length >= 1, 'beams=' + _CCP.data.beams.length);
+          TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().render();
+          const _curId = _CCP.activeId, _b4 = _CCP.capture();
+          _CCP.addBeam();                                  // คานใหม่ = clone (สืบ section/material) · active=ใหม่
+          const _newId = _CCP.activeId;
+          TT().setSection(35, 65, 240, 'SD40'); TT().render();   // แก้คานใหม่
+          A('โปรเจกต์: addBeam → คานเพิ่ม + active = คานใหม่', _CCP.activeId === _newId && _CCP.data.beams.some(b => b.id === _newId));
+          _CCP.select(_curId);                             // กลับคานเดิม
+          const _af = _CCP.capture();
+          A('โปรเจกต์: สลับคานแล้วกลับ → input คานเดิมไม่เพี้ยน (round-trip lossless)',
+            JSON.stringify(_b4.P) === JSON.stringify(_af.P) && JSON.stringify(_b4.loads) === JSON.stringify(_af.loads) && _b4.st.mode === _af.st.mode,
+            _af.P.b + '×' + _af.P.h);
+          _CCP.select(_newId);                             // ไปคานใหม่
+          const _b2 = _CCP.capture();
+          A('โปรเจกต์: คานใหม่เก็บค่าแยกอิสระ (35×65)', _b2.P.b === 35 && _b2.P.h === 65, _b2.P.b + '×' + _b2.P.h);
+          A('โปรเจกต์: สถานะต่อคานคำนวณ (ผ่าน/ไม่ผ่าน/ค้าง)', _CCP.data.beams.every(b => b.summary && b.summary.status), _CCP.data.beams.map(b => b.summary && b.summary.status).join(','));
+          // ── ระบบชั้น (floors) · เพิ่มชั้น · ย้ายคาน · พับ · migration ──
+          const _f0 = _CCP._floorList().length;
+          _CCP.addFloor();
+          A('โปรเจกต์·ชั้น: addFloor → ชั้นเพิ่ม', _CCP._floorList().length === _f0 + 1, 'floors=' + _CCP._floorList().length);
+          const _nf = _CCP.data.floors[_CCP.data.floors.length - 1];
+          _CCP.moveBeamToFloor(_newId, _nf);
+          A('โปรเจกต์·ชั้น: ลาก/ย้ายคานเข้าชั้นใหม่', (_CCP.data.beams.find(b => b.id === _newId) || {}).group === _nf, 'group=' + (_CCP.data.beams.find(b => b.id === _newId) || {}).group);
+          _CCP.toggleFloor(_nf);
+          A('โปรเจกต์·ชั้น: พับ/กางชั้น (collapsed)', _CCP.data.collapsed[_nf] === true);
+          A('โปรเจกต์·ชั้น: migrate v1→v2 (derive floors จาก group · ไม่ทิ้งงานเดิม)', (() => {
+            const o = _CCP._migrateV1toV2({ v: 1, project: { beams: [{ group: 'ชั้น A' }, { group: 'ชั้น B' }] } });
+            return o.v === 2 && Array.isArray(o.project.floors) && o.project.floors.includes('ชั้น A') && o.project.floors.includes('ชั้น B');
+          })());
+          // ── ชั้น = ตำแหน่งที่เลือกออกแบบ (1 คาน = 1 ชั้น · ไม่ติ๊กหลายชั้น · pi) ──
+          const _bnew = _CCP.data.beams.find(b => b.id === _newId);
+          A('typical: คานอยู่ใต้ชั้นออกแบบเดียว (1 แถว · ไม่ duplicate)',
+            document.querySelectorAll('#ccRail .cc-beam[data-ccid="' + _newId + '"]').length === 1);
+          A('typical: rail มีป้ายกำกับ "ตำแหน่งที่เลือกมาออกแบบ"', /ตำแหน่งที่เลือกมาออกแบบ/.test((document.querySelector('#ccRail .cc-legend') || {}).textContent || ''));
+          A('typical: breadcrumb ไม่มี chips ติ๊กใช้ที่ชั้น (เอาออกแล้ว)', !document.querySelector('#ccCrumb .cc-uf'));
+          // เฟส B · persist → load round-trip (localStorage · schema v2 · มี floors) + validate-or-discard
+          _CCP._noPersist = false; _CCP.persist(true); const _ld = _CCP.load(); _CCP._noPersist = true;
+          A('โปรเจกต์: persist→load round-trip (localStorage · schema v2 · floors)',
+            !!_ld && _ld.v === _CCP._SCHEMA && _ld.project.beams.length === _CCP.data.beams.length && Array.isArray(_ld.project.floors), _ld ? ('v=' + _ld.v + ' beams=' + _ld.project.beams.length) : 'null');
+          A('โปรเจกต์: load ทิ้งข้อมูลเสีย/เวอร์ชันผิด (ห้าม trust storage)', (() => {
+            try { localStorage.setItem(_CCP._STORE_KEY, '{bad'); const a1 = _CCP.load();
+              localStorage.setItem(_CCP._STORE_KEY, JSON.stringify({ v: 99, project: { beams: [] } })); const a2 = _CCP.load();
+              return a1 === null && a2 === null; } catch (e) { return false; }
+          })());
+          // เฟส C · พิมพ์รวมทั้งโครงการ (ปก + สารบัญ + ทุกคาน page-break)
+          const _preAll = _CCP.activeId;
+          const _allHTML = _CCP.buildAllHTML();
+          A('โปรเจกต์: พิมพ์รวม — เล่มมีปก+สารบัญ+ทุกคาน (page-break/คาน)',
+            /pd-cover/.test(_allHTML) && /pd-toc/.test(_allHTML) && (_allHTML.match(/cc-sheet/g) || []).length === _CCP.data.beams.length,
+            'sheets=' + (_allHTML.match(/cc-sheet/g) || []).length + '/' + _CCP.data.beams.length);
+          A('โปรเจกต์: พิมพ์รวม → active beam คืนสภาพ (ไม่ค้างคานอื่น)', _CCP.activeId === _preAll, 'active=' + _CCP.activeId + ' pre=' + _preAll);
+          // ── แก้ชื่อชั้น (pi bug: editFloor หา data-fl-name ผิด → rename เงียบ) + ปุ่มดินสอ ──
+          A('โปรเจกต์·ชั้น: ปุ่มดินสอแก้ชื่อชั้นมีให้เห็น (discoverable)', !!document.querySelector('#ccRail .cc-ga[data-fl-edit]'));
+          A('โปรเจกต์·ชั้น: editFloor หา element เจอ (data-fl-edit ตรง selector)', (() => {
+            const _fn = _CCP._floorList()[0];
+            return !![...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flEdit === _fn);
+          })());
+          A('โปรเจกต์·ชั้น: rename ชั้น → คานในชั้นย้าย group ตาม', (() => {
+            const _fn = _CCP._floorList()[0], _bs = _CCP.data.beams.filter(b => (b.group || 'ชั้น 1') === _fn).map(b => b.id);
+            _CCP.editFloor(_fn); const _e = [...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flEdit === _fn);
+            if (!_e) return false; _e.textContent = '__TMPฟลอร์__'; _e.dispatchEvent(new FocusEvent('blur'));
+            const _ok = _bs.every(id => (_CCP.data.beams.find(b => b.id === id) || {}).group === '__TMPฟลอร์__');
+            const _e2 = [...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flEdit === '__TMPฟลอร์__');
+            if (_e2) { _CCP.editFloor('__TMPฟลอร์__'); _e2.textContent = _fn; _e2.dispatchEvent(new FocusEvent('blur')); }   // คืนชื่อเดิม
+            return _ok;
+          })());
+          // ── กริดไลน์ต่อคาน (pi: ให้คนตรวจรู้ตำแหน่ง) — field แก้ได้ + override + โผล่ TOC ──
+          A('โปรเจกต์·กริด: breadcrumb มี field กริดแก้ได้', !!document.querySelector('#ccCrumb .cc-grid-val'));
+          A('โปรเจกต์·กริด: a11y — กด Enter ที่ field เปิดแก้ได้ (keyboard)', (() => {
+            const _e = document.querySelector('#ccCrumb .cc-grid-val'); if (!_e) return false;
+            _e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            const _open = _e.getAttribute('contenteditable') === 'true'; _e.dispatchEvent(new FocusEvent('blur')); return _open;
+          })());
+          A('โปรเจกต์·กริด: editBeamGrid → b.grid อัปเดต + โชว์', (() => {
+            const _b = _CCP.active(); if (!_b) return false; _CCP.editBeamGrid();
+            const _e = document.querySelector('#ccCrumb .cc-grid-val'); if (!_e) return false;
+            _e.textContent = 'Z9–Z10'; _e.dispatchEvent(new FocusEvent('blur'));
+            const _ok = _b.grid === 'Z9–Z10' && /Z9–Z10/.test((document.querySelector('#ccCrumb .cc-grid-val') || {}).textContent || '');
+            _b.grid = ''; _CCP.updateCrumb(); return _ok;
+          })());
+          A('โปรเจกต์·กริด: TOC รวมมีคอลัมน์ "กริดไลน์"', /<th[^>]*>กริดไลน์<\/th>/.test(_allHTML));
+        } finally {
+          _CCP.data = _ccSave; _CCP.activeId = _ccA; _CCP._seq = _ccS;   // กันคานทดสอบรั่วเข้าโปรเจกต์ user
+          try { if (_rawBak == null) localStorage.removeItem(_CCP._STORE_KEY); else localStorage.setItem(_CCP._STORE_KEY, _rawBak); } catch (e) {}   // คืน localStorage เดิม
+          _CCP._noPersist = false;
+          _CCP.restoreLive(_liveB4);   // A1-P3: คืน live calculator เต็ม(L/cover/legs/loadRows/...) ที่ TT.snapshot ไม่ครอบ
+          if (_CCP.renderRail) _CCP.renderRail();
+        }
+      }
       // ── T · แรงบิด (Torsion · B1) · present-when-on / absent-when-off (zero-reg) / TMD / parity ──
       ['single', 'cont'].forEach(mode => {
         const lbl = mode === 'cont' ? 'ต่อเนื่อง' : 'ช่วงเดียว';
@@ -7573,6 +8295,8 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       });
     } finally {
       if (snap && TT()) { TT().restore(snap); TT().render(); TT().selectCtab(origCtab); }   // restore state+แท็บเดิม ผ่าน DOM-updating path
+      if (window.CCProject && _ccUserLive) CCProject.restoreLive(_ccUserLive);   // คืน full user state (loads/L/legs/loadRows · re-wire) ที่ TT.snapshot ไม่ครอบ
+      else if (_lrBak != null && _lrEl) _lrEl.innerHTML = _lrBak;
     }
 
     const passed = checks.filter(c => c.pass).length, failed = checks.length - passed;
