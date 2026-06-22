@@ -248,6 +248,7 @@ ocg1 = calc.design_beam(BI(b=30, h=50, L=3, fc=240, fy=4000, DL=1, LL=0.5,
 chk_true("guard: คานยื่น+แรงบิดจุด → torsion applicable=False", bool(ocg1.torsion and ocg1.torsion.get("applicable") is False))
 chk_true("guard: คานยื่น+แรงบิดจุด → support_unsupported=True", bool(ocg1.torsion and ocg1.torsion.get("support_unsupported")))
 chk_true("guard: คานยื่น+แรงบิด → มี warning note (กัน under-design เงียบ)", any("คานยื่น" in n and "แรงบิด" in n for n in (ocg1.notes or [])))
+chk_true("guard: คานยื่น+แรงบิด → warning โผล่ใน out.warnings ด้วย (ทุก render surface · P3)", any("คานยื่น" in w and "แรงบิด" in w for w in (ocg1.warnings or [])))
 # (2) คานยื่น + แรงบิดกระจาย → applicable=False
 ocg2 = calc.design_beam(BI(b=30, h=50, L=3, fc=240, fy=4000, DL=1, LL=0.5, support=_CANT, Tu_dist_tonm_per_m=1.5))
 chk_true("guard: คานยื่น+แรงบิดกระจาย → applicable=False", bool(ocg2.torsion and ocg2.torsion.get("applicable") is False))

@@ -2162,7 +2162,9 @@ def design_beam(inp: BeamInput) -> BeamOutput:
         out.torsion = {"applicable": False, "support_unsupported": True,
                        "reason": ("คานยื่น (cantilever) ยังไม่รองรับการออกแบบรับแรงบิด — โมเดล SFD (simply-supported) "
                                   "ใช้กับคานยื่นไม่ได้ เพราะปลายอิสระไม่มีจุดรองรับบิด (แรงบิดทั้งหมดต้านที่ฐาน)")}
-        out.notes.append("⚠️ แรงบิดบนคานยื่น: ยังไม่รองรับการออกแบบ — ข้ามส่วนออกแบบรับแรงบิด เพื่อกัน under-design เงียบ")
+        _cant_tor_msg = "⚠️ แรงบิดบนคานยื่น: ยังไม่รองรับการออกแบบ — ข้ามส่วนออกแบบรับแรงบิด เพื่อกัน under-design เงียบ"
+        out.notes.append(_cant_tor_msg)
+        out.warnings.append(_cant_tor_msg)   # P3 review: ให้โผล่ทุก surface (markdown renderer โชว์ warnings · ไม่ใช่แค่ notes)
     elif inp.torsion_loads:   # B2 · แรงบิดมีตำแหน่ง → TMD จริง + Tu วิกฤต (มาก่อน)
         _tor_demand = compute_torsion_demand(inp.torsion_loads, inp.L, _d_tor)
         if _tor_demand.get("applicable"):
