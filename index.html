@@ -234,8 +234,12 @@
   .cc-addfloor:hover{ background:rgba(15,118,110,.11); border-color:var(--teal); }
   .cc-crumb-floor{ font-family:inherit; font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:7px; padding:2px 6px; cursor:pointer; height:26px; }
   .cc-crumb-floor:hover{ border-color:var(--steel); }
-  .cc-crumb-pos{ display:inline-flex; align-items:center; gap:5px; }
+  .cc-crumb-pos,.cc-crumb-grid{ display:inline-flex; align-items:center; gap:5px; }
   .cc-pos-lbl{ font-size:11px; color:var(--ink-muted); }
+  .cc-grid-val{ font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:7px; padding:2px 8px; min-width:42px; height:26px; display:inline-flex; align-items:center; cursor:text; font-family:var(--mono,inherit); }
+  .cc-grid-val:hover{ border-color:var(--steel); }
+  .cc-grid-val.ph{ color:var(--ink-faint,#9aa6b4); font-style:italic; font-family:inherit; }
+  .cc-grid-val:focus{ outline:2px solid var(--steel); outline-offset:1px; }
   .cc-legend{ display:flex; align-items:center; gap:6px; margin:0 12px 8px; padding:6px 10px; border-radius:8px; background:var(--accent-soft); color:var(--steel); font-size:11px; line-height:1.3; }
   .cc-legend svg{ width:14px; height:14px; flex:none; }
   .cc-legend b{ font-weight:600; }
@@ -2003,7 +2007,7 @@
       this.persist();
     },
     editFloor(name) {
-      const el = [...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flName === name); if (!el) return;
+      const el = [...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flEdit === name); if (!el) return;   // FIX: ใช้ data-fl-edit (เดิม fl-name ผิด → rename ไม่ทำงาน)
       el.contentEditable = 'true'; el.focus(); document.getSelection().selectAllChildren(el);
       const fin = () => {
         el.contentEditable = 'false'; const nw = (el.textContent || '').trim();
@@ -2051,12 +2055,16 @@
         ccApplyInput(b.input);                          // → render() คำนวณ + วาด + populate
         const home = this._homeFloor(b);   // ตำแหน่ง/ชั้นที่เลือกมาออกแบบ (ค่าวิกฤต)
         const mem = document.querySelector('#pt_member'); if (mem) mem.textContent = 'คาน ' + b.label + ' · ตำแหน่งออกแบบ ' + home;
+        let gAuto = ''; try { gAuto = geom().nodes.map((_, i) => ccModel.grid(i)).join('–'); } catch (e) {}   // กริดอัตโนมัติจากผัง
+        const grid = (b.grid || gAuto || '');           // override ต่อคาน > อัตโนมัติ
+        this._docGrid = b.grid || '';                   // ให้ ccPopulatePrintDoc ใช้ override คานนี้ (ไม่ใช่คานที่ active)
         ccPopulatePrintDoc();                           // repopulate ให้หัวเอกสารมีชื่อคานถูก
+        this._docGrid = null;
         const r = state.res;
         // A1-P2: ไม่ ready → "ยังไม่คำนวณ" · engine reject (_err) หรือ passes:false → "ไม่ผ่าน" (ห้ามซ่อน fail ในเอกสาร ก.ว.)
         const st = !r ? 'ยังไม่คำนวณ' : (r._err ? 'ไม่ผ่าน' : (r.pass ? 'ผ่าน' : 'ไม่ผ่าน'));
         parts.push({ b, html: document.querySelector('#cc-print-doc').innerHTML, bh: P.b + '×' + P.h,
-          floor: home, status: st, dc: (r && r.dc != null) ? r.dc : null });
+          floor: home, grid: grid, status: st, dc: (r && r.dc != null) ? r.dc : null });
       });
       const html = this._buildCombinedDoc(parts);
       // คืนสภาพ: step + projName + คานที่ active เดิม
@@ -2075,8 +2083,8 @@
         `<div class="s">${parts.length} คาน · ${pass} ผ่าน${fail ? ' · ' + fail + ' ไม่ผ่าน' : ''}${idle ? ' · ' + idle + ' ยังไม่คำนวณ' : ''}</div>` +
         `<div class="s">${esc(dstr)}</div><div class="s" style="margin-top:10px;color:#94a3b8">Civil Calc · Panuwat Lab</div></div>`;
       const toc = `<div class="pd-toc"><div class="pd-st">สารบัญคาน (${parts.length})</div><table>` +
-        `<thead><tr><th style="width:8%">ลำดับ</th><th>เบอร์คาน</th><th>ตำแหน่งที่เลือกใช้ออกแบบ</th><th>ขนาดคาน (ซม.)</th><th>อัตราส่วน D/C<br><span style="font-weight:400;font-size:9px;">(Demand-to-Capacity)</span></th></tr></thead><tbody>` +
-        parts.map((p, i) => `<tr><td>${i + 1}</td><td><b>คาน ${esc(p.b.label)}</b></td><td>${esc(p.floor || p.b.group || '')}</td><td class="mono">${esc(p.bh)}</td><td>${esc(p.status)}${p.dc != null ? (' · ' + p.dc + '%') : ''}</td></tr>`).join('') +
+        `<thead><tr><th style="width:7%">ลำดับ</th><th>เบอร์คาน</th><th>กริดไลน์</th><th>ตำแหน่งที่เลือกใช้ออกแบบ</th><th>ขนาดคาน (ซม.)</th><th>อัตราส่วน D/C<br><span style="font-weight:400;font-size:9px;">(Demand-to-Capacity)</span></th></tr></thead><tbody>` +
+        parts.map((p, i) => `<tr><td>${i + 1}</td><td><b>คาน ${esc(p.b.label)}</b></td><td class="mono">${esc(p.grid || '—')}</td><td>${esc(p.floor || p.b.group || '')}</td><td class="mono">${esc(p.bh)}</td><td>${esc(p.status)}${p.dc != null ? (' · ' + p.dc + '%') : ''}</td></tr>`).join('') +
         `</tbody></table></div>`;
       const sheets = parts.map(p => `<div class="page-break cc-sheet">${p.html}</div>`).join('');
       return cover + toc + sheets;
@@ -2133,6 +2141,7 @@
             `<span class="cc-grp-name" data-fl-edit="${ccEsc(fname)}" role="button" tabindex="0" title="คลิก/Enter เพื่อเปลี่ยนชื่อชั้น" aria-label="เปลี่ยนชื่อชั้น ${ccEsc(fname)}">${ccEsc(fname)}</span>` +
             `<span class="cc-grp-meta">${metaTxt}</span>` +
             `<span class="cc-grp-acts">` +
+              `<button class="cc-ga" data-fl-edit="${ccEsc(fname)}" aria-label="แก้ชื่อชั้น ${ccEsc(fname)}" title="แก้ชื่อชั้น"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>` +
               `<button class="cc-ga" data-fl-add="${ccEsc(fname)}" aria-label="เพิ่มคานในชั้นนี้" title="เพิ่มคานในชั้นนี้"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>` +
               `<button class="cc-ga" data-fl-up="${ccEsc(fname)}" aria-label="เลื่อนชั้นขึ้น"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"/></svg></button>` +
               `<button class="cc-ga" data-fl-dn="${ccEsc(fname)}" aria-label="เลื่อนชั้นลง"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>` +
@@ -2180,10 +2189,20 @@
       const floors = this._floorList(), home = this._homeFloor(b);
       // ชั้น = "ตำแหน่งที่เลือกมาออกแบบ" (ค่าวิกฤต) · เลือกชั้นเดียว (ไม่ต้องติ๊กหลายชั้น)
       const floorSel = `<span class="cc-crumb-pos"><span class="cc-pos-lbl">ตำแหน่งออกแบบ:</span><select class="cc-crumb-floor" data-cc-floor aria-label="ตำแหน่ง/ชั้นที่เลือกมาออกแบบ" title="ตำแหน่ง/ชั้นที่เลือกมาออกแบบ (ค่าวิกฤต)">${floors.map(f => `<option value="${ccEsc(f)}"${f === home ? ' selected' : ''}>${ccEsc(f)}</option>`).join('')}</select></span>`;
-      c.innerHTML = `${ccEsc(this.data.name)}${arrow}<b>${ccEsc(b.label)}</b>${arrow}${floorSel}` +
+      // กริดไลน์ต่อคาน (b.grid · แก้ได้ · ว่าง = ใช้ค่าจากผังอัตโนมัติ) — ให้คนตรวจรู้ว่าคานอยู่กริดไหน
+      const gv = b.grid || '';
+      const gridField = `<span class="cc-crumb-grid"><span class="cc-pos-lbl">กริด:</span><span class="cc-grid-val${gv ? '' : ' ph'}" role="button" tabindex="0" data-ccact="editBeamGrid" title="คลิกเพื่อใส่/แก้กริดไลน์ (เช่น A–B หรือ 2/A–B)">${ccEsc(gv || 'ใส่กริด')}</span></span>`;
+      c.innerHTML = `${ccEsc(this.data.name)}${arrow}<b>${ccEsc(b.label)}</b>${arrow}${floorSel}${arrow}${gridField}` +
         `<span class="cc-cacts"><button class="cc-cact" data-ccact="renameActive" aria-label="เปลี่ยนชื่อคาน">${ren}</button>` +
         `<button class="cc-cact" data-ccact="dupActive" aria-label="ทำสำเนาคาน">${cp}</button>` +
         `<button class="cc-cact" data-ccact="delActive" aria-label="ลบคาน">${tr}</button></span>`;
+    },
+    editBeamGrid() {
+      const el = document.querySelector('#ccCrumb .cc-grid-val'); const b = this.active(); if (!el || !b) return;
+      if (!b.grid) el.textContent = '';   // เคลียร์ placeholder ก่อนพิมพ์
+      el.classList.remove('ph'); el.contentEditable = 'true'; el.focus(); document.getSelection().selectAllChildren(el);
+      const fin = () => { el.contentEditable = 'false'; b.grid = (el.textContent || '').trim(); this.updateCrumb(); this.persist(); };
+      el.onblur = fin; el.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); } else if (ev.key === 'Escape') { ev.preventDefault(); el.textContent = b.grid || ''; el.blur(); } };
     },
     // เรียกจาก render() ทุกครั้ง — อัปสถานะคานที่เปิดอยู่ (in-place · ไม่ rebuild rail · กัน animation ซ้ำ)
     onRender() {
@@ -3657,6 +3676,8 @@
     const member = ($('#pt_member') && $('#pt_member').textContent) || ('คาน (' + (cont ? 'ต่อเนื่อง' : 'ช่วงเดียว') + ')');
     let grid = '';   // ดึงค่ากริดจากในรูป (ccModel.grid ที่วาดในผัง/กราฟ · pi 2026-06-21) → A–B / A–B–C–D
     try { const _gn = geom().nodes; grid = _gn.map((_, i) => ccModel.grid(i)).join('–'); } catch (e) { grid = ''; }
+    // override กริดต่อคาน (b.grid · pi 2026-06-22) — buildAllHTML ตั้ง _docGrid ต่อคาน · live ใช้คานที่เปิดอยู่
+    try { const _ccp = window.CCProject; const _ov = _ccp ? (_ccp._docGrid != null ? _ccp._docGrid : ((_ccp.active() && _ccp.active().grid) || '')) : ''; if (_ov) grid = _ov; } catch (e) {}
     const fy = fyOf(P.grade);
     let dstr = ''; try { dstr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { dstr = ''; }
     const planSvg = $('#ccCanvasHost svg'), diagSvg = $('#ccDiagHost svg');
@@ -7935,6 +7956,31 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
             /pd-cover/.test(_allHTML) && /pd-toc/.test(_allHTML) && (_allHTML.match(/cc-sheet/g) || []).length === _CCP.data.beams.length,
             'sheets=' + (_allHTML.match(/cc-sheet/g) || []).length + '/' + _CCP.data.beams.length);
           A('โปรเจกต์: พิมพ์รวม → active beam คืนสภาพ (ไม่ค้างคานอื่น)', _CCP.activeId === _preAll, 'active=' + _CCP.activeId + ' pre=' + _preAll);
+          // ── แก้ชื่อชั้น (pi bug: editFloor หา data-fl-name ผิด → rename เงียบ) + ปุ่มดินสอ ──
+          A('โปรเจกต์·ชั้น: ปุ่มดินสอแก้ชื่อชั้นมีให้เห็น (discoverable)', !!document.querySelector('#ccRail .cc-ga[data-fl-edit]'));
+          A('โปรเจกต์·ชั้น: editFloor หา element เจอ (data-fl-edit ตรง selector)', (() => {
+            const _fn = _CCP._floorList()[0];
+            return !![...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flEdit === _fn);
+          })());
+          A('โปรเจกต์·ชั้น: rename ชั้น → คานในชั้นย้าย group ตาม', (() => {
+            const _fn = _CCP._floorList()[0], _bs = _CCP.data.beams.filter(b => (b.group || 'ชั้น 1') === _fn).map(b => b.id);
+            _CCP.editFloor(_fn); const _e = [...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flEdit === _fn);
+            if (!_e) return false; _e.textContent = '__TMPฟลอร์__'; _e.dispatchEvent(new FocusEvent('blur'));
+            const _ok = _bs.every(id => (_CCP.data.beams.find(b => b.id === id) || {}).group === '__TMPฟลอร์__');
+            const _e2 = [...document.querySelectorAll('#ccRail .cc-grp-name')].find(n => n.dataset.flEdit === '__TMPฟลอร์__');
+            if (_e2) { _CCP.editFloor('__TMPฟลอร์__'); _e2.textContent = _fn; _e2.dispatchEvent(new FocusEvent('blur')); }   // คืนชื่อเดิม
+            return _ok;
+          })());
+          // ── กริดไลน์ต่อคาน (pi: ให้คนตรวจรู้ตำแหน่ง) — field แก้ได้ + override + โผล่ TOC ──
+          A('โปรเจกต์·กริด: breadcrumb มี field กริดแก้ได้', !!document.querySelector('#ccCrumb .cc-grid-val'));
+          A('โปรเจกต์·กริด: editBeamGrid → b.grid อัปเดต + โชว์', (() => {
+            const _b = _CCP.active(); if (!_b) return false; _CCP.editBeamGrid();
+            const _e = document.querySelector('#ccCrumb .cc-grid-val'); if (!_e) return false;
+            _e.textContent = 'Z9–Z10'; _e.dispatchEvent(new FocusEvent('blur'));
+            const _ok = _b.grid === 'Z9–Z10' && /Z9–Z10/.test((document.querySelector('#ccCrumb .cc-grid-val') || {}).textContent || '');
+            _b.grid = ''; _CCP.updateCrumb(); return _ok;
+          })());
+          A('โปรเจกต์·กริด: TOC รวมมีคอลัมน์ "กริดไลน์"', /<th[^>]*>กริดไลน์<\/th>/.test(_allHTML));
         } finally {
           _CCP.data = _ccSave; _CCP.activeId = _ccA; _CCP._seq = _ccS;   // กันคานทดสอบรั่วเข้าโปรเจกต์ user
           try { if (_rawBak == null) localStorage.removeItem(_CCP._STORE_KEY); else localStorage.setItem(_CCP._STORE_KEY, _rawBak); } catch (e) {}   // คืน localStorage เดิม
