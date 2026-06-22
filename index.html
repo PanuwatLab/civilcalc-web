@@ -1961,7 +1961,7 @@
     const tb = document.querySelector('#loadRows'); if (!tb) return;
     tb.innerHTML = (rows || []).map(r => {
       const sw = r.sw ? ' data-selfweight="1"' : '';
-      const kindAttr = r.kind ? ` data-kind="${r.kind}"` : '';
+      const kindAttr = r.kind ? ` data-kind="${ccEsc(r.kind)}"` : '';
       const last = r.sw ? '<td class="px-2 text-right text-ink-muted/40">—</td>' : '<td class="px-2 text-right"><button class="row-del" aria-label="ลบ">✕</button></td>';
       return `<tr${sw}${kindAttr}><td class="px-3 py-2.5">${ccEsc(r.name)}</td><td class="px-3 py-2.5 text-ink-muted text-[12px]">${ccEsc(r.source)}</td><td class="px-3 py-2.5 text-right load-val" data-kg="${+r.kg || 0}">${ccUnits.Wn(+r.kg || 0)}</td>${last}</tr>`;
     }).join('');
@@ -2227,8 +2227,13 @@
       if (o.v === 1) o = this._migrateV1toV2(o);                                      // backward-compat (ไม่ทิ้งงานเดิม)
       if (o.v !== this._SCHEMA) return null;                                          // เวอร์ชันอื่น/ใหม่กว่า → ทิ้ง
       const ok = o.project.beams.every(b => b && b.id && b.input && b.input.P &&
-        typeof b.input.P.b === 'number' && typeof b.input.P.h === 'number' && b.input.st && Array.isArray(b.input.loads));
-      if (!ok) return null;                                                          // validate ไม่ผ่าน → ทิ้ง
+        typeof b.input.P.b === 'number' && typeof b.input.P.h === 'number' &&
+        b.input.st && typeof b.input.st.mode === 'string' && Array.isArray(b.input.st.spanLens) &&   // กัน crash: ccApplyInput ทำ st.spanLens.slice()
+        Array.isArray(b.input.loads) &&
+        (b.input.points == null || Array.isArray(b.input.points)) &&
+        (b.input.partials == null || Array.isArray(b.input.partials)) &&
+        (b.input.torsion == null || typeof b.input.torsion === 'object'));
+      if (!ok) return null;                                                          // validate ไม่ผ่าน → ทิ้ง (ไฟล์ untrusted)
       if (!Array.isArray(o.project.floors) || !o.project.floors.length) o.project.floors = this._deriveFloors(o.project.beams);
       if (!o.project.collapsed || typeof o.project.collapsed !== 'object') o.project.collapsed = {};
       return o;
@@ -2498,12 +2503,20 @@
       inp.click();
     },
     _applyImported(o) {
-      this.data = o.project;
-      this._seq = o.project.beams.reduce((m, b) => { const num = parseInt(String(b.id).replace(/\D/g, ''), 10) || 0; return Math.max(m, num); }, 0);   // กัน id ชนตอน addBeam หลัง import
-      this.activeId = (o.activeId && o.project.beams.some(b => b.id === o.activeId)) ? o.activeId : o.project.beams[0].id;
-      this.renderRail(); this.updateCrumb();
-      const b = this.active(); if (b) ccApplyInput(b.input);   // โหลดคาน active เข้า calculator
-      this.persist(true);
+      const prevData = this.data, prevActive = this.activeId, prevSeq = this._seq;   // rollback ถ้า apply พัง (ไฟล์ untrusted)
+      try {
+        this._seq = 0; this.data = o.project;
+        const oldActive = o.activeId; let newActive = null;
+        o.project.beams.forEach(b => { const old = b.id; b.id = this._id(); if (old === oldActive) newActive = b.id; });   // regen id ภายในให้สะอาด (กัน XSS/selector-injection/ชน จาก id ในไฟล์)
+        this.activeId = newActive || o.project.beams[0].id;
+        this.renderRail(); this.updateCrumb();
+        const b = this.active(); if (b) ccApplyInput(b.input);   // โหลดคาน active เข้า calculator
+        this.persist(true);
+      } catch (e) {
+        this.data = prevData; this.activeId = prevActive; this._seq = prevSeq;       // คืนโปรเจกต์เดิม (ไม่ให้ไฟล์เสียทำงานหาย)
+        this.renderRail(); this.updateCrumb();
+        alert('นำเข้าไม่สำเร็จ — ไฟล์มีข้อมูลผิดรูปแบบ (ข้อมูลเดิมถูกคืนแล้ว)');
+      }
     },
     _statusDot(s) { const st = (s && s.status) || 'idle'; const cls = st === 'ok' ? 'ok' : (st === 'bad' ? 'bad' : 'idle'); return `<span class="cc-dot ${cls}"></span>`; },
     _ring() {
@@ -2524,11 +2537,11 @@
         const live = (b.id === this.activeId && b.summary && b.summary.status === 'ok') ? ' live' : '';
         const dim = (b.summary && b.summary.computed) ? b.summary.dims : 'ค้าง';
         const dotcls = (b.summary && b.summary.status === 'ok') ? ('ok' + live) : (b.summary && b.summary.status === 'bad' ? 'bad' : 'idle');
-        return `<div class="cc-beam${sel}" data-ccid="${b.id}" draggable="true" role="button" tabindex="0" aria-label="คาน ${ccEsc(b.label)}" style="animation-delay:${i * 0.04}s">` +
+        return `<div class="cc-beam${sel}" data-ccid="${ccEsc(b.id)}" draggable="true" role="button" tabindex="0" aria-label="คาน ${ccEsc(b.label)}" style="animation-delay:${i * 0.04}s">` +
           `<span class="cc-grip" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="5" r="1.4"/><circle cx="15" cy="5" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="19" r="1.4"/><circle cx="15" cy="19" r="1.4"/></svg></span>` +
           `<span class="cc-dot ${dotcls}"></span><span class="cc-beam-lbl">${ccEsc(b.label)}</span>` +
           `<span class="cc-beam-dim">${ccEsc(dim)}</span>` +
-          `<button class="cc-beam-x" data-ccx="${b.id}" aria-label="ลบคาน ${ccEsc(b.label)}">✕</button></div>`;
+          `<button class="cc-beam-x" data-ccx="${ccEsc(b.id)}" aria-label="ลบคาน ${ccEsc(b.label)}">✕</button></div>`;
       };
       const chev = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg>';
       const tree = floors.map(fname => {
@@ -8471,20 +8484,24 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           // เฟส B2 · นำเข้าโปรเจกต์ (.json) · validate-or-reject + round-trip + apply (ไม่ trust ไฟล์)
           A('โปรเจกต์·นำเข้า: importJSON/_validate/_applyImported มีจริง',
             typeof _CCP.importJSON === 'function' && typeof _CCP._validate === 'function' && typeof _CCP._applyImported === 'function');
-          A('โปรเจกต์·นำเข้า: _validate ผ่านไฟล์ดี · reject เสีย/version ผิด/ว่าง/junk (ห้าม trust)', (() => {
+          A('โปรเจกต์·นำเข้า: _validate ผ่านดี · reject เสีย/version/ว่าง/junk/st-ไม่มี-spanLens/points-ผิด (ห้าม trust)', (() => {
             const good = { v: _CCP._SCHEMA, project: JSON.parse(JSON.stringify(_CCP.data)) };
+            const stOk = { mode: 'single', spanLens: [4] };
+            const beam = (inp) => ({ v: _CCP._SCHEMA, project: { beams: [{ id: 'b1', input: inp }] } });
             return !!_CCP._validate(good)
-              && _CCP._validate({ v: 99, project: { beams: [{ id: 'b1', input: { P: { b: 25, h: 50 }, st: {}, loads: [] } }] } }) === null
+              && _CCP._validate({ v: 99, project: { beams: [{ id: 'b1', input: { P: { b: 25, h: 50 }, st: stOk, loads: [] } }] } }) === null   // version ผิด
               && _CCP._validate({ v: _CCP._SCHEMA, project: { beams: [] } }) === null
-              && _CCP._validate({ foo: 1 }) === null
-              && _CCP._validate(null) === null;
+              && _CCP._validate({ foo: 1 }) === null && _CCP._validate(null) === null
+              && _CCP._validate(beam({ P: { b: 25, h: 50 }, st: {}, loads: [] })) === null                          // st ไม่มี spanLens → กัน crash .slice()
+              && _CCP._validate(beam({ P: { b: 25, h: 50 }, st: stOk, loads: [], points: 'x' })) === null;          // points ไม่ใช่ array
           })());
-          A('โปรเจกต์·นำเข้า: _applyImported round-trip → คานครบ + activeId ตรง + _seq กัน collision', (() => {
-            const payload = { v: _CCP._SCHEMA, activeId: _CCP.activeId, project: JSON.parse(JSON.stringify(_CCP.data)) };
+          A('โปรเจกต์·นำเข้า: _applyImported → คานครบ + regen id สะอาด (กัน XSS/selector/ชน) + activeId ตรง', (() => {
+            const payload = { v: _CCP._SCHEMA, activeId: _CCP.data.beams[0] && _CCP.data.beams[0].id, project: JSON.parse(JSON.stringify(_CCP.data)) };
+            if (payload.project.beams[0]) payload.project.beams[0].id = 'x"><img src=x onerror=alert(1)>';   // id อันตรายในไฟล์
             const n = payload.project.beams.length;
-            const maxNum = payload.project.beams.reduce((m, b) => Math.max(m, parseInt(String(b.id).replace(/\D/g, ''), 10) || 0), 0);
             _CCP._applyImported(_CCP._validate(payload));
-            return _CCP.data.beams.length === n && _CCP.data.beams.some(b => b.id === _CCP.activeId) && _CCP._seq >= maxNum;
+            const cleanIds = _CCP.data.beams.every(b => /^b\d+$/.test(b.id));   // ต้องถูก regen เป็น id ภายในสะอาด
+            return _CCP.data.beams.length === n && cleanIds && _CCP.data.beams.some(b => b.id === _CCP.activeId) && _CCP._seq >= n;
           })());
           // เฟส C · พิมพ์รวมทั้งโครงการ (ปก + สารบัญ + ทุกคาน page-break)
           const _preAll = _CCP.activeId;
