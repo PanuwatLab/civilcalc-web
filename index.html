@@ -354,6 +354,15 @@
   .cc-ob-mode:hover .bm{ animation:ccObSag 1.1s var(--ease,cubic-bezier(.16,1,.3,1)) infinite; }
   @keyframes ccObDrop{ 0%,100%{transform:translateY(0);opacity:.5} 50%{transform:translateY(3px);opacity:1} }
   @keyframes ccObSag{ 0%,100%{transform:translateY(0)} 50%{transform:translateY(1.4px)} }
+  .cc-ob-proj{ margin-top:14px; background:linear-gradient(180deg,var(--accent-soft),rgba(231,239,246,.4)); border:1px solid rgba(47,102,144,.16); border-radius:14px; padding:12px 15px; }
+  .cc-ob-proj-hd{ font-size:13.5px; font-weight:600; color:var(--steel-700,#274f70); display:flex; align-items:center; gap:8px; margin-bottom:9px; }
+  .cc-ob-proj-hd svg{ width:17px; height:17px; flex:none; }
+  .cc-ob-proj-row{ display:flex; flex-wrap:wrap; gap:8px; }
+  .cc-ob-pf{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:9px; padding:6px 10px; }
+  .cc-ob-pf svg{ width:15px; height:15px; flex:none; color:var(--steel); }
+  .cc-ob-proj-ft{ font-size:11.5px; color:var(--ink-muted); margin-top:9px; }
+  .cc-ob-proj-ft b{ color:var(--steel); font-weight:600; }
+  @media (max-width:620px){ .cc-ob-pf{ flex:1 1 100%; } }
   .cc-ob-acts{ display:flex; align-items:center; gap:13px; margin-top:20px; flex-wrap:wrap; }
   .cc-ob-cta{ font-family:inherit; font-size:15px; font-weight:600; color:#fff; border:none; cursor:pointer; background:var(--accent-grad); border-radius:11px; padding:11px 24px; box-shadow:0 8px 20px rgba(47,102,144,.28); display:inline-flex; align-items:center; gap:8px; transition:.25s var(--ease,cubic-bezier(.16,1,.3,1)); }
   .cc-ob-cta:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; filter:grayscale(.3); }
@@ -2119,6 +2128,14 @@
         '<button class="cc-ob-mode" data-ccmode="single" aria-pressed="false">' + tick + diaSingle + '<h4>คานช่วงเดียว</h4><p>คานวางบนเสา 2 ต้น · เริ่มต้นง่ายที่สุด</p><span class="tag">เหมาะกับมือใหม่</span></button>' +
         '<button class="cc-ob-mode" data-ccmode="cont" aria-pressed="false">' + tick + diaCont + '<h4>คานต่อเนื่อง</h4><p>คานพาดหลายช่วง · 2–4 ช่วง</p><span class="tag">+ แรงบิด / เหล็กอัด</span></button>' +
         '</div>' +
+        // ── แนะนำระบบโปรเจกต์ (info-only · ให้ user รู้ว่าออกแบบทั้งบ้านได้ ไม่ใช่แค่คานเดียว) ──
+        '<div class="cc-ob-proj"><div class="cc-ob-proj-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"/></svg> ออกแบบได้ทั้งโครงการ — ไม่ใช่แค่คานเดียว</div>' +
+        '<div class="cc-ob-proj-row">' +
+        '<span class="cc-ob-pf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg> หลายคานในโปรเจกต์เดียว</span>' +
+        '<span class="cc-ob-pf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18M6 21V8m12 13V8M3 8l9-5 9 5"/></svg> แยกชั้น + กริดไลน์</span>' +
+        '<span class="cc-ob-pf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-5h16v5h-2M8 13h8v8H8z"/></svg> พิมพ์รวมเป็นเล่ม ก.ว.</span>' +
+        '</div>' +
+        '<div class="cc-ob-proj-ft">จัดการคานทั้งหมดได้ที่ <b>แถบด้านซ้าย</b> — เพิ่มคาน · เปลี่ยนชื่อ · จัดชั้นได้</div></div>' +
         '<div class="cc-ob-acts"><button class="cc-ob-cta" id="ccObCta" disabled>เริ่มออกแบบ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>' +
         '<button class="cc-ob-link" id="ccObExToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg> ไม่แน่ใจ? ดูตัวอย่างก่อน</button></div>' +
         '<div class="cc-ob-exwrap" id="ccObExWrap"><div class="cc-ob-exhd"><span class="p">ตัวอย่าง</span>เปิดดูเคสจริง → กรอกค่าให้ครบ + คำนวณ แล้วแก้ต่อได้เลย</div><div class="cc-ob-exgrid">' + exs + '</div></div>' +
@@ -8511,6 +8528,8 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
             document.querySelectorAll('#ccObBack .cc-ob-mode').length === 2 &&
             document.querySelectorAll('#ccObBack .cc-ob-ex').length === 6 &&
             document.querySelectorAll('#ccObBack .cc-ob-cap').length === 8);
+          A('onboarding: แนะนำระบบโปรเจกต์ (strip + 3 feature: หลายคาน/แยกชั้น/พิมพ์รวม)',
+            !!document.querySelector('#ccObBack .cc-ob-proj') && document.querySelectorAll('#ccObBack .cc-ob-pf').length === 3);
           _O.show();
           A('onboarding: show → overlay + พื้นหลัง inert (aria-modal · focus-trap)',
             document.getElementById('ccObBack').classList.contains('show') && document.getElementById('ccObBack').getAttribute('role') === 'dialog' && (!_app || _app.hasAttribute('inert')));
