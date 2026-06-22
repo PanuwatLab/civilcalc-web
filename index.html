@@ -369,7 +369,7 @@
   .cc-ob-sw::after{ content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:.3s var(--ease,cubic-bezier(.16,1,.3,1)); }
   .cc-ob-help.on .cc-ob-sw{ background:var(--accent-grad); }
   .cc-ob-help.on .cc-ob-sw::after{ transform:translateX(18px); }
-  .cc-ob-skip{ font-family:inherit; font-size:12.5px; color:var(--ink-faint,#9aa6b4); background:none; border:none; cursor:pointer; padding:4px; }
+  .cc-ob-skip{ font-family:inherit; font-size:12.5px; color:var(--ink-muted); background:none; border:none; cursor:pointer; padding:4px; }
   .cc-ob-skip:hover{ color:var(--ink-muted); text-decoration:underline; }
   .cc-ob-exwrap{ max-height:0; overflow:hidden; opacity:0; margin-top:0; transition:max-height .55s var(--ease,cubic-bezier(.16,1,.3,1)),opacity .4s ease,margin .4s ease; }
   .cc-ob-exwrap.open{ max-height:560px; opacity:1; margin-top:16px; }
@@ -385,7 +385,7 @@
   .cc-ob-ex .d{ font-size:11px; color:var(--ink-muted); line-height:1.35; }
   .cc-ob-ex .l{ font-size:10.5px; color:var(--teal); margin-top:5px; font-weight:500; }
   /* floating ? reopen button */
-  .cc-ob-fab{ position:fixed; right:18px; bottom:18px; z-index:1100; width:46px; height:46px; border-radius:50%; border:none; cursor:pointer; background:var(--accent-grad); color:#fff; box-shadow:0 8px 20px rgba(47,102,144,.36); display:grid; place-items:center; transition:.25s var(--ease,cubic-bezier(.16,1,.3,1)); }
+  .cc-ob-fab{ position:fixed; right:18px; bottom:78px; z-index:1100; width:46px; height:46px; border-radius:50%; border:none; cursor:pointer; background:var(--accent-grad); color:#fff; box-shadow:0 8px 20px rgba(47,102,144,.36); display:grid; place-items:center; transition:.25s var(--ease,cubic-bezier(.16,1,.3,1)); }
   .cc-ob-fab:hover{ transform:translateY(-3px) scale(1.05); box-shadow:0 12px 26px rgba(47,102,144,.44); }
   .cc-ob-fab svg{ width:22px; height:22px; }
   /* inline help hints (help mode) */
@@ -2041,8 +2041,20 @@
     _set(k, v) { try { localStorage.setItem(k, v); } catch (e) { } },
     helpOn() { return this._ls(this._K_HELP) === '1'; },
     _done() { this._set(this._K_DONE, '1'); },
-    show() { const b = $('#ccObBack'); if (b) { b.classList.add('show'); const f = b.querySelector('.cc-ob-mode'); if (f) setTimeout(() => { try { f.focus(); } catch (e) { } }, 120); } },
-    hide() { const b = $('#ccObBack'); if (b) b.classList.remove('show'); },
+    show() {
+      const b = $('#ccObBack'); if (!b) return;
+      this._opener = document.activeElement;                 // จำ focus เดิม (คืนตอนปิด · a11y)
+      const app = $('#app'); if (app) app.setAttribute('inert', '');   // กัน Tab/SR หลุดไปพื้นหลัง (aria-modal)
+      b.classList.add('show');
+      const f = b.querySelector('.cc-ob-mode'); if (f) setTimeout(() => { try { f.focus(); } catch (e) { } }, 120);
+    },
+    hide() {
+      const b = $('#ccObBack'); if (b) b.classList.remove('show');
+      const app = $('#app'); if (app) app.removeAttribute('inert');
+      this._done();                                          // ปิดด้วยวิธีใดก็ตาม (X/Esc/backdrop) = ไม่เด้งซ้ำ
+      const o = this._opener; if (o && o.focus) { try { o.focus(); } catch (e) { } }
+      else { const fab = $('#ccObFab'); if (fab) try { fab.focus(); } catch (e) { } }   // คืน focus → opener หรือ FAB
+    },
     _switchMode(mode) {
       $$('.mode-btn').forEach(x => x.setAttribute('aria-checked', String(x.dataset.mode === mode)));
       state.mode = (mode === 'cont' ? 'cont' : 'single'); applyMode(); render();
@@ -2057,8 +2069,14 @@
     start() { if (!this._selected) return; this._switchMode(this._selected); this._done(); this.hide(); },
     loadExample(id) {
       const ex = this.EXAMPLES.find(e => e.id === id); if (!ex) return;
-      try { ccApplyInput(JSON.parse(JSON.stringify(ex.snap))); } catch (e) { }   // ผ่าน apply path เดิม (parity-safe)
-      this._done(); this.hide();
+      const P = window.CCProject;
+      // first-visit (คานเดียว · ยังไม่ onboarded) → ใส่ในคานว่างเดิม · ไม่งั้น → คานใหม่ (กันทับงาน returning user · P2 review)
+      const fresh = !!(P && P.data && P.data.beams && P.data.beams.length <= 1 && !this._ls(this._K_DONE));
+      try {
+        if (!fresh && P && P.addBeam) P.addBeam();
+        ccApplyInput(JSON.parse(JSON.stringify(ex.snap)));   // ผ่าน apply path เดิม (parity-safe)
+      } catch (e) { }
+      this.hide();
     },
     toggleHelp() {
       const on = !this.helpOn(); this._set(this._K_HELP, on ? '1' : '0'); this._applyHelp(on);
@@ -2067,7 +2085,11 @@
     _applyHelp(on) {
       document.querySelectorAll('.cc-ob-hint').forEach(h => h.remove());
       if (!on) return;
-      this.HINTS.forEach(p => { const t = document.querySelector(p[0]); if (t && t.parentNode) { const h = document.createElement('span'); h.className = 'cc-ob-hint'; h.textContent = '💡 ' + p[1]; t.parentNode.insertBefore(h, t.nextSibling); } });
+      this.HINTS.forEach(p => {
+        const t = document.querySelector(p[0]); if (!t) return;
+        const tbl = t.closest('table'); const anchor = (tbl && tbl !== t) ? tbl : t;   // กัน <span> เป็นลูกตรงของ <table> (invalid · foster-parented)
+        if (anchor.parentNode) { const h = document.createElement('span'); h.className = 'cc-ob-hint'; h.textContent = '💡 ' + p[1]; anchor.parentNode.insertBefore(h, anchor.nextSibling); }
+      });
     },
     _build() {
       if (this._built) return; this._built = true;
@@ -2101,7 +2123,7 @@
         '<button class="cc-ob-link" id="ccObExToggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg> ไม่แน่ใจ? ดูตัวอย่างก่อน</button></div>' +
         '<div class="cc-ob-exwrap" id="ccObExWrap"><div class="cc-ob-exhd"><span class="p">ตัวอย่าง</span>เปิดดูเคสจริง → กรอกค่าให้ครบ + คำนวณ แล้วแก้ต่อได้เลย</div><div class="cc-ob-exgrid">' + exs + '</div></div>' +
         '<div class="cc-ob-ft"><div class="cc-ob-help" id="ccObHelp" role="switch" aria-checked="false" tabindex="0"><span class="cc-ob-sw"></span><span>โหมดช่วยเหลือ · คำอธิบายรายช่อง</span></div>' +
-        '<div style="display:flex;align-items:center;gap:14px"><span class="s" id="ccObHint" style="font-size:12px;color:var(--ink-faint,#9aa6b4)">เลือกแบบคานก่อนเพื่อเริ่ม</span><button class="cc-ob-skip" id="ccObSkip">ข้ามไปก่อน</button></div></div>' +
+        '<div style="display:flex;align-items:center;gap:14px"><span class="s" id="ccObHint" style="font-size:12px;color:var(--ink-muted)">เลือกแบบคานก่อนเพื่อเริ่ม</span><button class="cc-ob-skip" id="ccObSkip">ข้ามไปก่อน</button></div></div>' +
         '</div></div>';
       document.body.appendChild(back);
 
@@ -2110,20 +2132,22 @@
       $('#ccObSkip').addEventListener('click', () => { this._done(); this.hide(); });
       $('#ccObCta').addEventListener('click', () => this.start());
       $('#ccObExToggle').addEventListener('click', () => $('#ccObExWrap').classList.toggle('open'));
-      back.querySelectorAll('.cc-ob-mode').forEach(m => {
-        const go = () => this._pick(m.dataset.ccmode, m);
-        m.addEventListener('click', go);
-        m.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
-      });
-      back.querySelectorAll('.cc-ob-ex').forEach(x => {
-        x.addEventListener('click', () => this.loadExample(x.dataset.ccex));
-        x.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.loadExample(x.dataset.ccex); } });
-      });
+      back.querySelectorAll('.cc-ob-mode').forEach(m => m.addEventListener('click', () => this._pick(m.dataset.ccmode, m)));   // <button> native = Enter/Space → click (ไม่ต้อง keydown ซ้ำ · กัน double-fire)
+      back.querySelectorAll('.cc-ob-ex').forEach(x => x.addEventListener('click', () => this.loadExample(x.dataset.ccex)));
       const hp = $('#ccObHelp');
       hp.addEventListener('click', () => this.toggleHelp());
-      hp.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.toggleHelp(); } });
-      if (this.helpOn()) hp.classList.add('on'), hp.setAttribute('aria-checked', 'true');
-      document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#ccObBack') && $('#ccObBack').classList.contains('show')) this.hide(); });
+      hp.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.toggleHelp(); } });   // role=switch (ไม่ใช่ <button>) → ต้อง keydown
+      if (this.helpOn()) { hp.classList.add('on'); hp.setAttribute('aria-checked', 'true'); }
+      // a11y: focus-trap (Tab/Shift+Tab วนใน dialog) + Esc ปิด
+      back.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { this.hide(); return; }
+        if (e.key !== 'Tab') return;
+        const f = [...back.querySelectorAll('button,select,a[href],[tabindex="0"]')].filter(el => !el.disabled && el.offsetParent !== null);
+        if (!f.length) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      });
     }
   };
 
@@ -8472,11 +8496,15 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           if (_CCP.renderRail) _CCP.renderRail();
         }
       }
-      // ── ระบบนำทาง / onboarding (CCOnboard) · display-only · first-visit + ติ๊กโหมด + ตัวอย่าง + help ──
+      // ── ระบบนำทาง / onboarding (CCOnboard) · display-only · first-visit + ติ๊กโหมด + ตัวอย่าง(คานใหม่) + help ──
       if (window.CCOnboard) {
         const _O = window.CCOnboard;
         const _obDone = _O._ls(_O._K_DONE), _obHelp = _O._ls(_O._K_HELP), _obLive = _CCP.capture();
+        const _obBeams = _CCP.data.beams.slice(), _obActive = _CCP.activeId, _obSeq = _CCP._seq;
+        const _obRaw = (() => { try { return localStorage.getItem(_CCP._STORE_KEY); } catch (e) { return null; } })();
+        const _app = document.getElementById('app');
         const _activeMode = () => { const b = document.querySelector('.mode-btn[aria-checked="true"]'); return b ? b.dataset.mode : null; };
+        _CCP._noPersist = true;   // กัน addBeam/loadExample เขียน localStorage ระหว่าง audit
         try {
           A('onboarding: overlay + FAB สร้างแล้ว', !!document.getElementById('ccObBack') && !!document.getElementById('ccObFab'));
           A('onboarding: 2 โหมด + 6 ตัวอย่าง + 8 ความสามารถ',
@@ -8484,25 +8512,37 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
             document.querySelectorAll('#ccObBack .cc-ob-ex').length === 6 &&
             document.querySelectorAll('#ccObBack .cc-ob-cap').length === 8);
           _O.show();
-          A('onboarding: show → overlay แสดง (role=dialog)', document.getElementById('ccObBack').classList.contains('show') && document.getElementById('ccObBack').getAttribute('role') === 'dialog');
+          A('onboarding: show → overlay + พื้นหลัง inert (aria-modal · focus-trap)',
+            document.getElementById('ccObBack').classList.contains('show') && document.getElementById('ccObBack').getAttribute('role') === 'dialog' && (!_app || _app.hasAttribute('inert')));
           const _m = document.querySelector('#ccObBack .cc-ob-mode[data-ccmode="cont"]'); _m.click();
           A('onboarding: ติ๊กโหมด → CTA เปิด + selected', !document.getElementById('ccObCta').disabled && _m.classList.contains('on') && _O._selected === 'cont');
           _O.start();
-          A('onboarding: เริ่มออกแบบ → สลับโหมด cont + onboarded + ปิด overlay',
-            _activeMode() === 'cont' && _O._ls(_O._K_DONE) === '1' && !document.getElementById('ccObBack').classList.contains('show'));
+          A('onboarding: เริ่มออกแบบ → สลับโหมด cont + onboarded + ปิด overlay + คืน inert',
+            _activeMode() === 'cont' && _O._ls(_O._K_DONE) === '1' && !document.getElementById('ccObBack').classList.contains('show') && (!_app || !_app.hasAttribute('inert')));
+          // loadExample (returning user · onboarded แล้ว) → คานใหม่ ไม่ทับงานเดิม (P2 review fix)
+          const _nBefore = _CCP.data.beams.length, _firstId = _CCP.data.beams[0] ? _CCP.data.beams[0].id : null;
           _O.loadExample('wall');
           const _rw = TT().res();
-          A('onboarding: โหลดตัวอย่าง → apply input ผ่าน path เดิม (wall 25×50 single)', !!_rw && _rw.b === 25 && _rw.h === 50 && _activeMode() === 'single');
+          A('onboarding: โหลดตัวอย่าง (returning) → คานใหม่ ไม่ทับงานเดิม + apply path เดิม (wall 25×50)',
+            !!_rw && _rw.b === 25 && _rw.h === 50 && _activeMode() === 'single' && _CCP.data.beams.length === _nBefore + 1 && (!_firstId || _CCP.data.beams.some(b => b.id === _firstId)));
+          // dismiss (X/Esc/backdrop → hide) → set onboarded (ไม่เด้งซ้ำ)
+          _O._set(_O._K_DONE, ''); _O.show(); _O.hide();
+          A('onboarding: ปิดด้วย hide (X/Esc/backdrop) → set onboarded (ไม่เด้งซ้ำ)', _O._ls(_O._K_DONE) === '1');
           _O._set(_O._K_HELP, '0'); _O.toggleHelp();
           A('onboarding: help on → hints รายช่องโผล่', document.querySelectorAll('.cc-ob-hint').length >= 1);
+          A('onboarding: help hint ไม่แทรกตรงใน <table> (valid markup)', ![...document.querySelectorAll('.cc-ob-hint')].some(h => h.parentNode && h.parentNode.tagName === 'TABLE'));
           _O.toggleHelp();
           A('onboarding: help off → hints หาย (idempotent)', document.querySelectorAll('.cc-ob-hint').length === 0);
         } finally {
           _O.hide();
+          _CCP.data.beams = _obBeams; _CCP.activeId = _obActive; _CCP._seq = _obSeq;   // คืนคานทดสอบ (loadExample addBeam)
+          _CCP._noPersist = false;
+          try { if (_obRaw == null) localStorage.removeItem(_CCP._STORE_KEY); else localStorage.setItem(_CCP._STORE_KEY, _obRaw); } catch (e) {}
           try { if (_obDone == null) localStorage.removeItem(_O._K_DONE); else _O._set(_O._K_DONE, _obDone); } catch (e) {}
           try { if (_obHelp == null) localStorage.removeItem(_O._K_HELP); else _O._set(_O._K_HELP, _obHelp); } catch (e) {}
           _O._applyHelp(_O.helpOn());
           _CCP.restoreLive(_obLive);
+          if (_CCP.renderRail) _CCP.renderRail();
         }
       }
       // ── T · แรงบิด (Torsion · B1) · present-when-on / absent-when-off (zero-reg) / TMD / parity ──
