@@ -975,6 +975,10 @@ def design_shear(
         raise InvalidInputError(f"n_legs = {n_legs} · รองรับเฉพาะ 2 (1ป) หรือ 4 (2ป)")
     n_stirrups = n_legs // 2
 
+    forced_tight = False   # บังคับปลอก + ระยะที่ต้องการ <5 ซม. (impractical · review P2-1) → flag ให้ UI เตือน
+    if force_stirrup_bar and force_stirrup_bar not in _STIRRUP_2LEG_AV_CM2:
+        force_stirrup_bar = None   # ชื่อปลอกไม่รู้จัก → auto (defensive · กัน KeyError ใน _av_legs · review P2-2)
+
     # 1. Critical shear · normally at distance d from support (Gemini Q4b).
     #    Cantilever passes vu_design_override = Vu at FACE (no d-reduction · Gemini Q3:
     #    cantilever load is "hung" off the support → no arch action → critical at face).
@@ -1086,8 +1090,9 @@ def design_shear(
         s_S1_final = _floor_to_practical_spacing(s_S1_capped)
         s_S2_final = _floor_to_practical_spacing(s_S2_capped)
         # Fallback DB10 if spacing tighter than 5 cm (เฉพาะ auto · ถ้า user บังคับขนาด → เคารพ + เตือนถ้าแน่น)
-        if force_stirrup_bar and s_S1_final < 5.0 - FLOAT_TOL:
-            notes.append(f"⚠ ปลอก {bar} ระยะ {s_S1_final:.1f} ซม. แน่นมาก (<5 ซม.) — ควรเลือกขนาดใหญ่กว่า")
+        if force_stirrup_bar and s_S1_capped < 5.0 - FLOAT_TOL:   # review P2-1: เทียบก่อน floor (s_S1_final clamp ≥5 → เดิม dead code)
+            forced_tight = True
+            notes.append(f"⚠ ปลอก {bar} ระยะที่ต้องการ {s_S1_capped:.1f} ซม. แน่นเกินไป (<5 ซม. · ใช้ขั้นต่ำ 5 ซม.) — ควรเลือกขนาดใหญ่กว่า")
         if (not force_stirrup_bar) and s_S1_final < 5.0 - FLOAT_TOL:
             bar = "DB10"
             A_v = _av_legs(bar, n_legs)
@@ -1182,6 +1187,7 @@ def design_shear(
         "phi_Vn_ton": phi_Vn_kN * KN_TO_TON,
         "shop_drawing_notation": shop,
         "passes": passes,
+        "forced_tight": forced_tight,   # บังคับปลอก + ระยะที่ต้องการ <5 ซม. → UI เตือน (review P2)
         "notes": notes,
         "citations": citations,
         # Black Box mitigation (Gemini Top Risk #1) — show intermediate steps
