@@ -236,29 +236,14 @@
   .cc-crumb-floor:hover{ border-color:var(--steel); }
   .cc-crumb-pos,.cc-crumb-grid{ display:inline-flex; align-items:center; gap:5px; }
   .cc-pos-lbl{ font-size:11px; color:var(--ink-muted); }
-  .cc-grid-val{ font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:7px; padding:2px 8px; min-width:42px; height:26px; display:inline-flex; align-items:center; cursor:text; font-family:var(--mono,inherit); }
+  .cc-grid-val{ font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--border); border-radius:7px; padding:2px 8px; min-width:42px; height:26px; display:inline-flex; align-items:center; cursor:text; font-family:"JetBrains Mono",monospace; }
   .cc-grid-val:hover{ border-color:var(--steel); }
-  .cc-grid-val.ph{ color:var(--ink-faint,#9aa6b4); font-style:italic; font-family:inherit; }
+  .cc-grid-val.ph{ color:#9aa6b4; font-style:italic; font-family:inherit; }
   .cc-grid-val:focus{ outline:2px solid var(--steel); outline-offset:1px; }
   .cc-legend{ display:flex; align-items:center; gap:6px; margin:0 12px 8px; padding:6px 10px; border-radius:8px; background:var(--accent-soft); color:var(--steel); font-size:11px; line-height:1.3; }
   .cc-legend svg{ width:14px; height:14px; flex:none; }
   .cc-legend b{ font-weight:600; }
   @media (prefers-reduced-motion:reduce){ .cc-grp-tog svg,.cc-grp-body{ transition:none !important; } }
-  /* คานเบอร์เดียวใช้หลายชั้น (typical) */
-  .cc-multi{ display:inline-flex; align-items:center; gap:1px; font-size:10px; font-weight:600; color:var(--teal); background:rgba(15,118,110,.1); border-radius:20px; padding:1px 6px 1px 4px; flex:none; }
-  .cc-multi svg{ width:12px; height:12px; }
-  .cc-beam.cc-shared{ opacity:.82; }
-  .cc-beam.cc-shared .cc-beam-lbl{ font-weight:400; }
-  .cc-beam.cc-shared .cc-beam-dim{ color:var(--teal); font-family:inherit; font-size:11px; }
-  .cc-link{ display:grid; place-items:center; color:var(--teal); flex:none; width:13px; }
-  .cc-link svg{ width:13px; height:13px; }
-  .cc-usefloors{ display:inline-flex; align-items:center; gap:5px; flex-wrap:wrap; margin-left:10px; padding-left:10px; border-left:1px solid var(--border); }
-  .cc-uf-lbl{ font-size:11px; color:var(--ink-muted); }
-  .cc-uf{ font-family:inherit; font-size:11.5px; color:var(--ink-muted); background:#fff; border:1px solid var(--border); border-radius:20px; padding:2px 10px; cursor:pointer; transition:.15s ease; }
-  .cc-uf:hover{ border-color:var(--steel); color:var(--ink); }
-  .cc-uf.on{ background:var(--accent-soft); color:var(--steel); border-color:rgba(47,102,144,.4); font-weight:500; }
-  .cc-uf.home{ background:var(--accent-grad); color:#fff; border:none; cursor:default; font-weight:600; }
-  .cc-uf.home:hover{ color:#fff; }
   .cc-beam{ display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:9px; cursor:pointer; position:relative;
     border:1px solid transparent; transition:background .18s ease, border-color .18s ease, transform .18s cubic-bezier(.16,1,.3,1);
     opacity:0; transform:translateX(-8px); animation:ccSlide .42s cubic-bezier(.16,1,.3,1) forwards; }
@@ -1925,6 +1910,11 @@
       if (main) {
         const c = document.createElement('div'); c.id = 'ccCrumb'; c.className = 'no-print'; main.insertBefore(c, main.firstChild);
         c.addEventListener('click', e => { const a = e.target.closest('[data-ccact]'); if (a && this[a.dataset.ccact]) this[a.dataset.ccact](); });
+        c.addEventListener('keydown', e => {   // a11y: span role=button (เช่น .cc-grid-val) เปิดแก้ด้วย Enter/Space ได้ (ปุ่ม <button> จริงทำ native อยู่แล้ว · ข้ามกัน double-fire)
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          const a = e.target.closest('[data-ccact]');
+          if (a && a.tagName !== 'BUTTON' && a.getAttribute('contenteditable') !== 'true' && this[a.dataset.ccact]) { e.preventDefault(); this[a.dataset.ccact](); }
+        });
         c.addEventListener('change', e => { const s = e.target.closest('[data-cc-floor]'); if (s) this.moveBeamToFloor(this.activeId, s.value); });
       }
       rail.addEventListener('click', e => this._onRailClick(e));
@@ -1938,7 +1928,6 @@
       const fdn = e.target.closest('[data-fl-dn]'); if (fdn) { this.moveFloor(fdn.dataset.flDn, 1); return; }
       const fdl = e.target.closest('[data-fl-del]'); if (fdl) { this.deleteFloor(fdl.dataset.flDel); return; }
       const fnm = e.target.closest('[data-fl-edit]'); if (fnm) { this.editFloor(fnm.dataset.flEdit); return; }
-      const un = e.target.closest('[data-ccunuse]'); if (un) { e.stopPropagation(); const [bid, fl] = un.dataset.ccunuse.split('|'); this.unuseFloor(bid, fl); return; }
       const x = e.target.closest('[data-ccx]'); if (x) { e.stopPropagation(); this.remove(x.dataset.ccx); return; }
       const beam = e.target.closest('[data-ccid]'); if (beam) { this.select(beam.dataset.ccid); return; }
       const act = e.target.closest('[data-ccact]'); if (act) { this[act.dataset.ccact](); }
@@ -7973,6 +7962,11 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           })());
           // ── กริดไลน์ต่อคาน (pi: ให้คนตรวจรู้ตำแหน่ง) — field แก้ได้ + override + โผล่ TOC ──
           A('โปรเจกต์·กริด: breadcrumb มี field กริดแก้ได้', !!document.querySelector('#ccCrumb .cc-grid-val'));
+          A('โปรเจกต์·กริด: a11y — กด Enter ที่ field เปิดแก้ได้ (keyboard)', (() => {
+            const _e = document.querySelector('#ccCrumb .cc-grid-val'); if (!_e) return false;
+            _e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            const _open = _e.getAttribute('contenteditable') === 'true'; _e.dispatchEvent(new FocusEvent('blur')); return _open;
+          })());
           A('โปรเจกต์·กริด: editBeamGrid → b.grid อัปเดต + โชว์', (() => {
             const _b = _CCP.active(); if (!_b) return false; _CCP.editBeamGrid();
             const _e = document.querySelector('#ccCrumb .cc-grid-val'); if (!_e) return false;
