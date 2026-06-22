@@ -2152,7 +2152,18 @@ def design_beam(inp: BeamInput) -> BeamOutput:
     _d_tor = out.d_actual or out.d_assumed
     _tu_design = inp.Tu_tonm
     _tor_demand = None
-    if inp.torsion_loads:   # B2 · แรงบิดมีตำแหน่ง → TMD จริง + Tu วิกฤต (มาก่อน)
+    _has_torsion_input = bool(inp.torsion_loads) or (inp.Tu_dist_tonm_per_m or 0) > 0 or (inp.Tu_tonm or 0) > 0
+    _cant_torsion_blocked = (inp.support == SupportType.CANTILEVER and _has_torsion_input)
+    if _cant_torsion_blocked:
+        # ⚠️ คานยื่น (cantilever) ยังไม่รองรับการออกแบบรับแรงบิด — โมเดล analogy SFD (simply-supported · ปลาย 2 ข้าง
+        #    เป็นจุดรองรับบิด) ใช้กับคานยื่นไม่ได้: ปลายอิสระไม่มีเสารั้งบิด → แรงบิดทั้งหมดต้านที่ฐาน (Tu=Στ ไม่ใช่ split).
+        #    ใช้ honest-flag (applicable=False) แทนการ under-design เงียบ · ตรงแพทเทิร์น curtailment คานยื่น+จุด (#22/#23).
+        _tu_design = 0.0
+        out.torsion = {"applicable": False, "support_unsupported": True,
+                       "reason": ("คานยื่น (cantilever) ยังไม่รองรับการออกแบบรับแรงบิด — โมเดล SFD (simply-supported) "
+                                  "ใช้กับคานยื่นไม่ได้ เพราะปลายอิสระไม่มีจุดรองรับบิด (แรงบิดทั้งหมดต้านที่ฐาน)")}
+        out.notes.append("⚠️ แรงบิดบนคานยื่น: ยังไม่รองรับการออกแบบ — ข้ามส่วนออกแบบรับแรงบิด เพื่อกัน under-design เงียบ")
+    elif inp.torsion_loads:   # B2 · แรงบิดมีตำแหน่ง → TMD จริง + Tu วิกฤต (มาก่อน)
         _tor_demand = compute_torsion_demand(inp.torsion_loads, inp.L, _d_tor)
         if _tor_demand.get("applicable"):
             _tu_design = _tor_demand["Tu_design_tonm"]
@@ -2177,7 +2188,7 @@ def design_beam(inp: BeamInput) -> BeamOutput:
                 out.torsion["demand"] = _tor_demand   # TMD ยังวาดได้แม้หน้าตัดไม่พอ
             out.passes = False
             out.warnings.append(f"🔴 แรงเฉือน+บิดร่วมกัน: {exc}")
-    else:
+    elif not _cant_torsion_blocked:   # คานยื่น+บิด: คง honest-flag (applicable=False) ที่ guard ตั้งไว้ · ไม่ reset เป็น None
         out.torsion = None
 
     return out
