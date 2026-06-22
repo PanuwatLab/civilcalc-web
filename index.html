@@ -2405,8 +2405,11 @@
       const cur = this.active(); if (cur) { cur.input = ccCaptureInput(); cur.summary = this.summaryNow(); }
       const src = cur ? cur.input : ccCaptureInput();
       const b = { id: this._id(), label: this.nextLabel(), group: cur ? cur.group : 'ชั้น 1', input: JSON.parse(JSON.stringify(src)), summary: cur ? Object.assign({}, cur.summary) : this.summaryNow() };
+      const _hadForce = ccModel.forceMain || ccModel.forceStir;   // P1 (review-2): addBeam ไม่ผ่าน ccApplyInput → ต้อง reset force เอง
       this.data.beams.push(b); this.activeId = b.id;   // คานใหม่ = ค่าตั้งต้นจากคานปัจจุบัน (สืบ section/material)
+      ccModel.forceMain = ''; ccModel.forceStir = '';   // คานใหม่เริ่ม auto · ไม่สืบการบังคับขนาดเหล็กของคานก่อน (กัน silent design-change)
       this.renderRail(); this.updateCrumb();            // input เท่าเดิม → ไม่ต้อง apply (จอแสดงค่าเดิมอยู่แล้ว)
+      if (_hadForce) render();   // เคย force → refresh ผลเป็น auto ของคานใหม่ (กันจอค้างผลที่บังคับ)
     },
     duplicate(id) {
       const src = this.data.beams.find(b => b.id === id); if (!src) return;
