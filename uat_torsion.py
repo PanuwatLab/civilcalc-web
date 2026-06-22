@@ -203,6 +203,42 @@ chk("continuous Tu_dist: Tu_design = t·(L/2−d_actual)", ocd["spans"][0]["tors
     round(max(0.0, 1.5 * (5 / 2 - _dc / 100)), 3), abs_tol=0.01)
 
 print("=" * 64)
+print(" J · B2 · แรงบิดมีตำแหน่ง (compute_torsion_demand + wiring · DRMK p250/Ex9.4)")
+print("=" * 64)
+fdem = calc.compute_torsion_demand
+# analysis: distributed ทั้งคาน = B1 (reaction ±t·L/2 · Tu=t·(L/2−d))
+ra = fdem([{"kind": "dist", "x1": 0, "x2": 4.5, "t": 1.5}], 4.5, 55.3)
+chk("demand dist-full → T_A = t·L/2", ra["T_A_tonm"], 3.375, abs_tol=0.01)
+chk("demand dist-full → Tu = t·(L/2−d) (=B1)", ra["Tu_design_tonm"], 2.546, abs_tol=0.01)
+# analysis: point torque T=6 @ a=2 บน L=5 → reaction T·b/L, T·a/L
+rp = fdem([{"kind": "point", "x": 2.0, "T": 6.0}], 5.0, 60.0)
+chk("demand point → T_A = T·(L−a)/L", rp["T_A_tonm"], 3.6, abs_tol=0.01)
+chk("demand point → T_B = T·a/L", rp["T_B_tonm"], 2.4, abs_tol=0.01)
+chk_true("demand point → TMD ขั้นบันได (T[0]>0, T[-1]<0)", rp["T_grid"][0] > 0 and rp["T_grid"][-1] < 0)
+# analysis: superposition dist+point
+rs = fdem([{"kind": "dist", "x1": 0, "x2": 6, "t": 1.0}, {"kind": "point", "x": 1.5, "T": 4.0}], 6.0, 55.0)
+chk("demand superpose → T_A (dist3+pt3)", rs["T_A_tonm"], 6.0, abs_tol=0.01)
+chk("demand superpose → T_B (dist3+pt1)", rs["T_B_tonm"], 4.0, abs_tol=0.01)
+chk_true("demand empty → applicable=False", fdem([], 5.0, 50.0)["applicable"] is False)
+# wiring single: torsion_loads → torsion applicable + demand แนบ + Tu จาก demand
+oB2 = calc.design_beam(BI(b=40, h=70, L=8, fc=280, fy=4000, DL=3, LL=2,
+    torsion_loads=[{"kind": "point", "x": 3.0, "T": 5.0}]))
+chk_true("B2 single: torsion applicable", bool(oB2.torsion and oB2.torsion.get("applicable")))
+chk_true("B2 single: torsion มี demand (TMD)", bool(oB2.torsion and oB2.torsion.get("demand", {}).get("x_grid")))
+chk_true("B2 single: At/s > 0 + Al > 0", bool(oB2.torsion.get("At_s", 0) > 0 and oB2.torsion.get("Al_final_cm2", 0) > 0))
+_dem = oB2.torsion["demand"]
+chk("B2 single: Tu_design = demand Tu (max|T|@[d,L−d])", oB2.torsion["Tu_design_tonm"], _dem["Tu_design_tonm"], abs_tol=0.01)
+# zero-reg: ไม่มี torsion_loads → torsion None
+chk_true("B2 zero-reg: torsion_loads ว่าง → torsion None",
+         calc.design_beam(BI(b=40, h=70, L=8, fc=280, fy=4000, DL=3, LL=2)).torsion is None)
+# wiring continuous: torsion_loads_per_span
+ocB2 = calc.design_continuous_beam_exact(CBI(b=40, h=70, fc=280, fy=4000,
+    spans=[SI(5.0, 8.0, 3.0, []), SI(5.0, 8.0, 3.0, [])],
+    torsion_loads_per_span=[[{"kind": "point", "x": 2.5, "T": 4.0}], []]))
+chk_true("B2 continuous: ช่วง 0 torsion applicable + demand", bool(ocB2["spans"][0].get("torsion") and ocB2["spans"][0]["torsion"].get("demand")))
+chk_true("B2 continuous: ช่วง 1 ไม่มี (per-span)", ocB2["spans"][1].get("torsion") is None)
+
+print("=" * 64)
 n_pass, n_fail = len(PASS), len(FAIL)
 print(f" RESULT: {n_pass}/{n_pass + n_fail} passed" + (f" · FAILED: {FAIL}" if FAIL else " · ALL PASS ✓"))
 print("=" * 64)
