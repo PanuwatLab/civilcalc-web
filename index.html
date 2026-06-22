@@ -2219,6 +2219,10 @@
       let raw; try { raw = localStorage.getItem(this._STORE_KEY); } catch (e) { return null; }
       if (!raw) return null;
       let o; try { o = JSON.parse(raw); } catch (e) { return null; }                 // corrupt → ทิ้ง
+      return this._validate(o);
+    },
+    // ตรวจ parsed object (จาก localStorage หรือไฟล์นำเข้า) · คืน normalized {v,project,...} หรือ null · ห้าม trust
+    _validate(o) {
       if (!o || !o.project || !Array.isArray(o.project.beams) || !o.project.beams.length) return null;
       if (o.v === 1) o = this._migrateV1toV2(o);                                      // backward-compat (ไม่ทิ้งงานเดิม)
       if (o.v !== this._SCHEMA) return null;                                          // เวอร์ชันอื่น/ใหม่กว่า → ทิ้ง
@@ -2468,10 +2472,38 @@
     },
     exportJSON() {
       const cur = this.active(); if (cur) cur.input = ccCaptureInput();
-      const blob = new Blob([JSON.stringify(this.data, null, 2)], { type: 'application/json' });
+      const payload = { v: this._SCHEMA, app: 'civilcalc-web', exportedAt: new Date().toISOString(), activeId: this.activeId, project: this.data };   // ห่อ version → import validate ได้
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
       a.download = (this.data.name || 'project').replace(/[^\w฀-๿-]+/g, '_') + '.json'; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    },
+    importJSON() {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
+      inp.addEventListener('change', () => {
+        const file = inp.files && inp.files[0]; if (!file) return;
+        const rd = new FileReader();
+        rd.onload = () => {
+          let o; try { o = JSON.parse(String(rd.result)); } catch (e) { alert('ไฟล์ไม่ใช่ JSON ที่ถูกต้อง — นำเข้าไม่ได้'); return; }
+          if (o && Array.isArray(o.beams) && !o.project) o = { v: this._SCHEMA, project: o };   // backward-compat ไฟล์เก่า (ส่งออก this.data ดิบ)
+          const valid = this._validate(o);                                                       // ห้าม trust ไฟล์ · validate-or-reject
+          if (!valid) { alert('ไฟล์โครงการไม่ถูกต้องหรือคนละเวอร์ชัน — นำเข้าไม่ได้ (ข้อมูลเดิมไม่ถูกแตะ)'); return; }
+          const n = valid.project.beams.length;
+          if (!confirm('นำเข้า "' + (valid.project.name || 'โครงการ') + '" (' + n + ' คาน)?\n⚠️ จะแทนที่โปรเจกต์ปัจจุบันทั้งหมด — สำรองด้วย "ส่งออก" ก่อนถ้ายังไม่ได้เซฟ')) return;
+          this._applyImported(valid);
+        };
+        rd.onerror = () => alert('อ่านไฟล์ไม่สำเร็จ — นำเข้าไม่ได้');
+        rd.readAsText(file);
+      });
+      inp.click();
+    },
+    _applyImported(o) {
+      this.data = o.project;
+      this._seq = o.project.beams.reduce((m, b) => { const num = parseInt(String(b.id).replace(/\D/g, ''), 10) || 0; return Math.max(m, num); }, 0);   // กัน id ชนตอน addBeam หลัง import
+      this.activeId = (o.activeId && o.project.beams.some(b => b.id === o.activeId)) ? o.activeId : o.project.beams[0].id;
+      this.renderRail(); this.updateCrumb();
+      const b = this.active(); if (b) ccApplyInput(b.input);   // โหลดคาน active เข้า calculator
+      this.persist(true);
     },
     _statusDot(s) { const st = (s && s.status) || 'idle'; const cls = st === 'ok' ? 'ok' : (st === 'bad' ? 'bad' : 'idle'); return `<span class="cc-dot ${cls}"></span>`; },
     _ring() {
@@ -2529,7 +2561,8 @@
           `<button class="cc-add cc-addfloor" data-ccact="addFloor"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18M3 12h18M3 17h18"/></svg>เพิ่มชั้น</button></div></div>` +
         `<div class="cc-savedrow"><span class="cc-saved" id="ccSaved"></span></div>` +
         `<div class="cc-foot"><button class="cc-fbtn" data-ccact="newProject" title="เริ่มโปรเจกต์ใหม่"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 12v6M9 15h6"/></svg>ใหม่</button>` +
-          `<button class="cc-fbtn" data-ccact="exportJSON" title="ส่งออกไฟล์โครงการ (.json)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>ส่งออก</button>` +
+          `<button class="cc-fbtn" data-ccact="exportJSON" title="ส่งออกไฟล์โครงการ (.json) — สำรอง/ย้ายเครื่อง"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>ส่งออก</button>` +
+          `<button class="cc-fbtn" data-ccact="importJSON" title="นำเข้าไฟล์โครงการ (.json) — กู้คืน/เปิดไฟล์ที่ส่งออก"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 9l5-5 5 5M12 4v12"/></svg>นำเข้า</button>` +
           `<button class="cc-fbtn primary" data-ccact="printAll" title="พิมพ์รวมทั้งโครงการ"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>พิมพ์</button></div>`;
       this._setSaved(this._savedState);   // คืนสถานะบันทึกหลัง rebuild
       // keyboard + drag-drop (ย้ายคานข้ามชั้น) · dropdown ย้ายใน breadcrumb เป็น fallback a11y
@@ -8434,6 +8467,24 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
             try { localStorage.setItem(_CCP._STORE_KEY, '{bad'); const a1 = _CCP.load();
               localStorage.setItem(_CCP._STORE_KEY, JSON.stringify({ v: 99, project: { beams: [] } })); const a2 = _CCP.load();
               return a1 === null && a2 === null; } catch (e) { return false; }
+          })());
+          // เฟส B2 · นำเข้าโปรเจกต์ (.json) · validate-or-reject + round-trip + apply (ไม่ trust ไฟล์)
+          A('โปรเจกต์·นำเข้า: importJSON/_validate/_applyImported มีจริง',
+            typeof _CCP.importJSON === 'function' && typeof _CCP._validate === 'function' && typeof _CCP._applyImported === 'function');
+          A('โปรเจกต์·นำเข้า: _validate ผ่านไฟล์ดี · reject เสีย/version ผิด/ว่าง/junk (ห้าม trust)', (() => {
+            const good = { v: _CCP._SCHEMA, project: JSON.parse(JSON.stringify(_CCP.data)) };
+            return !!_CCP._validate(good)
+              && _CCP._validate({ v: 99, project: { beams: [{ id: 'b1', input: { P: { b: 25, h: 50 }, st: {}, loads: [] } }] } }) === null
+              && _CCP._validate({ v: _CCP._SCHEMA, project: { beams: [] } }) === null
+              && _CCP._validate({ foo: 1 }) === null
+              && _CCP._validate(null) === null;
+          })());
+          A('โปรเจกต์·นำเข้า: _applyImported round-trip → คานครบ + activeId ตรง + _seq กัน collision', (() => {
+            const payload = { v: _CCP._SCHEMA, activeId: _CCP.activeId, project: JSON.parse(JSON.stringify(_CCP.data)) };
+            const n = payload.project.beams.length;
+            const maxNum = payload.project.beams.reduce((m, b) => Math.max(m, parseInt(String(b.id).replace(/\D/g, ''), 10) || 0), 0);
+            _CCP._applyImported(_CCP._validate(payload));
+            return _CCP.data.beams.length === n && _CCP.data.beams.some(b => b.id === _CCP.activeId) && _CCP._seq >= maxNum;
           })());
           // เฟส C · พิมพ์รวมทั้งโครงการ (ปก + สารบัญ + ทุกคาน page-break)
           const _preAll = _CCP.activeId;
