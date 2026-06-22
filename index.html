@@ -1122,6 +1122,26 @@
   .wstep .wnote{ font-family:"IBM Plex Sans Thai",sans-serif; font-size:12.5px; color:var(--ink-muted); padding-left:32px; margin-top:4px; }
 
   [data-mode-cont]{ }
+
+  /* ── Mobile print help: in-app browser (Line/FB/IG) ปิดการพิมพ์ → แนะนำเปิดในเบราว์เซอร์ ── */
+  .cc-print-help-ov{ display:none; position:fixed; inset:0; z-index:9999; padding:20px;
+    background:rgba(15,23,42,.55); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px);
+    align-items:center; justify-content:center; }
+  .cc-print-help{ background:#fff; border-radius:16px; max-width:400px; width:100%; padding:24px 22px;
+    box-shadow:0 24px 60px -16px rgba(15,23,42,.45); font-family:"IBM Plex Sans Thai",sans-serif; text-align:left; }
+  .cc-print-help .cc-ph-ic{ font-size:34px; text-align:center; line-height:1; }
+  .cc-print-help h3{ margin:10px 0 6px; font-size:18px; font-weight:700; color:var(--ink); text-align:center; }
+  .cc-print-help p{ font-size:13.5px; line-height:1.7; color:var(--ink-muted); margin:0 0 14px; }
+  .cc-print-help ol{ margin:0 0 16px; padding-left:20px; font-size:13.5px; line-height:1.95; color:var(--ink); }
+  .cc-print-help ol b{ color:var(--accent); font-weight:700; }
+  .cc-print-help .cc-ph-link{ display:flex; gap:8px; margin-bottom:14px; }
+  .cc-print-help .cc-ph-link input{ flex:1; min-width:0; font-size:12px; font-family:"JetBrains Mono",monospace;
+    padding:9px 10px; border:1px solid var(--line,#e2e8f0); border-radius:8px; background:#f8fafc; color:var(--ink-muted); }
+  .cc-print-help .cc-ph-link button{ flex:none; font-size:13px; font-weight:600; padding:9px 14px; border-radius:8px;
+    border:1px solid var(--accent); color:var(--accent); background:var(--accent-soft); white-space:nowrap; cursor:pointer; }
+  .cc-print-help .cc-ph-close{ width:100%; font-size:15px; font-weight:600; padding:12px; border-radius:10px;
+    background:var(--accent); color:#fff; border:0; cursor:pointer; }
+  @media (max-width:420px){ .cc-print-help .cc-ph-link{ flex-direction:column; } .cc-print-help .cc-ph-link button{ width:100%; } }
 </style>
 
 <!-- ════════════════ JAVASCRIPT (vanilla) ════════════════ -->
@@ -1361,7 +1381,7 @@
   function initNav() {
     $('#btnPrev').addEventListener('click', () => goStep(state.step - 1));
     $('#btnNext').addEventListener('click', () => goStep(state.step + 1));
-    $('#btnPrint').addEventListener('click', () => window.print());
+    $('#btnPrint').addEventListener('click', () => ccTryPrint());
   }
   function updateNav() {
     $('#btnPrev').disabled = state.step === 1;
@@ -2485,7 +2505,7 @@
       const doc = document.querySelector('#cc-print-doc'); if (!doc) return;
       const html = this.buildAllHTML();
       this._printingAll = true; doc.innerHTML = html;            // กัน beforeprint clobber
-      try { window.print(); } catch (e) {}
+      try { ccTryPrint(); } catch (e) {}                         // in-app browser → overlay แนะนำ · ปกติ → พิมพ์
       this._printingAll = false; ccPopulatePrintDoc();           // คืนเอกสารคานปัจจุบัน
     },
     exportJSON() {
@@ -4074,6 +4094,54 @@
       p.setAttribute('aria-pressed', 'true'); state.legs = +p.dataset.leg;
       render();   // recompute engine (stirrup_legs เปลี่ยน → เฉือน/D-C/verdict ใหม่) + redraw ครบ
     }));
+  }
+
+  /* ╔════ พิมพ์บนมือถือ: in-app browser (Line/FB/IG/Messenger) ปิด window.print() → แนะนำเปิดในเบราว์เซอร์ ════╗
+     อาการ "กดเงียบ" บนมือถือ = แอปแชต block การพิมพ์ · แก้ในโค้ดให้พิมพ์ตรงนั้นไม่ได้ → ตรวจจับ + บอกทางออก */
+  function ccInApp() {
+    return /\bLine\/|FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger|MicroMessenger|\bTikTok/i.test(navigator.userAgent || '');
+  }
+  function ccShowPrintHelp() {
+    let ov = document.getElementById('ccPrintHelp');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'ccPrintHelp'; ov.className = 'cc-print-help-ov';
+      ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-labelledby', 'ccPhTitle');
+      ov.innerHTML =
+        '<div class="cc-print-help" role="document">' +
+          '<div class="cc-ph-ic" aria-hidden="true">📱</div>' +
+          '<h3 id="ccPhTitle">พิมพ์ PDF ในแอปนี้ไม่ได้</h3>' +
+          '<p>แอปแชต (Line · Facebook · Messenger) ปิดการพิมพ์ไว้ — เปิดหน้านี้ในเบราว์เซอร์ปกติก่อน แล้วกดพิมพ์อีกครั้ง</p>' +
+          '<ol>' +
+            '<li>แตะปุ่มเมนู <b>⋯</b> หรือ <b>⋮</b> มุมขวาบน</li>' +
+            '<li>เลือก <b>“เปิดในเบราว์เซอร์”</b> (Safari / Chrome)</li>' +
+            '<li>กด <b>🖨 พิมพ์ PDF</b> อีกครั้ง → เลือก <b>“บันทึกเป็น PDF”</b></li>' +
+          '</ol>' +
+          '<div class="cc-ph-link"><input id="ccPhUrl" readonly aria-label="ลิงก์หน้านี้"><button type="button" id="ccPhCopy">คัดลอกลิงก์</button></div>' +
+          '<button type="button" class="cc-ph-close" id="ccPhClose">เข้าใจแล้ว</button>' +
+        '</div>';
+      document.body.appendChild(ov);
+      const close = () => { ov.style.display = 'none'; };
+      ov.addEventListener('click', e => { if (e.target === ov) close(); });
+      ov.querySelector('#ccPhClose').addEventListener('click', close);
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && ov.style.display === 'flex') close(); });
+      ov.querySelector('#ccPhCopy').addEventListener('click', () => {
+        const inp = ov.querySelector('#ccPhUrl'), btn = ov.querySelector('#ccPhCopy');
+        const done = () => { btn.textContent = 'คัดลอกแล้ว ✓'; setTimeout(() => { btn.textContent = 'คัดลอกลิงก์'; }, 1800); };
+        try { inp.focus(); inp.select(); inp.setSelectionRange(0, 99999); } catch (e) {}
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(inp.value).then(done, () => { try { document.execCommand('copy'); done(); } catch (e) {} });
+        } else { try { document.execCommand('copy'); done(); } catch (e) {} }
+      });
+    }
+    ov.querySelector('#ccPhUrl').value = location.href;
+    ov.style.display = 'flex';
+    setTimeout(() => { const c = ov.querySelector('#ccPhClose'); if (c) c.focus(); }, 30);
+  }
+  /* เรียกแทน window.print() ทุกจุด · in-app → overlay แนะนำ · เบราว์เซอร์ปกติ → พิมพ์เลย */
+  function ccTryPrint() {
+    if (ccInApp()) { ccShowPrintHelp(); return false; }
+    window.print(); return true;
   }
 
   /* ╔══════════════ master render ══════════════╗ */
