@@ -8537,7 +8537,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
           try { if (_obRaw == null) localStorage.removeItem(_CCP._STORE_KEY); else localStorage.setItem(_CCP._STORE_KEY, _obRaw); } catch (e) {}
           try { if (_obDone == null) localStorage.removeItem(_O._K_DONE); else _O._set(_O._K_DONE, _obDone); } catch (e) {}
           try { if (_obHelp == null) localStorage.removeItem(_O._K_HELP); else _O._set(_O._K_HELP, _obHelp); } catch (e) {}
-          _O._applyHelp(_O.helpOn());
+          _O._applyHelp(_O.helpOn()); _O._syncHelpUI(_O.helpOn());   // P3 review: คืน UI ปุ่ม/สวิตช์ help ให้ตรง state ด้วย (ไม่ใช่แค่ legend)
           _CCP.restoreLive(_obLive);
           if (_CCP.renderRail) _CCP.renderRail();
         }
