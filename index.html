@@ -1539,6 +1539,9 @@
     $('#in_endR').addEventListener('change', e => _endSel(e.target, 'R'));
     $('#in_cantL').addEventListener('input', e => { if (/ยื่น/.test($('#in_endL').value)) { ccModel.cant.L = +e.target.value || 0; render(); } });   // guard ที่ select (ไม่ใช่ค่า cant — ลบเลขชั่วคราวแล้วพิมพ์ใหม่ต้องไม่ค้าง)
     $('#in_cantR').addEventListener('input', e => { if (/ยื่น/.test($('#in_endR').value)) { ccModel.cant.R = +e.target.value || 0; render(); } });
+    // commit (blur/spinner): clamp ≥0.3 ม — กันสถานะค้าง "เลือกคานยื่นแต่ระยะ <0.1 → engine ไม่คิดยื่นเงียบๆ" (review P3)
+    $('#in_cantL').addEventListener('change', e => { if (/ยื่น/.test($('#in_endL').value)) { ccModel.cant.L = Math.max(0.3, +e.target.value || 1.5); e.target.value = ccModel.cant.L; render(); } });
+    $('#in_cantR').addEventListener('change', e => { if (/ยื่น/.test($('#in_endR').value)) { ccModel.cant.R = Math.max(0.3, +e.target.value || 1.5); e.target.value = ccModel.cant.R; render(); } });
     buildSpanLenInputs();
     recalcBase();
   }
@@ -2016,7 +2019,7 @@
       (o.supports || []).forEach(su => acc(su.top));
       (o.cantilevers || []).forEach(c => { acc(c.top); if (c.passes === false) anyFail = true; });   // คานยื่น: ดัด (margin) + เฉือน/Ld รวมใน c.passes — กัน D/C เขียวทั้งที่ยื่น fail
       const pass = o.passes !== false && !anyFail;
-      if (anyFail) govDc = Math.max(govDc, 101);          // มี element เกินกำลัง → D/C > 100
+      if (anyFail || o.passes === false) govDc = Math.max(govDc, 101);   // element เกินกำลัง หรือ fail ระดับระบบ (เช่น uplift) → D/C > 100 (กันคู่ "✕ + D/C เขียว" หลอก · review P3)
       const dc = Math.round(govDc || (pass ? 78 : 123));
       const margin = Math.round(10000 / Math.max(1, dc) - 100);
       // Phase 2d · flexure show-work = ช่วงที่ +M สูงสุด (governing positive · ตรงกับกล่อง +M)
@@ -3769,7 +3772,9 @@
       //   ใช้ปลาย "จริง" — tile แตกเป็น sub-beam ราย span (c.endFlags บอกว่า node ไหนเป็นปลายจริงของคานเต็ม)
       //   → หัวเสาในไม่ได้ nominal · ปลายจริงได้ทั้ง full + tile (ตรงกับ BBS · Codex P2)
       const isRealEnd = c.endFlags ? !!c.endFlags[i] : isEnd;
-      if (isCont && isRealEnd && !groups.length) { groups = [[topSize, 2]]; nominal = true; }
+      // ปลายที่มีคานยื่น: เหล็กบนเป็นของจริงจาก engine — ห้าม nominal (ขัด BBS ที่ suppress แล้ว · review P3)
+      const _endCant = isRealEnd && ((isL && ccModel.cantL > 0) || (isR && ccModel.cantR > 0));
+      if (isCont && isRealEnd && !groups.length && !_endCant) { groups = [[topSize, 2]]; nominal = true; }
       if (!groups.length) return;
       const lbl = isRealEnd ? (nominal ? 'เสริมปลาย*' : 'เสริมปลาย') : 'เสริมหัวเสา';
       const ct = curt && curt.top && curt.top[i];
@@ -3848,17 +3853,19 @@
     if (state.scale === 'auto') { const pxm = (1040 - 140) / totalLen; $('#scaleLabel').textContent = '1:' + Math.round((3779.5 / pxm) / 5) * 5 + ' (auto)'; }
     else $('#scaleLabel').textContent = '1:' + state.scale;
 
-    if (c.spans.length >= 5) { host.style.overflowX = 'visible'; drawElevationTiles(host, c); return; }
-    const { svg, fitWidth } = buildElevationSVG(c, { callouts: true });
-    host.style.overflowX = fitWidth ? 'visible' : 'auto';
-    host.appendChild(svg);
-    // honest note: รูปด้านข้างยังวาดเฉพาะช่วงระหว่างเสา — ช่วงยื่นยังไม่วาด (ตามแผน · เหล็ก/ตารางถูกต้องแล้ว)
-    if (state.mode === 'cont' && (ccModel.cantL || ccModel.cantR)) {
+    // honest note: รูปด้านข้างยังวาดเฉพาะช่วงระหว่างเสา — ช่วงยื่นยังไม่วาด (ตามแผน · เหล็ก/ตารางถูกต้องแล้ว) · ต้องโผล่ทั้ง path ปกติ+tiles ≥5 ช่วง (review P3)
+    const _cantNote = () => {
+      if (!(state.mode === 'cont' && (ccModel.cantL || ccModel.cantR))) return;
       const note = document.createElement('div');
       note.className = 'mt-2 text-[11px] text-ink-muted';
       note.textContent = 'ℹ️ รูปด้านข้างแสดงเฉพาะช่วงระหว่างเสา — ช่วงคานยื่นดูที่ ตารางสรุป · หน้าตัด · BBS (รูปด้านข้างช่วงยื่นจะเพิ่มในรุ่นถัดไป)';
       host.appendChild(note);
-    }
+    };
+    if (c.spans.length >= 5) { host.style.overflowX = 'visible'; drawElevationTiles(host, c); _cantNote(); return; }
+    const { svg, fitWidth } = buildElevationSVG(c, { callouts: true });
+    host.style.overflowX = fitWidth ? 'visible' : 'auto';
+    host.appendChild(svg);
+    _cantNote();
   }
 
   // overview strip: whole beam shrunk + Mmax dots at every span/support
@@ -4161,7 +4168,10 @@
           const _tL = _ctEnv ? (_ct.cut_third_left_m || 0) : (_ct ? _ct.cut_third_m : 0);
           const _tR = _ctEnv ? (_ct.cut_third_right_m || 0) : (_ct ? _ct.cut_third_m : 0);
           let len = +(_ct ? (_colW + _tL + _tR) : ((isEnd ? (spL || spR) : (spL + spR)) / 3)).toFixed(2);
-          if (_cv) len = +(_colW + (+_cv.L || 0) + Math.max(_tL + _tR, (_cv.Ld_cm || 0) / 100)).toFixed(2);   // ยื่นเต็ม Lc + max(ระยะตัดฝั่งใน, Ld)
+          if (_cv) {   // ยื่นเต็ม Lc + max(ระยะตัดฝั่งใน "ข้างเดียว", Ld) — engine cut_third ของหัวเสาปลาย = one-sided (calc _fig-8.32 adj ช่วงในเดียว) ห้ามรวม _tL+_tR (double-count · review P2)
+            const _tInt = (i === 0 ? _tR : _tL);
+            len = +(_colW + (+_cv.L || 0) + Math.max(_tInt, (_cv.Ld_cm || 0) / 100)).toFixed(2);
+          }
           const mark = isEnd ? (i === 0 ? 'TE1' : 'TE2') : `T${i}`;
           const pos = isEnd ? (_cv ? `บน·คานยื่น ${su.label} (ยื่น+Ld)` : `บน·เสริมปลาย* ${su.label}`) : `บน·เสริมหัวเสา ${su.label}`;
           groups.forEach((g, k) => rows.push([mark + (groups.length > 1 ? String.fromCharCode(97 + k) : ''), g[0], g[1], len, pos]));
@@ -4348,10 +4358,11 @@
     const summaryTable = summaryRowsHTML
       ? `<table class="pd-sum"><thead><tr><th>ตำแหน่ง</th><th>+M / −M</th><th>เหล็กหลัก</th><th>Vu</th><th>ปลอก</th></tr></thead><tbody>${summaryRowsHTML}</tbody></table>`
       : '';
-    // §3 รูปหน้าตัดคาน = clone #sectionMain (engine วาดจริงผ่าน buildSection · 2 จุด กลาง+หัวเสา/ปลาย · parity-safe · ว่าง→ไม่พิมพ์)
-    let sectionMainHTML = ($('#sectionMain') && $('#sectionMain').innerHTML) || '';
-    // bulletproof: ถ้า populate ตอนไม่ได้อยู่ step 3 (#sectionMain ยังว่าง) แต่ผลพร้อม → วาดก่อน clone (กัน printAll/beforeprint ขาดหน้าตัด)
-    if (!sectionMainHTML && ready) { try { drawMainSections(); sectionMainHTML = ($('#sectionMain') && $('#sectionMain').innerHTML) || ''; } catch (e) {} }
+    // §3 รูปหน้าตัดคาน = clone #sectionMain (engine วาดจริงผ่าน buildSection · parity-safe · ว่าง→ไม่พิมพ์)
+    // ผลพร้อม → วาดสดก่อน clone เสมอ (เดิม redraw เฉพาะตอนว่าง → แก้คานยื่น/ขนาดนอก step 3 แล้วรูปพิมพ์ค้าง · review P3 · drawMainSections cheap: engine call cached)
+    let sectionMainHTML = '';
+    if (ready) { try { drawMainSections(); } catch (e) {} }
+    sectionMainHTML = ($('#sectionMain') && $('#sectionMain').innerHTML) || '';
     const secFig = sectionMainHTML
       ? `<div class="pd-sub" data-pd="section">หน้าตัดและรายละเอียดเหล็กเสริม</div><div class="pd-secfig">${sectionMainHTML}</div>`
       : '';
@@ -8439,6 +8450,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       if (!TT()) { console.warn('[design-audit] __civilTest ยังไม่พร้อม'); return null; }
       if (window.__ccBaseLoadRows && _lrEl) _lrEl.innerHTML = window.__ccBaseLoadRows;   // reset โหลดเป็น default base ให้ guard (เช่น doubly inject บน default) — กัน fail ปลอมเมื่อมีโปรเจกต์เซฟไว้
       if (TT().setTorsion) TT().setTorsion(false, 0, false);   // isolate แรงบิด (global state ใหม่ · กัน user-state รั่วเข้า test อื่น) · guard แรงบิดเปิดเองภายหลัง
+      if (TT().setCant) TT().setCant(0, 0);   // isolate คานยื่น — user overhang รั่วเข้า scenario C (curtailment approx) → false DRIFT (review P2) · guard overhang เปิดเองภายหลัง
 
       // ── A · design tokens (drift guard) ──
       ['--ink', '--accent', '--pass', '--fail', '--rebar', '--concrete'].forEach(v =>
@@ -8688,6 +8700,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
 
       // ── คานยื่น (overhang · wire UI→engine · pi 2026-07-04) — เปิด/ปิด ครบวงจร ──
       TT().setMode('cont'); TT().setSection(30, 60, 240, 'SD40'); TT().setPoints([]); TT().setCant(1.5, 0); TT().recompute(); TT().render();
+      TT().drawMainSections(); TT().drawDetailing();   // วาดชัดเจน — render() วาด #sectionMain/#bbsRows เฉพาะ step 3 (staleness gotcha เดิม C4 · review P2)
       const _ovO = ((TT().lastInp() || {}).out) || {};
       A('overhang: เลือกยื่นซ้าย 1.5 ม → engine รับ left_cantilever (has_cantilever + 1 แถวออกแบบ)',
         _ovO.has_cantilever === true && (_ovO.cantilevers || []).length === 1 && (_ovO.cantilevers[0].top_bars || '—') !== '—',
@@ -8706,6 +8719,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('overhang: pass/D-C นับคานยื่น (o.passes สอดคล้อง state.res.pass)',
         !!(TT().res()) && ((TT().res().pass === true) === (_ovO.passes === true)), 'pass=' + (TT().res() || {}).pass + ' o.passes=' + _ovO.passes);
       TT().setCant(0, 0); TT().recompute(); TT().render();
+      TT().drawMainSections(); TT().drawDetailing();   // วาดชัดเจนฝั่งปิดด้วย — zero-reg check ต้องเทียบ DOM สด ไม่ใช่ค้าง
       const _ovOff = ((TT().lastInp() || {}).out) || {};
       A('overhang: ปิดยื่น → กลับ 2 รูป + ไม่มีแถวคานยื่น (zero-reg)',
         !_ovOff.has_cantilever && document.querySelectorAll('#sectionMain svg').length === 2 &&
