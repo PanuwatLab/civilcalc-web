@@ -1540,6 +1540,7 @@
       state.nspan = Math.max(2, +e.target.value || 2); syncSpanLens(); buildSpanLenInputs(); render();   // ต่อเนื่องต้อง ≥2 ช่วง (engine reject 1 · Codex P2)
     });
     // ── คานยื่นปลายซ้าย/ขวา (overhang · wire UI→engine 2026-07-04) — เลือก "คานยื่น" → โผล่ช่องระยะยื่น → ccModel.cant ──
+    // เลือกปลาย "เสา" → cant[side]=0 (engine omit key · zero-reg) แต่ "คง" ptsL/ptsR ไว้ (เผลอปิดแล้วเปิดใหม่ จุดโหลดกลับมา) — ต่างจาก TT.setCant ที่ reset pts (test isolation) โดยตั้งใจ (P3 review #58)
     const _endSel = (sel, side) => { ccModel.cant[side] = /ยื่น/.test(sel.value) ? (+$(side === 'L' ? '#in_cantL' : '#in_cantR').value || 1.5) : 0; syncCantUI(); render(); };
     $('#in_endL').addEventListener('change', e => _endSel(e.target, 'L'));
     $('#in_endR').addEventListener('change', e => _endSel(e.target, 'R'));
