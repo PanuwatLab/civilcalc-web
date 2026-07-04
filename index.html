@@ -3910,7 +3910,9 @@
   function drawElevation() {
     const host = $('#ccDrawHost'); host.innerHTML = '';
     const c = D();
-    const totalLen = c.nodes.at(-1);
+    // สเกล auto ต้องคิดจากความกว้างที่วาดจริง = รวมช่วงยื่น (F2 · buildElevationSVG ขยายโดเมน domLo..domHi) · ไม่มียื่น → = node span เดิม (node0=0 · zero-reg)
+    const _sL = (c.cant && c.cant.L) ? c.cant.L.len : 0, _sR = (c.cant && c.cant.R) ? c.cant.R.len : 0;
+    const totalLen = (c.nodes.at(-1) - c.nodes[0]) + _sL + _sR;
     if (state.scale === 'auto') { const pxm = (1040 - 140) / totalLen; $('#scaleLabel').textContent = '1:' + Math.round((3779.5 / pxm) / 5) * 5 + ' (auto)'; }
     else $('#scaleLabel').textContent = '1:' + state.scale;
 
