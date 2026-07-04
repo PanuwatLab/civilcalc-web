@@ -2029,6 +2029,8 @@
       //   → Vu_at_d/Vc/Vs/stirShop + d มาจากช่วงเดียวกัน (สูตร Vs=Vu/φ−Vc ไม่ผสมข้ามช่วง · ตรงเลข engine)
       let govShear = {}, govShVu = -Infinity, govShearD = 0;
       (o.spans || []).forEach(sp => { const v = sp.Vu_ton || 0; if (v > govShVu) { govShVu = v; govShear = sp.shear || {}; govShearD = (sp.bottom && sp.bottom.d_actual) || 0; } });
+      // คานยื่น: เฉือนหน้าเสา (Vu_face · ไม่ลด d) อาจ govern เหนือทุกช่วงใน → รวมในการเลือก gov เพื่อให้ "Vu วิกฤต"/show-work/พิมพ์ ไม่ under-report (Codex P2)
+      (o.cantilevers || []).forEach(c => { const v = c.Vu_face_ton || 0; if (v > govShVu) { govShVu = v; govShear = c.shear || {}; govShearD = (c.top && c.top.d_actual) || 0; } });
       const _fyC = fyOf(P.grade);
       const mat = ccMaterial(P.fc, _fyC);   // β₁/ρb/ρmin/ρmax (engine ต่อเนื่องไม่คืนราย span)
       // ρ_design (ก่อนจำกัด) — engine ต่อเนื่องคืนแค่ rho_final → mirror compute_rho_design (มงคล Eq 3.8) จาก gov.Rn
