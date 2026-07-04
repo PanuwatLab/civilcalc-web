@@ -677,6 +677,8 @@
                   <div id="cantLWrap" class="step-hidden space-y-1">
                     <label for="in_cantL" class="text-[12px] text-ink-muted">ระยะยื่นซ้าย (ม)</label>
                     <input id="in_cantL" type="number" step="0.1" min="0.3" value="1.5" class="num-field" aria-label="ระยะยื่นคานยื่นซ้าย (เมตร)">
+                    <div id="cantLPts" class="space-y-1.5 pt-1"></div>
+                    <button id="addCantLPt" type="button" class="text-[12px] text-accent font-medium hover:underline">+ จุดโหลดบนยื่นซ้าย</button>
                   </div>
                 </div>
                 <div class="space-y-1.5">
@@ -685,10 +687,12 @@
                   <div id="cantRWrap" class="step-hidden space-y-1">
                     <label for="in_cantR" class="text-[12px] text-ink-muted">ระยะยื่นขวา (ม)</label>
                     <input id="in_cantR" type="number" step="0.1" min="0.3" value="1.5" class="num-field" aria-label="ระยะยื่นคานยื่นขวา (เมตร)">
+                    <div id="cantRPts" class="space-y-1.5 pt-1"></div>
+                    <button id="addCantRPt" type="button" class="text-[12px] text-accent font-medium hover:underline">+ จุดโหลดบนยื่นขวา</button>
                   </div>
                 </div>
               </div>
-              <p class="text-[11px] text-ink-muted leading-relaxed">คานยื่นรับน้ำหนักแผ่เดียวกับช่วงใน (รวมน้ำหนักคาน) · จุดโหลดบนช่วงยื่นยังไม่รองรับในหน้านี้</p>
+              <p class="text-[11px] text-ink-muted leading-relaxed">คานยื่นรับน้ำหนักแผ่เดียวกับช่วงใน (รวมน้ำหนักคาน) · เพิ่มจุดโหลดบนช่วงยื่นได้ (x วัดจากหน้าเสา)</p>
             </div>
           </fieldset>
         </div>
@@ -1263,10 +1267,12 @@
     forceMain: '',                                      // บังคับขนาดเหล็กเมน (user เลือกหลังคำนวณ · '' = auto · 'DB20' = engine จัด count ใหม่ให้ As ถึง) · single mode
     forceStir: '',                                      // บังคับขนาดเหล็กปลอก (user เลือก · '' = auto RB9/DB10 · 'RB6'/'DB10' = engine คิด spacing ใหม่จาก Av)
     // คานยื่น (overhang) ปลายซ้าย/ขวา · โหมดต่อเนื่องเท่านั้น · L>0 = มียื่น (ม.) · 0 = เสา (รองรับ) ปกติ
-    //   engine: left/right_cantilever {L, DL, LL(service kN/m — คูณ 1.4/1.7 ใน engine), point_loads[]} · UI รอบนี้ = UDL เดียวกับช่วงใน
-    cant: { L: 0, R: 0 },
+    //   engine: left/right_cantilever {L, DL, LL(service kN/m — คูณ 1.4/1.7 ใน engine), point_loads[]} · UDL แผ่เดียวกับช่วงใน
+    //   ptsL/ptsR = จุดโหลดบนช่วงยื่นต่อข้าง (F1 2026-07-04 · {P:kgf, x:ม.จากเสา, kind}) · P เก็บ kgf เหมือน ccModel.points
+    cant: { L: 0, R: 0, ptsL: [], ptsR: [] },
     get cantL() { return (state.mode === 'cont' && this.cant.L >= 0.1) ? +this.cant.L : 0; },   // ค่าที่ "ใช้จริง" (กันเลขชั่วคราวขณะพิมพ์ <0.1 ทำ engine throw)
     get cantR() { return (state.mode === 'cont' && this.cant.R >= 0.1) ? +this.cant.R : 0; },
+    addCantPt(side) { const arr = side === 'L' ? this.cant.ptsL : this.cant.ptsR; if (arr.length >= 3) return; const Lc = side === 'L' ? this.cantL : this.cantR; arr.push({ P: 1000, x: +Math.min(Lc || 1, Math.max(0.3, (Lc || 1) / 2)).toFixed(2), kind: 'LL' }); },   // จุดโหลดยื่น (สูงสุด 3/ข้าง · x กลางยื่น)
 
     get Wu() { const L = sumLoads(); return 1.4 * L.DL + 1.7 * L.LL; },   // kg/m (factored · 1.4D+1.7L · จาก load list จริง)
     points: [{ id: 1, x: 2.0, P: 5000, kind: 'LL' }],   // P in kg
@@ -1542,6 +1548,9 @@
     // commit (blur/spinner): clamp ≥0.3 ม — กันสถานะค้าง "เลือกคานยื่นแต่ระยะ <0.1 → engine ไม่คิดยื่นเงียบๆ" (review P3)
     $('#in_cantL').addEventListener('change', e => { if (/ยื่น/.test($('#in_endL').value)) { ccModel.cant.L = Math.max(0.3, +e.target.value || 1.5); e.target.value = ccModel.cant.L; render(); } });
     $('#in_cantR').addEventListener('change', e => { if (/ยื่น/.test($('#in_endR').value)) { ccModel.cant.R = Math.max(0.3, +e.target.value || 1.5); e.target.value = ccModel.cant.R; render(); } });
+    // จุดโหลดบนช่วงยื่น (F1) — ปุ่มเพิ่มต่อข้าง (max 3 · addCantPt gate เอง)
+    $('#addCantLPt').addEventListener('click', () => { ccModel.addCantPt('L'); renderCantPts('L'); render(); });
+    $('#addCantRPt').addEventListener('click', () => { ccModel.addCantPt('R'); renderCantPts('R'); render(); });
     buildSpanLenInputs();
     recalcBase();
   }
@@ -1561,6 +1570,7 @@
     if (wR) wR.classList.toggle('step-hidden', !(ccModel.cant.R > 0));
     if (iL && ccModel.cant.L > 0 && +iL.value !== +ccModel.cant.L) iL.value = ccModel.cant.L;
     if (iR && ccModel.cant.R > 0 && +iR.value !== +ccModel.cant.R) iR.value = ccModel.cant.R;
+    renderCantPts('L'); renderCantPts('R');   // จุดโหลดยื่น (F1) — rebuild list ตาม ccModel.cant.ptsL/R (สลับคาน/โหลดตัวอย่าง/toggle)
   }
   function buildSpanLenInputs() {
     const host = $('#spanLens'); if (!host) return;
@@ -1619,6 +1629,41 @@
     }));
     host.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
       ccModel.points.splice(+e.target.dataset.del, 1); renderPointLoads(); render();
+    }));
+  }
+
+  // จุดโหลดบนช่วงยื่น (F1 2026-07-04) — mirror renderPointLoads ต่อข้าง (P เก็บ kgf · x วัดจากหน้าเสา) · เรียกตอน add/del/toggle/สลับคาน (ไม่เรียกตอนพิมพ์ → กัน focus หลุด)
+  function renderCantPts(side) {
+    const host = $(side === 'L' ? '#cantLPts' : '#cantRPts'); if (!host) return; host.innerHTML = '';
+    const arr = side === 'L' ? ccModel.cant.ptsL : ccModel.cant.ptsR;
+    const uP = ccUnits.uP();
+    arr.forEach((pl, i) => {
+      const dispP = ccUnits.force === 'T' ? (pl.P / 1000) : pl.P;
+      const row = document.createElement('div');
+      row.className = 'flex items-center gap-1.5 flex-wrap text-[12px]';
+      row.innerHTML = `
+        <span class="mono text-ink-muted">P${i + 1}</span>
+        <input class="num-field text-center !w-[64px] !py-1" type="number" step="${ccUnits.force === 'T' ? 0.1 : 50}" value="${dispP}" data-cpl="P" data-i="${i}" aria-label="แรงจุดโหลดยื่น${side} P${i + 1}" />
+        <span class="text-ink-muted">${uP} · x</span>
+        <input class="num-field text-center !w-[52px] !py-1" type="number" step="0.1" value="${pl.x}" data-cpl="x" data-i="${i}" aria-label="ตำแหน่ง x จากเสา" />
+        <span class="text-ink-muted">ม.</span>
+        <select class="num-field !font-sans !w-[64px] !py-1" data-cpl="kind" data-i="${i}" aria-label="ชนิด">
+          <option ${pl.kind === 'DL' ? 'selected' : ''}>DL</option>
+          <option ${pl.kind === 'LL' ? 'selected' : ''}>LL</option>
+        </select>
+        <button class="row-del" data-cdel="${i}" aria-label="ลบจุดโหลดยื่น">✕</button>`;
+      host.appendChild(row);
+    });
+    const Lc = side === 'L' ? ccModel.cantL : ccModel.cantR;
+    host.querySelectorAll('[data-cpl]').forEach(inp => inp.addEventListener('input', e => {
+      const i = +e.target.dataset.i, k = e.target.dataset.cpl, v = e.target.value;
+      if (k === 'kind') arr[i].kind = v;
+      else if (k === 'P') arr[i].P = (parseFloat(v) || 0) * (ccUnits.force === 'T' ? 1000 : 1);
+      else arr[i].x = Math.min(Lc || 99, Math.max(0, parseFloat(v) || 0));
+      refreshResults();
+    }));
+    host.querySelectorAll('[data-cdel]').forEach(b => b.addEventListener('click', e => {
+      arr.splice(+e.target.dataset.cdel, 1); renderCantPts(side); render();
     }));
   }
 
@@ -1874,7 +1919,7 @@
     const _L = sumLoads(), dl = _L.DL / KGF_PER_KN, ll = _L.LL / KGF_PER_KN;  // kg/m → kN/m (จาก load list จริง · Phase 2c)
     const cantL = ccModel.cantL, cantR = ccModel.cantR;   // คานยื่นปลายซ้าย/ขวา (ม. · 0 = ไม่มี · getter กันค่าชั่วคราว <0.1)
     // signature cache (Phase 2c) — recompute()+ccDiagram.render() เรียกซ้ำในสถานะเดิม → engine call เดียว (คานยื่นต้องอยู่ใน sig — กันผลค้างหลังแก้ระยะยื่น)
-    const sig = JSON.stringify([g.spans, P.b, P.h, P.fc, P.grade, P.cover, P.db, P.dstir, dl, ll, ccModel.points, ccModel.partials, ccModel.torsion, cantL, cantR]);
+    const sig = JSON.stringify([g.spans, P.b, P.h, P.fc, P.grade, P.cover, P.db, P.dstir, dl, ll, ccModel.points, ccModel.partials, ccModel.torsion, cantL, cantR, ccModel.cant.ptsL, ccModel.cant.ptsR]);
     if (_acCache.sig === sig) return _acCache.val;
     const spans = g.spans.map(L => ({ L, DL: dl, LL: ll, point_loads: [] }));
     // helper: วางจุดโหลด (global x ม. · P kN) ลงช่วงที่ถูกต้อง
@@ -1898,13 +1943,16 @@
       for (let j = 0; j < N; j++) addPt(x0 + seg * (j + 0.5), Peach, 'LL');
     });
     let res;
+    // จุดโหลดบนช่วงยื่น (F1) → engine format: kgf→kN · x clamp [0,Lc] จากหน้าเสา · กรอง P≈0
+    const _cantPL = (arr, Lc) => (arr || []).filter(p => Math.abs(+p.P) > 1e-6).map(p => ({ kind: p.kind === 'DL' ? 'DL' : 'LL', P: (+p.P) / KGF_PER_KN, x: Math.max(0, Math.min(Lc, +p.x || 0)) }));
     // section/material = ค่า live จาก Step 1 (P) เหมือนช่วงเดียว · UDL ยัง mock (Phase 2c)
     const cInp = { b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir), spans, load_combo: '1.4D+1.7L',
       // แรงบิดต่อช่วง (B1 กระจาย + B2 จุด) · ส่ง torsion_loads_per_span → engine derive TMD จริงต่อช่วง + Tu วิกฤต ด้วย d จริงของช่วง · ปิด = ไม่ใส่คีย์ (zero-reg)
       ...(torActive() ? { torsion_loads_per_span: torLoadsPerSpan(g), torsion_compatibility: ccModel.torsion.compat } : {}),
       // คานยื่น (overhang) — DL/LL = service kN/m เดียวกับช่วงใน (engine คูณ 1.4/1.7 เอง · ห้ามคูณซ้ำ) · ไม่มี = ไม่ใส่คีย์ (zero-reg)
-      ...(cantL ? { left_cantilever: { L: cantL, DL: dl, LL: ll, point_loads: [] } } : {}),
-      ...(cantR ? { right_cantilever: { L: cantR, DL: dl, LL: ll, point_loads: [] } } : {}) };
+      //   จุดโหลดยื่น (F1): kgf→kN (÷KGF_PER_KN) · x clamp [0,Lc] จากหน้าเสา · engine _parse_cant รับ {kind,P:kN,x} · P=0 กรอง
+      ...(cantL ? { left_cantilever: { L: cantL, DL: dl, LL: ll, point_loads: _cantPL(ccModel.cant.ptsL, cantL) } } : {}),
+      ...(cantR ? { right_cantilever: { L: cantR, DL: dl, LL: ll, point_loads: _cantPL(ccModel.cant.ptsR, cantR) } } : {}) };
     try { res = window.__civilCalc.designContinuous(cInp); }
     catch (e) { console.warn('[civilcalc] continuous engine call failed', e); return null; }
     if (!res || !res.ok || !res.out || !res.out.diagram) return null;
@@ -2099,7 +2147,8 @@
       partials: JSON.parse(JSON.stringify(ccModel.partials)),
       gridNames: JSON.parse(JSON.stringify(ccModel.gridNames || {})),
       torsion: JSON.parse(JSON.stringify(ccModel.torsion || { on: false, compat: false, t: [], tps: [] })),
-      cant: { L: +(ccModel.cant && ccModel.cant.L) || 0, R: +(ccModel.cant && ccModel.cant.R) || 0 },   // คานยื่นต่อคาน (กันรั่วข้ามคาน — บทเรียน P1 torsion/forceMain)
+      cant: { L: +(ccModel.cant && ccModel.cant.L) || 0, R: +(ccModel.cant && ccModel.cant.R) || 0,
+        ptsL: JSON.parse(JSON.stringify((ccModel.cant && ccModel.cant.ptsL) || [])), ptsR: JSON.parse(JSON.stringify((ccModel.cant && ccModel.cant.ptsR) || [])) },   // คานยื่น + จุดโหลดยื่นต่อคาน (กันรั่วข้ามคาน — บทเรียน P1 torsion/forceMain)
       loads: [...document.querySelectorAll('#loadRows tr')].map(tr => {
         const c = tr.querySelector('.load-val'), tds = tr.querySelectorAll('td');
         return { name: (tds[0] || {}).textContent || '', source: (tds[1] || {}).textContent || '',
@@ -2131,7 +2180,7 @@
     ccModel.partials = JSON.parse(JSON.stringify(s.partials || []));
     ccModel.gridNames = JSON.parse(JSON.stringify(s.gridNames || {}));
     ccModel.torsion = s.torsion ? JSON.parse(JSON.stringify(s.torsion)) : { on: false, compat: false, t: [], tps: [] };   // restore แรงบิดต่อคาน · ไม่มี → reset (กันรั่วจากคานก่อนหน้า)
-    ccModel.cant = (s.cant && typeof s.cant === 'object') ? { L: +s.cant.L || 0, R: +s.cant.R || 0 } : { L: 0, R: 0 };   // restore คานยื่นต่อคาน · save เก่าไม่มี → reset (กันรั่ว · pattern เดียวกับ torsion)
+    ccModel.cant = (s.cant && typeof s.cant === 'object') ? { L: +s.cant.L || 0, R: +s.cant.R || 0, ptsL: JSON.parse(JSON.stringify(s.cant.ptsL || [])), ptsR: JSON.parse(JSON.stringify(s.cant.ptsR || [])) } : { L: 0, R: 0, ptsL: [], ptsR: [] };   // restore คานยื่น + จุดโหลดยื่นต่อคาน · save เก่าไม่มี → reset (กันรั่ว · pattern เดียวกับ torsion)
     ccModel.forceMain = ''; ccModel.forceStir = '';   // P1 (review): force ขนาดเหล็กไม่ capture per-beam → reset เมื่อสลับคาน/โหลดตัวอย่าง (กัน force คาน A รั่วเข้าคาน B เงียบ → เปลี่ยน design)
     ccRebuildLoadRows(s.loads);
     ccSyncControls();
@@ -2788,8 +2837,10 @@
     torExpect(t) { return torTuDesign(+t || 0, ccModel.spans[0]); },   // parity helper · Tu ออกแบบที่คาดหวัง (ช่วงแรก)
     // แรงบิดจุด (B2) · ขับจาก audit · arr=[{x,T}] global ม./ตัน·ม → demand TMD ขั้นบันได
     setTorquePoints(arr, compat) { ccModel.torsion.on = true; ccModel.torsion.compat = !!compat; ccModel.torsion.t = ccModel.spans.map(() => 0); ccModel.torsion.tps = (arr || []).map((p, i) => ({ id: 980 + i, x: p.x, T: p.T })); renderTorsionInputs(); },
-    // คานยื่นปลายซ้าย/ขวา (overhang) · ขับจาก audit/test — L/R เมตร (0 = ไม่มี)
-    setCant(l, r) { ccModel.cant = { L: +l || 0, R: +r || 0 }; syncCantUI(); },
+    // คานยื่นปลายซ้าย/ขวา (overhang) · ขับจาก audit/test — L/R เมตร (0 = ไม่มี) · reset จุดโหลดยื่น (isolation)
+    setCant(l, r) { ccModel.cant = { L: +l || 0, R: +r || 0, ptsL: [], ptsR: [] }; syncCantUI(); },
+    // จุดโหลดบนช่วงยื่น (F1) · ขับจาก audit/test — side 'L'/'R' · arr [{P:kgf, x:ม.จากเสา, kind}]
+    setCantPoints(side, arr) { const k = side === 'L' ? 'ptsL' : 'ptsR'; ccModel.cant[k] = (arr || []).map(p => ({ P: +p.P || 0, x: +p.x || 0, kind: p.kind === 'DL' ? 'DL' : 'LL' })); renderCantPts(side); },
     recompute, render, renderWork,
     drawMainSections, drawDetailing,
     detailBars: () => detailBars(),   // §A · ให้ audit เทียบจำนวนเหล็กหน้าตัด == engine ต่อ location
@@ -2809,8 +2860,8 @@
     lastInp: () => state._lastInp,
     engine: () => window.__civilCalc,
     MOCK: () => MOCK,
-    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)), partials: JSON.parse(JSON.stringify(ccModel.partials)), torsion: JSON.parse(JSON.stringify(ccModel.torsion)), cant: { L: ccModel.cant.L, R: ccModel.cant.R } }; },
-    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; if (s.partials) ccModel.partials = s.partials; if (s.torsion) ccModel.torsion = s.torsion; ccModel.cant = s.cant ? { L: +s.cant.L || 0, R: +s.cant.R || 0 } : { L: 0, R: 0 }; applyMode(); recompute(); },
+    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)), partials: JSON.parse(JSON.stringify(ccModel.partials)), torsion: JSON.parse(JSON.stringify(ccModel.torsion)), cant: JSON.parse(JSON.stringify(ccModel.cant)) }; },
+    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; if (s.partials) ccModel.partials = s.partials; if (s.torsion) ccModel.torsion = s.torsion; ccModel.cant = s.cant ? { L: +s.cant.L || 0, R: +s.cant.R || 0, ptsL: JSON.parse(JSON.stringify(s.cant.ptsL || [])), ptsR: JSON.parse(JSON.stringify(s.cant.ptsR || [])) } : { L: 0, R: 0, ptsL: [], ptsR: [] }; applyMode(); recompute(); },
   };
 
   /* sync verdict (pass/fail) + D/C จากผล engine จริง (Phase 2b · override mock toggle เมื่อ engine พร้อม) */
@@ -2930,6 +2981,18 @@
         this._dragPoint(grp, host, i);
         svg.appendChild(grp);
       });
+
+      // จุดโหลดบนช่วงยื่น (F1) — glyph แสดงผล (แก้ค่าที่ช่องกรอก Step 1 · ไม่ลากในผัง) · x_global = −a (ซ้าย) / total+a (ขวา)
+      const drawCantGlyphs = (arr, sd) => { const Lc = sd === 'L' ? _cvL : _cvR; if (!Lc) return; (arr || []).forEach(pl => {
+        if (Math.abs(+pl.P) < 1e-6) return;
+        const a = Math.max(0, Math.min(Lc, +pl.x || 0)), px = X(sd === 'L' ? -a : total + a);
+        svg.appendChild(svgEl('line', { x1: px, y1: beamY - 40, x2: px, y2: beamY - 1, stroke: '#334155', 'stroke-width': 2 }));
+        svg.appendChild(svgEl('path', { d: `M${px - 4},${beamY - 8} L${px},${beamY - 1} L${px + 4},${beamY - 8}`, stroke: '#334155', 'stroke-width': 2, fill: 'none' }));
+        svg.appendChild(svgEl('circle', { cx: px, cy: beamY - 44, r: 3.4, fill: '#334155' }));
+        const t = svgEl('text', { x: px, y: beamY - 51, 'font-size': 9.5, fill: '#334155', 'text-anchor': 'middle', 'font-weight': 700 }); t.textContent = ccUnits.P(pl.P); svg.appendChild(t);
+      }); };
+      drawCantGlyphs(ccModel.cant.ptsL, 'L');
+      drawCantGlyphs(ccModel.cant.ptsR, 'R');
 
       // dimension line (each span) — clickable to edit
       g.spans.forEach((sp, si) => {
@@ -8786,6 +8849,18 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
         'data-cant=' + (_ovEl ? _ovEl.getAttribute('data-cant') : 'no-attr'));
       A('overhang: pass/D-C นับคานยื่น (o.passes สอดคล้อง state.res.pass)',
         !!(TT().res()) && ((TT().res().pass === true) === (_ovO.passes === true)), 'pass=' + (TT().res() || {}).pass + ' o.passes=' + _ovO.passes);
+      // จุดโหลดบนช่วงยื่น (F1 2026-07-04) — เพิ่มจุดโหลดบนยื่นซ้าย → engine รับ point_loads + |M_end| โต (−M ยื่นเพิ่มจาก P·a) + glyph ในผัง
+      const _f1M0 = (_ovO.cantilevers && _ovO.cantilevers[0]) ? Math.abs(_ovO.cantilevers[0].M_end_tonm || 0) : 0;
+      TT().setCantPoints('L', [{ P: 2000, x: 0.75, kind: 'LL' }]); TT().recompute(); TT().render();
+      const _f1O = ((TT().lastInp() || {}).out) || {}, _f1I = ((TT().lastInp() || {}).inp) || {};
+      const _f1M1 = (_f1O.cantilevers && _f1O.cantilevers[0]) ? Math.abs(_f1O.cantilevers[0].M_end_tonm || 0) : 0;
+      A('overhang·จุดโหลด: engine รับ point_loads บนยื่น (cInp left_cantilever.point_loads + n_points≥1)',
+        !!(_f1I.left_cantilever && (_f1I.left_cantilever.point_loads || []).length === 1 && _f1O.cantilevers && _f1O.cantilevers[0].n_points >= 1),
+        'PL=' + JSON.stringify(_f1I.left_cantilever && _f1I.left_cantilever.point_loads) + ' n=' + (_f1O.cantilevers && _f1O.cantilevers[0] && _f1O.cantilevers[0].n_points));
+      A('overhang·จุดโหลด: |M_end| โตขึ้นจากจุดโหลด (P·a เพิ่มโมเมนต์ยื่น)',
+        _f1M1 > _f1M0 + 0.01, 'M0=' + _f1M0.toFixed(2) + ' M1=' + _f1M1.toFixed(2));
+      const _f1Gl = Array.from((document.querySelector('#ccCanvasHost svg') || document.createElement('div')).querySelectorAll('text[fill="#334155"]')).length;
+      A('overhang·จุดโหลด: ผังคานวาด glyph จุดโหลดยื่น (sibling-surface)', _f1Gl >= 1, 'glyphs=' + _f1Gl);
       TT().setCant(0, 0); TT().recompute(); TT().render();
       TT().drawMainSections(); TT().drawDetailing();   // วาดชัดเจนฝั่งปิดด้วย — zero-reg check ต้องเทียบ DOM สด ไม่ใช่ค้าง
       const _ovOff = ((TT().lastInp() || {}).out) || {};
@@ -8796,6 +8871,9 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('overhang: ปิดยื่น → รูปด้านข้างไม่มี data-cant (zero-reg · elevation กลับปกติ)',
         !document.querySelector('#ccDrawHost svg[data-cant]'),
         'el=' + (document.querySelector('#ccDrawHost svg[data-cant]') ? 'still-has-cant' : 'clean'));
+      A('overhang·จุดโหลด: ปิดยื่น → ผังไม่มี glyph จุดโหลดยื่น (zero-reg · setCant reset pts)',
+        Array.from((document.querySelector('#ccCanvasHost svg') || document.createElement('div')).querySelectorAll('text[fill="#334155"]')).length === 0,
+        'glyphs-after=' + Array.from((document.querySelector('#ccCanvasHost svg') || document.createElement('div')).querySelectorAll('text[fill="#334155"]')).length);
 
       // ── F · เอกสารพิมพ์ A4 calc-sheet (#cc-print-doc · pi 2026-06-21) ──
       TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().recompute(); TT().render();
