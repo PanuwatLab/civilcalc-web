@@ -674,12 +674,21 @@
                 <div class="space-y-1.5">
                   <label for="in_endL" class="text-[14px]">ปลายซ้าย</label>
                   <select id="in_endL" class="num-field !font-sans"><option>เสา (รองรับ)</option><option>คานยื่น</option></select>
+                  <div id="cantLWrap" class="step-hidden space-y-1">
+                    <label for="in_cantL" class="text-[12px] text-ink-muted">ระยะยื่นซ้าย (ม)</label>
+                    <input id="in_cantL" type="number" step="0.1" min="0.3" value="1.5" class="num-field" aria-label="ระยะยื่นคานยื่นซ้าย (เมตร)">
+                  </div>
                 </div>
                 <div class="space-y-1.5">
                   <label for="in_endR" class="text-[14px]">ปลายขวา</label>
                   <select id="in_endR" class="num-field !font-sans"><option>เสา (รองรับ)</option><option>คานยื่น</option></select>
+                  <div id="cantRWrap" class="step-hidden space-y-1">
+                    <label for="in_cantR" class="text-[12px] text-ink-muted">ระยะยื่นขวา (ม)</label>
+                    <input id="in_cantR" type="number" step="0.1" min="0.3" value="1.5" class="num-field" aria-label="ระยะยื่นคานยื่นขวา (เมตร)">
+                  </div>
                 </div>
               </div>
+              <p class="text-[11px] text-ink-muted leading-relaxed">คานยื่นรับน้ำหนักแผ่เดียวกับช่วงใน (รวมน้ำหนักคาน) · จุดโหลดบนช่วงยื่นยังไม่รองรับในหน้านี้</p>
             </div>
           </fieldset>
         </div>
@@ -874,7 +883,7 @@
         <div id="ccServiceWarn" class="step-hidden rounded-card border px-4 py-3 mb-5" style="background:#FFFBEB;border-color:#FDE68A;">
           <div class="flex items-start gap-2">
             <span class="text-lg leading-none">🟡</span>
-            <div class="text-[13px] text-ink"><b style="color:#B45309">ผ่านกำลัง · แต่หน้าตัดตื้นเกิน — ต้องตรวจการแอ่นตัว</b>
+            <div class="text-[13px] text-ink"><b id="ccServiceWarnHead" style="color:#B45309">ผ่านกำลัง · แต่หน้าตัดตื้นเกิน — ต้องตรวจการแอ่นตัว</b>
               <div id="ccServiceWarnBody" class="mt-1 text-ink-muted space-y-0.5"></div></div>
           </div>
         </div>
@@ -1253,6 +1262,11 @@
     gridNames: {},                                      // i -> ชื่อกริดที่ผู้ใช้แก้ (ตัวหนังสือ)
     forceMain: '',                                      // บังคับขนาดเหล็กเมน (user เลือกหลังคำนวณ · '' = auto · 'DB20' = engine จัด count ใหม่ให้ As ถึง) · single mode
     forceStir: '',                                      // บังคับขนาดเหล็กปลอก (user เลือก · '' = auto RB9/DB10 · 'RB6'/'DB10' = engine คิด spacing ใหม่จาก Av)
+    // คานยื่น (overhang) ปลายซ้าย/ขวา · โหมดต่อเนื่องเท่านั้น · L>0 = มียื่น (ม.) · 0 = เสา (รองรับ) ปกติ
+    //   engine: left/right_cantilever {L, DL, LL(service kN/m — คูณ 1.4/1.7 ใน engine), point_loads[]} · UI รอบนี้ = UDL เดียวกับช่วงใน
+    cant: { L: 0, R: 0 },
+    get cantL() { return (state.mode === 'cont' && this.cant.L >= 0.1) ? +this.cant.L : 0; },   // ค่าที่ "ใช้จริง" (กันเลขชั่วคราวขณะพิมพ์ <0.1 ทำ engine throw)
+    get cantR() { return (state.mode === 'cont' && this.cant.R >= 0.1) ? +this.cant.R : 0; },
 
     get Wu() { const L = sumLoads(); return 1.4 * L.DL + 1.7 * L.LL; },   // kg/m (factored · 1.4D+1.7L · จาก load list จริง)
     points: [{ id: 1, x: 2.0, P: 5000, kind: 'LL' }],   // P in kg
@@ -1519,6 +1533,15 @@
     $('#in_nspan').addEventListener('change', e => {
       state.nspan = Math.max(2, +e.target.value || 2); syncSpanLens(); buildSpanLenInputs(); render();   // ต่อเนื่องต้อง ≥2 ช่วง (engine reject 1 · Codex P2)
     });
+    // ── คานยื่นปลายซ้าย/ขวา (overhang · wire UI→engine 2026-07-04) — เลือก "คานยื่น" → โผล่ช่องระยะยื่น → ccModel.cant ──
+    const _endSel = (sel, side) => { ccModel.cant[side] = /ยื่น/.test(sel.value) ? (+$(side === 'L' ? '#in_cantL' : '#in_cantR').value || 1.5) : 0; syncCantUI(); render(); };
+    $('#in_endL').addEventListener('change', e => _endSel(e.target, 'L'));
+    $('#in_endR').addEventListener('change', e => _endSel(e.target, 'R'));
+    $('#in_cantL').addEventListener('input', e => { if (/ยื่น/.test($('#in_endL').value)) { ccModel.cant.L = +e.target.value || 0; render(); } });   // guard ที่ select (ไม่ใช่ค่า cant — ลบเลขชั่วคราวแล้วพิมพ์ใหม่ต้องไม่ค้าง)
+    $('#in_cantR').addEventListener('input', e => { if (/ยื่น/.test($('#in_endR').value)) { ccModel.cant.R = +e.target.value || 0; render(); } });
+    // commit (blur/spinner): clamp ≥0.3 ม — กันสถานะค้าง "เลือกคานยื่นแต่ระยะ <0.1 → engine ไม่คิดยื่นเงียบๆ" (review P3)
+    $('#in_cantL').addEventListener('change', e => { if (/ยื่น/.test($('#in_endL').value)) { ccModel.cant.L = Math.max(0.3, +e.target.value || 1.5); e.target.value = ccModel.cant.L; render(); } });
+    $('#in_cantR').addEventListener('change', e => { if (/ยื่น/.test($('#in_endR').value)) { ccModel.cant.R = Math.max(0.3, +e.target.value || 1.5); e.target.value = ccModel.cant.R; render(); } });
     buildSpanLenInputs();
     recalcBase();
   }
@@ -1527,6 +1550,17 @@
   function syncSpanLens() {
     const cur = state.spanLens;
     state.spanLens = Array.from({ length: state.nspan }, (_, i) => cur[i] != null ? cur[i] : 4.5);
+  }
+  /* sync UI คานยื่น ← ccModel.cant (select + ช่องระยะยื่น + visibility) — เรียกจาก handler และ ccSyncControls (สลับคาน/โหลดตัวอย่าง) */
+  function syncCantUI() {
+    const eL = $('#in_endL'), eR = $('#in_endR'), wL = $('#cantLWrap'), wR = $('#cantRWrap'), iL = $('#in_cantL'), iR = $('#in_cantR');
+    if (!eL) return;
+    eL.value = ccModel.cant.L > 0 ? 'คานยื่น' : 'เสา (รองรับ)';
+    if (eR) eR.value = ccModel.cant.R > 0 ? 'คานยื่น' : 'เสา (รองรับ)';
+    if (wL) wL.classList.toggle('step-hidden', !(ccModel.cant.L > 0));
+    if (wR) wR.classList.toggle('step-hidden', !(ccModel.cant.R > 0));
+    if (iL && ccModel.cant.L > 0 && +iL.value !== +ccModel.cant.L) iL.value = ccModel.cant.L;
+    if (iR && ccModel.cant.R > 0 && +iR.value !== +ccModel.cant.R) iR.value = ccModel.cant.R;
   }
   function buildSpanLenInputs() {
     const host = $('#spanLens'); if (!host) return;
@@ -1549,6 +1583,10 @@
   const snap01 = v => Math.round(v * 10) / 10;
   const Xat = (m, total) => CV.mx + (m / total) * (CV.W - 2 * CV.mx);
   const Minv = (vbx, total) => ((vbx - CV.mx) / (CV.W - 2 * CV.mx)) * total;
+  // โดเมนแกน x ของผังคาน (รวมคานยื่น) — ไม่มียื่น → [0,total] = Xat/Minv เดิมเป๊ะ (zero-reg) · คู่ X↔inverse ต้องแก้พร้อมกันเสมอ (drag เพี้ยน)
+  const ccXDom = () => { const t = ccModel.total, l = ccModel.cantL, r = ccModel.cantR; return { lo: -l, hi: t + r }; };
+  const XatC = m => { const d = ccXDom(); return CV.mx + ((m - d.lo) / (d.hi - d.lo)) * (CV.W - 2 * CV.mx); };
+  const MinvC = vbx => { const d = ccXDom(); return d.lo + ((vbx - CV.mx) / (CV.W - 2 * CV.mx)) * (d.hi - d.lo); };
 
   /* ── load editors (write to ccModel, redraw) ── */
   function renderPointLoads() {
@@ -1834,8 +1872,9 @@
     if (!(window.__civilCalc && window.__civilCalc.ready)) return null;
     const g = geom();
     const _L = sumLoads(), dl = _L.DL / KGF_PER_KN, ll = _L.LL / KGF_PER_KN;  // kg/m → kN/m (จาก load list จริง · Phase 2c)
-    // signature cache (Phase 2c) — recompute()+ccDiagram.render() เรียกซ้ำในสถานะเดิม → engine call เดียว
-    const sig = JSON.stringify([g.spans, P.b, P.h, P.fc, P.grade, P.cover, P.db, P.dstir, dl, ll, ccModel.points, ccModel.partials, ccModel.torsion]);
+    const cantL = ccModel.cantL, cantR = ccModel.cantR;   // คานยื่นปลายซ้าย/ขวา (ม. · 0 = ไม่มี · getter กันค่าชั่วคราว <0.1)
+    // signature cache (Phase 2c) — recompute()+ccDiagram.render() เรียกซ้ำในสถานะเดิม → engine call เดียว (คานยื่นต้องอยู่ใน sig — กันผลค้างหลังแก้ระยะยื่น)
+    const sig = JSON.stringify([g.spans, P.b, P.h, P.fc, P.grade, P.cover, P.db, P.dstir, dl, ll, ccModel.points, ccModel.partials, ccModel.torsion, cantL, cantR]);
     if (_acCache.sig === sig) return _acCache.val;
     const spans = g.spans.map(L => ({ L, DL: dl, LL: ll, point_loads: [] }));
     // helper: วางจุดโหลด (global x ม. · P kN) ลงช่วงที่ถูกต้อง
@@ -1862,7 +1901,10 @@
     // section/material = ค่า live จาก Step 1 (P) เหมือนช่วงเดียว · UDL ยัง mock (Phase 2c)
     const cInp = { b: P.b, h: P.h, fc: P.fc, fy: fyOf(P.grade), cover: P.cover, db_assume: dbVal(P.db), d_stirrup: dsVal(P.dstir), spans, load_combo: '1.4D+1.7L',
       // แรงบิดต่อช่วง (B1 กระจาย + B2 จุด) · ส่ง torsion_loads_per_span → engine derive TMD จริงต่อช่วง + Tu วิกฤต ด้วย d จริงของช่วง · ปิด = ไม่ใส่คีย์ (zero-reg)
-      ...(torActive() ? { torsion_loads_per_span: torLoadsPerSpan(g), torsion_compatibility: ccModel.torsion.compat } : {}) };
+      ...(torActive() ? { torsion_loads_per_span: torLoadsPerSpan(g), torsion_compatibility: ccModel.torsion.compat } : {}),
+      // คานยื่น (overhang) — DL/LL = service kN/m เดียวกับช่วงใน (engine คูณ 1.4/1.7 เอง · ห้ามคูณซ้ำ) · ไม่มี = ไม่ใส่คีย์ (zero-reg)
+      ...(cantL ? { left_cantilever: { L: cantL, DL: dl, LL: ll, point_loads: [] } } : {}),
+      ...(cantR ? { right_cantilever: { L: cantR, DL: dl, LL: ll, point_loads: [] } } : {}) };
     try { res = window.__civilCalc.designContinuous(cInp); }
     catch (e) { console.warn('[civilcalc] continuous engine call failed', e); return null; }
     if (!res || !res.ok || !res.out || !res.out.diagram) return null;
@@ -1893,7 +1935,9 @@
       for (let i = 0; i < xs.length; i++) { if (xs[i] >= g.nodes[si] - 1e-9 && xs[i] <= g.nodes[si + 1] + 1e-9 && M[i] > best) { best = M[i]; bx = xs[i]; } }
       if (best > 1) { marks.push({ x: bx, val: best, type: 'pos' }); Mpk = Math.max(Mpk, best); }
     });
-    for (let k = 1; k < g.nodes.length - 1; k++) {
+    // −M: หัวเสาภายใน + หัวเสาปลายที่มีคานยื่น (M_end จริง — เดิมข้ามปลาย → MuNeg/km_nm โกหกเมื่อโมเมนต์ยื่น govern)
+    const kFrom = cantL ? 0 : 1, kTo = cantR ? g.nodes.length - 1 : g.nodes.length - 2;
+    for (let k = kFrom; k <= kTo; k++) {
       let worst = Infinity, wx = g.nodes[k];
       for (let i = 0; i < xs.length; i++) { if (Math.abs(xs[i] - g.nodes[k]) < (g.total / 400) && M[i] < worst) { worst = M[i]; wx = xs[i]; } }
       if (worst < -1) { marks.push({ x: wx, val: -worst, type: 'neg' }); Mpk = Math.max(Mpk, -worst); }
@@ -1973,8 +2017,9 @@
       };
       (o.spans || []).forEach(sp => acc(sp.bottom));
       (o.supports || []).forEach(su => acc(su.top));
+      (o.cantilevers || []).forEach(c => { acc(c.top); if (c.passes === false) anyFail = true; });   // คานยื่น: ดัด (margin) + เฉือน/Ld รวมใน c.passes — กัน D/C เขียวทั้งที่ยื่น fail
       const pass = o.passes !== false && !anyFail;
-      if (anyFail) govDc = Math.max(govDc, 101);          // มี element เกินกำลัง → D/C > 100
+      if (anyFail || o.passes === false) govDc = Math.max(govDc, 101);   // element เกินกำลัง หรือ fail ระดับระบบ (เช่น uplift) → D/C > 100 (กันคู่ "✕ + D/C เขียว" หลอก · review P3)
       const dc = Math.round(govDc || (pass ? 78 : 123));
       const margin = Math.round(10000 / Math.max(1, dc) - 100);
       // Phase 2d · flexure show-work = ช่วงที่ +M สูงสุด (governing positive · ตรงกับกล่อง +M)
@@ -1984,6 +2029,8 @@
       //   → Vu_at_d/Vc/Vs/stirShop + d มาจากช่วงเดียวกัน (สูตร Vs=Vu/φ−Vc ไม่ผสมข้ามช่วง · ตรงเลข engine)
       let govShear = {}, govShVu = -Infinity, govShearD = 0;
       (o.spans || []).forEach(sp => { const v = sp.Vu_ton || 0; if (v > govShVu) { govShVu = v; govShear = sp.shear || {}; govShearD = (sp.bottom && sp.bottom.d_actual) || 0; } });
+      // คานยื่น: เฉือนหน้าเสา (Vu_face · ไม่ลด d) อาจ govern เหนือทุกช่วงใน → รวมในการเลือก gov เพื่อให้ "Vu วิกฤต"/show-work/พิมพ์ ไม่ under-report (Codex P2)
+      (o.cantilevers || []).forEach(c => { const v = c.Vu_face_ton || 0; if (v > govShVu) { govShVu = v; govShear = c.shear || {}; govShearD = (c.top && c.top.d_actual) || 0; } });
       const _fyC = fyOf(P.grade);
       const mat = ccMaterial(P.fc, _fyC);   // β₁/ρb/ρmin/ρmax (engine ต่อเนื่องไม่คืนราย span)
       // ρ_design (ก่อนจำกัด) — engine ต่อเนื่องคืนแค่ rho_final → mirror compute_rho_design (มงคล Eq 3.8) จาก gov.Rn
@@ -2005,7 +2052,12 @@
         Vu: govShVu > 0 ? Math.round(govShVu * 1000) : ac.Vmax, pass, dc, margin,   // Vu จากช่วง Vu สูงสุด (ตรงกับ Vc/Vs · Codex P2)
         beta1: mat.beta1, rho_b: mat.rho_b, rho_min: mat.rho_min, rho_max: mat.rho_max,
         DL: _L.DL, LL: _L.LL, Wu: 1.4 * _L.DL + 1.7 * _L.LL,
-        minDepthOk: o.min_depth_ok !== false, minDepthWarn: o.min_depth_warnings || [],   // serviceability ต่อช่วง (DRMK ตาราง 3.1)
+        minDepthOk: o.min_depth_ok !== false, minDepthWarn: (() => {   // serviceability ต่อช่วง (DRMK ตาราง 3.1) + คำเตือนคานยื่น (backspan<Ld/แอ่น/uplift-risk · dedupe กับ Lc/8 ที่ engine merge แล้ว)
+          const md = (o.min_depth_warnings || []).slice();
+          (o.cantilever_warnings || []).forEach(w => { if (!md.includes(w)) md.push(w); });
+          if ((o.uplift_supports || []).length) md.push('🔴 เกิดแรงยก (uplift) ที่ฐานรองรับ ' + o.uplift_supports.join(', ') + ' — ตรวจน้ำหนักถ่วง/การยึดปลายคาน');
+          return md;
+        })(),
       }, cd);
     }
   }
@@ -2047,6 +2099,7 @@
       partials: JSON.parse(JSON.stringify(ccModel.partials)),
       gridNames: JSON.parse(JSON.stringify(ccModel.gridNames || {})),
       torsion: JSON.parse(JSON.stringify(ccModel.torsion || { on: false, compat: false, t: [], tps: [] })),
+      cant: { L: +(ccModel.cant && ccModel.cant.L) || 0, R: +(ccModel.cant && ccModel.cant.R) || 0 },   // คานยื่นต่อคาน (กันรั่วข้ามคาน — บทเรียน P1 torsion/forceMain)
       loads: [...document.querySelectorAll('#loadRows tr')].map(tr => {
         const c = tr.querySelector('.load-val'), tds = tr.querySelectorAll('td');
         return { name: (tds[0] || {}).textContent || '', source: (tds[1] || {}).textContent || '',
@@ -2067,6 +2120,7 @@
     document.querySelectorAll('#coverPills .pill').forEach(p => p.setAttribute('aria-pressed', String(+p.dataset.cover === P.cover)));
     document.querySelectorAll('#legPills .pill').forEach(p => p.setAttribute('aria-pressed', String(+p.dataset.leg === state.legs)));
     document.querySelectorAll('.mode-btn').forEach(b => b.setAttribute('aria-checked', String(b.dataset.mode === state.mode)));
+    syncCantUI();   // คานยื่นปลายซ้าย/ขวา (select + ช่องระยะยื่น) ← ccModel.cant
   }
   // ใช้สแน็ปช็อตเข้า calculator (apply → คำนวณใหม่ · parity-safe)
   function ccApplyInput(s) {
@@ -2077,6 +2131,7 @@
     ccModel.partials = JSON.parse(JSON.stringify(s.partials || []));
     ccModel.gridNames = JSON.parse(JSON.stringify(s.gridNames || {}));
     ccModel.torsion = s.torsion ? JSON.parse(JSON.stringify(s.torsion)) : { on: false, compat: false, t: [], tps: [] };   // restore แรงบิดต่อคาน · ไม่มี → reset (กันรั่วจากคานก่อนหน้า)
+    ccModel.cant = (s.cant && typeof s.cant === 'object') ? { L: +s.cant.L || 0, R: +s.cant.R || 0 } : { L: 0, R: 0 };   // restore คานยื่นต่อคาน · save เก่าไม่มี → reset (กันรั่ว · pattern เดียวกับ torsion)
     ccModel.forceMain = ''; ccModel.forceStir = '';   // P1 (review): force ขนาดเหล็กไม่ capture per-beam → reset เมื่อสลับคาน/โหลดตัวอย่าง (กัน force คาน A รั่วเข้าคาน B เงียบ → เปลี่ยน design)
     ccRebuildLoadRows(s.loads);
     ccSyncControls();
@@ -2304,7 +2359,8 @@
         Array.isArray(b.input.loads) &&
         (b.input.points == null || Array.isArray(b.input.points)) &&
         (b.input.partials == null || Array.isArray(b.input.partials)) &&
-        (b.input.torsion == null || typeof b.input.torsion === 'object'));
+        (b.input.torsion == null || typeof b.input.torsion === 'object') &&
+        (b.input.cant == null || typeof b.input.cant === 'object'));   // คานยื่น optional (save เก่าไม่มี → ผ่าน · apply ตั้ง default)
       if (!ok) return null;                                                          // validate ไม่ผ่าน → ทิ้ง (ไฟล์ untrusted)
       if (!Array.isArray(o.project.floors) || !o.project.floors.length) o.project.floors = this._deriveFloors(o.project.beams);
       if (!o.project.collapsed || typeof o.project.collapsed !== 'object') o.project.collapsed = {};
@@ -2732,6 +2788,8 @@
     torExpect(t) { return torTuDesign(+t || 0, ccModel.spans[0]); },   // parity helper · Tu ออกแบบที่คาดหวัง (ช่วงแรก)
     // แรงบิดจุด (B2) · ขับจาก audit · arr=[{x,T}] global ม./ตัน·ม → demand TMD ขั้นบันได
     setTorquePoints(arr, compat) { ccModel.torsion.on = true; ccModel.torsion.compat = !!compat; ccModel.torsion.t = ccModel.spans.map(() => 0); ccModel.torsion.tps = (arr || []).map((p, i) => ({ id: 980 + i, x: p.x, T: p.T })); renderTorsionInputs(); },
+    // คานยื่นปลายซ้าย/ขวา (overhang) · ขับจาก audit/test — L/R เมตร (0 = ไม่มี)
+    setCant(l, r) { ccModel.cant = { L: +l || 0, R: +r || 0 }; syncCantUI(); },
     recompute, render, renderWork,
     drawMainSections, drawDetailing,
     detailBars: () => detailBars(),   // §A · ให้ audit เทียบจำนวนเหล็กหน้าตัด == engine ต่อ location
@@ -2751,8 +2809,8 @@
     lastInp: () => state._lastInp,
     engine: () => window.__civilCalc,
     MOCK: () => MOCK,
-    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)), partials: JSON.parse(JSON.stringify(ccModel.partials)), torsion: JSON.parse(JSON.stringify(ccModel.torsion)) }; },
-    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; if (s.partials) ccModel.partials = s.partials; if (s.torsion) ccModel.torsion = s.torsion; applyMode(); recompute(); },
+    snapshot() { return { b: P.b, h: P.h, fc: P.fc, grade: P.grade, mode: state.mode, points: JSON.parse(JSON.stringify(ccModel.points)), partials: JSON.parse(JSON.stringify(ccModel.partials)), torsion: JSON.parse(JSON.stringify(ccModel.torsion)), cant: { L: ccModel.cant.L, R: ccModel.cant.R } }; },
+    restore(s) { if (!s) return; P.b = s.b; P.h = s.h; P.fc = s.fc; P.grade = s.grade; state.mode = s.mode; ccModel.points = s.points; if (s.partials) ccModel.partials = s.partials; if (s.torsion) ccModel.torsion = s.torsion; ccModel.cant = s.cant ? { L: +s.cant.L || 0, R: +s.cant.R || 0 } : { L: 0, R: 0 }; applyMode(); recompute(); },
   };
 
   /* sync verdict (pass/fail) + D/C จากผล engine จริง (Phase 2b · override mock toggle เมื่อ engine พร้อม) */
@@ -2787,7 +2845,13 @@
     }
     const sw = $('#ccServiceWarn'), swb = $('#ccServiceWarnBody');
     if (sw) {
-      if (!mdOk && mdWarn.length) { if (swb) swb.innerHTML = mdWarn.map(w => `<div>${w}</div>`).join(''); sw.classList.remove('step-hidden'); }
+      // โชว์เมื่อมีคำเตือน — ตื้นเกิน (headline เดิม) หรือ คำเตือนคานยื่น/uplift แม้ลึกพอ (headline generic · advisory)
+      if (mdWarn.length) {
+        const head = $('#ccServiceWarnHead');
+        if (head) head.textContent = !mdOk ? 'ผ่านกำลัง · แต่หน้าตัดตื้นเกิน — ต้องตรวจการแอ่นตัว' : 'ข้อควรระวัง — คานยื่น / การใช้งาน';
+        if (swb) swb.innerHTML = mdWarn.map(w => `<div>${w}</div>`).join('');
+        sw.classList.remove('step-hidden');
+      }
       else sw.classList.add('step-hidden');
     }
   }
@@ -2809,7 +2873,8 @@
       const host = $('#ccCanvasHost'); if (!host) return;
       // clear (keep overlay inputs out)
       host.querySelectorAll('svg').forEach(s => s.remove());
-      const g = geom(), total = g.total, X = m => Xat(m, total);
+      const g = geom(), total = g.total, X = XatC;   // โดเมนรวมคานยื่น (ไม่มียื่น = Xat เดิม) · inverse ฝั่ง drag = MinvC คู่กัน
+      const _cvL = ccModel.cantL, _cvR = ccModel.cantR;
       const W = CV.W, H = 196;
       const gridTop = 26, beamY = 96, beamH = 30, beamBot = beamY + beamH, colTop = 70, colBot = beamBot + 16, dimY = colBot + 30;
       this._dragDimY = beamBot + 11;
@@ -2826,15 +2891,19 @@
         const t = svgEl('text', { x, y: gridTop + 4, 'font-size': 11, fill: '#475569', 'text-anchor': 'middle', 'font-weight': 700, 'pointer-events': 'none' }); t.textContent = ccModel.grid(i); svg.appendChild(t);
       });
 
-      // columns (at supports) + beam
+      // columns (at supports) + beam (รวมส่วนยื่น −Lc..total+Lc · เสาเฉพาะที่ node — ปลายยื่นอิสระ)
       g.nodes.forEach(nx => { const cw = 14, x = X(nx) - cw / 2; svg.appendChild(svgEl('rect', { x, y: colTop, width: cw, height: colBot - colTop, fill: '#CBD5E1', stroke: '#94A3B8', 'stroke-width': 1 })); });
-      svg.appendChild(svgEl('rect', { x: X(0), y: beamY, width: X(total) - X(0), height: beamH, fill: '#EEF2F6', stroke: '#94A3B8', 'stroke-width': 1.2 }));
+      const _bx0 = -_cvL, _bx1 = total + _cvR;
+      svg.appendChild(svgEl('rect', { x: X(_bx0), y: beamY, width: X(_bx1) - X(_bx0), height: beamH, fill: '#EEF2F6', stroke: '#94A3B8', 'stroke-width': 1.2 }));
+      // ขีดปลายยื่น (free end)
+      if (_cvL) svg.appendChild(svgEl('line', { x1: X(_bx0), y1: beamY - 6, x2: X(_bx0), y2: beamBot + 6, stroke: '#64748B', 'stroke-width': 1.6 }));
+      if (_cvR) svg.appendChild(svgEl('line', { x1: X(_bx1), y1: beamY - 6, x2: X(_bx1), y2: beamBot + 6, stroke: '#64748B', 'stroke-width': 1.6 }));
 
-      // full-span UDL (Wu) — small arrows along top of beam
-      const nA = Math.max(8, Math.round(total * 2));
-      for (let i = 0; i <= nA; i++) { const ax = X(0) + (i / nA) * (X(total) - X(0)); svg.appendChild(svgEl('line', { x1: ax, y1: beamY - 14, x2: ax, y2: beamY - 1, stroke: '#94A3B8', 'stroke-width': 1 })); svg.appendChild(svgEl('path', { d: `M${ax - 2},${beamY - 5} L${ax},${beamY - 1} L${ax + 2},${beamY - 5}`, stroke: '#94A3B8', 'stroke-width': 1, fill: 'none' })); }
-      svg.appendChild(svgEl('line', { x1: X(0), y1: beamY - 14, x2: X(total), y2: beamY - 14, stroke: '#94A3B8', 'stroke-width': 1 }));
-      const wl = svgEl('text', { x: X(0) + 4, y: beamY - 18, 'font-size': 10.5, fill: '#64748B' }); wl.textContent = 'Wu = ' + ccUnits.W(ccModel.Wu); svg.appendChild(wl);
+      // full-span UDL (Wu) — small arrows along top of beam (แผ่คลุมถึงปลายยื่น · engine รับ w เดียวกัน)
+      const nA = Math.max(8, Math.round((_bx1 - _bx0) * 2));
+      for (let i = 0; i <= nA; i++) { const ax = X(_bx0) + (i / nA) * (X(_bx1) - X(_bx0)); svg.appendChild(svgEl('line', { x1: ax, y1: beamY - 14, x2: ax, y2: beamY - 1, stroke: '#94A3B8', 'stroke-width': 1 })); svg.appendChild(svgEl('path', { d: `M${ax - 2},${beamY - 5} L${ax},${beamY - 1} L${ax + 2},${beamY - 5}`, stroke: '#94A3B8', 'stroke-width': 1, fill: 'none' })); }
+      svg.appendChild(svgEl('line', { x1: X(_bx0), y1: beamY - 14, x2: X(_bx1), y2: beamY - 14, stroke: '#94A3B8', 'stroke-width': 1 }));
+      const wl = svgEl('text', { x: X(_bx0) + 4, y: beamY - 18, 'font-size': 10.5, fill: '#64748B' }); wl.textContent = 'Wu = ' + ccUnits.W(ccModel.Wu); svg.appendChild(wl);
 
       // partial UDLs — shaded band + draggable end handles + draggable body
       ccModel.partials.forEach((q, i) => {
@@ -2870,6 +2939,9 @@
         hit.addEventListener('dblclick', () => editSpanPrompt(si, (x1 + x2) / 2, dimY - 8, host, total));
         svg.appendChild(hit);
       });
+      // dim ช่วงยื่น (แสดงระยะยื่นจริง · แก้ค่าที่ช่อง "ระยะยื่น" ใน Step 1)
+      if (_cvL) dim(svg, X(_bx0), X(0), dimY, _cvL.toFixed(2));
+      if (_cvR) dim(svg, X(total), X(_bx1), dimY, _cvR.toFixed(2));
       if (g.spans.length > 1) dim(svg, X(0), X(total), dimY + 22, total.toFixed(2), true);
 
       // temporary Revit-style dims while dragging a load (snap to adjacent grid lines)
@@ -2885,7 +2957,7 @@
         const move = e => {
           const r = host.getBoundingClientRect(); const total = ccModel.total;
           const vbx = ((e.clientX - r.left) / r.width) * CV.W;
-          ccModel.points[i].x = Math.min(total, Math.max(0, snap01(Minv(vbx, total))));
+          ccModel.points[i].x = Math.min(total, Math.max(0, snap01(MinvC(vbx))));   // inverse โดเมนรวมยื่น (คู่ XatC) · จุดโหลดยัง clamp [0,total] (บนช่วงยื่นรอบหน้า)
           const px = ccModel.points[i].x, ad = adjacentNodes(px);
           ccCanvas._dragDim = { y: ccCanvas._dragDimY || 137, segs: [[ad[0], px], [px, ad[1]]] };
           drawStep2(); showDragTip(host, e.clientX - r.left, e.clientY - r.top, 'x = ' + px.toFixed(1) + ' ม · ' + ccUnits.P(ccModel.points[i].P));
@@ -2899,10 +2971,10 @@
       el.addEventListener('pointerdown', ev => {
         ev.preventDefault(); el.setPointerCapture?.(ev.pointerId);
         const r0 = host.getBoundingClientRect(), total = ccModel.total;
-        const startM = Minv(((ev.clientX - r0.left) / r0.width) * CV.W, total);
+        const startM = MinvC(((ev.clientX - r0.left) / r0.width) * CV.W);
         const q0 = { x0: ccModel.partials[i].x0, x1: ccModel.partials[i].x1 };
         const move = e => {
-          const r = host.getBoundingClientRect(); const m = snap01(Minv(((e.clientX - r.left) / r.width) * CV.W, total));
+          const r = host.getBoundingClientRect(); const m = snap01(MinvC(((e.clientX - r.left) / r.width) * CV.W));
           const q = ccModel.partials[i];
           if (kind === 'x0') q.x0 = Math.min(q.x1 - 0.1, Math.max(0, m));
           else if (kind === 'x1') q.x1 = Math.min(total, Math.max(q.x0 + 0.1, m));
@@ -2988,8 +3060,12 @@
   const ccDiagram = {
     render() {
       const host = $('#ccDiagHost'); if (!host) return; host.innerHTML = '';
-      const g = geom(), total = g.total, X = m => Xat(m, total);
+      const g = geom(), total = g.total;
       const cont = state.mode === 'cont';
+      // คานยื่น: ขยายโดเมนแกน x เป็น [−LcL, total+LcR] (engine diagram.x วิ่งถึงปลายยื่น) · ไม่มียื่น → [0,total] = Xat เดิมเป๊ะ (zero-reg)
+      const _cvL = cont ? ccModel.cantL : 0, _cvR = cont ? ccModel.cantR : 0;
+      const xlo = -_cvL, xhi = total + _cvR;
+      const X = m => CV.mx + ((m - xlo) / (xhi - xlo)) * (CV.W - 2 * CV.mx);
 
       // ── layout: ทุกแถบ (V/M/T) มี "ช่องไฟ ชื่อแถบ→เส้นกราฟ" เท่ากัน = HEAD (pi 2026-06-22) ──
       //   V/T zero line ไม่ centered แต่วางต่ำ มี headroom ว่างด้านบนเท่า M (ที่เผื่อโมเมนต์ลบ)
@@ -3035,12 +3111,12 @@
           Mmax = Math.max(maxPos, maxNeg);
           const vsc = vAmp / Vmax, msc = Math.min(momDown / maxPos, momUp / maxNeg);
           vLine = ac.xs.map((x, i) => `${X(x)},${(vMid - ac.V[i] * vsc).toFixed(1)}`).join(' ');
-          vArea = `${X(0)},${vMid} ` + vLine + ` ${X(total)},${vMid}`;
+          vArea = `${X(ac.xs[0])},${vMid} ` + vLine + ` ${X(ac.xs[ac.xs.length - 1])},${vMid}`;   // ปิด polygon ที่ปลายข้อมูลจริง (มียื่น → −Lc/total+Lc)
           vMarks = vPeaks(ac.xs, ac.V, vsc);
           const lp = [], fp = [];
           ac.xs.forEach((x, i) => { const py = mAxis + ac.M[i] * msc; lp.push(`${X(x)},${py.toFixed(1)}`); fp.push(`${X(x)},${Math.max(mAxis, py).toFixed(1)}`); });
           mLine = lp.join(' ');
-          mFill = `${X(0)},${mAxis} ` + fp.join(' ') + ` ${X(total)},${mAxis}`;
+          mFill = `${X(ac.xs[0])},${mAxis} ` + fp.join(' ') + ` ${X(ac.xs[ac.xs.length - 1])},${mAxis}`;
           ac.marks.forEach(mk => marks.push({ x: X(mk.x), y: mAxis + (mk.type === 'neg' ? -mk.val : mk.val) * msc, val: mk.val, type: mk.type }));
         } else {
           // ── fallback (engine ยังไม่พร้อม) · parabola ประมาณจาก spanMoments ──
@@ -3073,7 +3149,7 @@
 
       // ── V band ──
       lbl(svg, 'แรงเฉือน  V (' + ccUnits.uP() + ')', vTitleY);
-      ax(svg, X(0), X(total), vMid);
+      ax(svg, X(xlo), X(xhi),vMid);
       svg.appendChild(svgEl('polyline', { points: vArea, fill: 'rgba(8,145,178,.10)', stroke: 'none' }));
       svg.appendChild(svgEl('polyline', { points: vLine, fill: 'none', stroke: '#0891b2', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
       // peak V labels (จุด + ค่า max · เดิม shear ไม่โชว์ค่า/สเกล · pi 2026-06-21)
@@ -3083,7 +3159,7 @@
       });
       // ── M band ──
       lbl(svg, 'โมเมนต์  M (' + ccUnits.uM() + ')  — พล็อตคว่ำ', mAxis - momUp - 22);
-      ax(svg, X(0), X(total), mAxis);
+      ax(svg, X(xlo), X(xhi),mAxis);
       svg.appendChild(svgEl('polygon', { points: mFill, fill: 'rgba(124,58,237,.10)', stroke: 'none' }));
       svg.appendChild(svgEl('polyline', { points: mLine, fill: 'none', stroke: '#7c3aed', 'stroke-width': 2.2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }));
       marks.forEach(mk => {
@@ -3109,7 +3185,7 @@
           });
         }
         lbl(svg, 'แรงบิด  T (' + ccUnits.uM() + ')  — TMD (จากแรงบิดจริง · ออกแบบที่ระยะ d)', tTitleY);   // หน่วยตาม toggle kg↔T เหมือน V/M
-        ax(svg, X(0), X(total), tMid);
+        ax(svg, X(xlo), X(xhi),tMid);
         if (segs.length) {
           // ── engine demand (จริง · ขั้นบันได/ลาด) ──
           let Tmax = 0; segs.forEach(s => s.Ts.forEach(T => { Tmax = Math.max(Tmax, Math.abs(T)); }));
@@ -3146,7 +3222,7 @@
 
       // shared x ticks
       const tickY = baseBottom + 4;
-      const ticks = cont ? g.nodes : [0, total / 4, total / 2, 3 * total / 4, total];
+      const ticks = cont ? [...(_cvL ? [-_cvL] : []), ...g.nodes, ...(_cvR ? [total + _cvR] : [])] : [0, total / 4, total / 2, 3 * total / 4, total];   // มียื่น → tick ที่ปลายยื่นด้วย
       ticks.forEach(m => { const xx = X(m); svg.appendChild(svgEl('line', { x1: xx, y1: tickY, x2: xx, y2: tickY + 5, stroke: '#cbd5e1', 'stroke-width': 1 })); const t = svgEl('text', { x: xx, y: tickY + 16, 'font-size': 9, fill: '#94A3B8', 'text-anchor': 'middle' }); t.textContent = m.toFixed(1); svg.appendChild(t); });
 
       host.appendChild(svg);
@@ -3297,7 +3373,8 @@
     let flexDoubly = !!m.isDoubly;   // ชนิดเสริมเหล็กรับดัด (plan A) · single จาก engine · cont = any span/support doubly (reuse o ด้านล่าง)
     if (state.mode === 'cont') {
       const ac = analyzeContinuous(), o = ac && ac.out;
-      flexDoubly = !!(o && o.spans && (o.spans.some(sp => sp.bottom && sp.bottom.is_doubly) || o.supports.some(su => su.top && su.top.is_doubly)));
+      flexDoubly = !!(o && o.spans && (o.spans.some(sp => sp.bottom && sp.bottom.is_doubly) || o.supports.some(su => su.top && su.top.is_doubly)
+        || (o.cantilevers || []).some(c => c.top && c.top.is_doubly)));   // คานยื่น doubly ก็ต้องติด badge (กัน "เหล็กเดี่ยวทั้งหมด" โกหก)
       // engine shear ราย span → ป้ายปลอก (S1=หัวเสา · S2=กลางช่วง)
       //   - เฉือน FAIL (passes=false · ไม่มี S1/S2) → โชว์ "✗ หน้าตัดไม่พอ" ห้ามแต่งเป็น spacing ปลอม (Codex P1)
       //   - ไม่มีข้อมูล → "—" (ไม่ใช้ stirText/state.legs · กัน leak 2ป จาก single · Codex P2)
@@ -3310,6 +3387,15 @@
       };
       if (o && o.spans && o.spans.length) {
         const ns = o.spans.length;
+        // แถวคานยื่น (จาก out.cantilevers · engine ออกแบบจริง: เหล็กบน + เฉือนหน้าเสา ไม่ลด d) — ซ้ายก่อนหัวเสาแรก · ขวาหลังหัวเสาท้าย
+        const cantRow = c => {
+          const comp = (c.is_doubly && c.comp_bars && c.comp_bars !== '—') ? ` · ${c.comp_bars} (ล่าง·รับอัด)` : '';
+          return [`คานยื่น${c.side_label || ''} (${(+c.L).toFixed(2)} ม)`, '−' + ccUnits.Mn((c.Mu_tonm || 0) * 1000),
+                  (c.top_bars && c.top_bars !== '—') ? c.top_bars + ' (บน)' + comp : '—',
+                  c.Vu_face_ton ? ccUnits.Pn(c.Vu_face_ton * 1000) : '—', fmtStir(c.shear, 'S1')];
+        };
+        const _cL = (o.cantilevers || []).find(c => c.side === 'L'), _cR = (o.cantilevers || []).find(c => c.side === 'R');
+        if (_cL) rows.push(cantRow(_cL));
         o.supports.forEach((su, i) => {
           const isEnd = (i === 0 || i === ns);
           const mneg = su.M_neg_tonm ? '−' + ccUnits.Mn(su.M_neg_tonm * 1000) : '—';
@@ -3330,6 +3416,7 @@
                        (sp.bottom_bars || '—') + ' (ล่าง)' + spComp, '—', fmtStir(sp.shear, 'S2')]);
           }
         });
+        if (_cR) rows.push(cantRow(_cR));
       }
     } else {
       const size = (m.rebarMain && /DB?\d+/.test(m.rebarMain)) ? m.rebarMain.match(/[RD]B?\d+/)[0] : 'DB16';
@@ -3496,8 +3583,15 @@
         supTop: o.supports.map(su => fromRebar(su.top && su.top.rebar)),
         spanComp: o.spans.map(sp => compOf(sp.bottom)),     // เหล็กอัด "บน" ของช่วง (+M doubly · null ถ้าไม่ doubly)
         supComp: o.supports.map(su => compOf(su.top)),      // เหล็กอัด "ล่าง" ของหัวเสา (−M doubly · null ถ้าไม่ doubly)
-        isDoubly: o.spans.some(sp => sp.bottom && sp.bottom.is_doubly) || o.supports.some(su => su.top && su.top.is_doubly),
+        isDoubly: o.spans.some(sp => sp.bottom && sp.bottom.is_doubly) || o.supports.some(su => su.top && su.top.is_doubly)
+          || (o.cantilevers || []).some(c => c.top && c.top.is_doubly),
         spanStir: o.spans.map(sp => stir(sp.shear)),
+        // คานยื่น (out.cantilevers · เรียงตาม engine: ซ้ายก่อนขวา) — เหล็กบน (−M) + เหล็กอัดล่าง (doubly) + ปลอกหน้าเสา
+        cantTop: (o.cantilevers || []).map(c => fromRebar(c.top && c.top.rebar)),
+        cantComp: (o.cantilevers || []).map(c => compOf(c.top)),
+        cantStir: (o.cantilevers || []).map(c => stir(c.shear)),
+        cantSide: (o.cantilevers || []).map(c => c.side),
+        cantLen: (o.cantilevers || []).map(c => +c.L || 0),
       };
     }
     const m = liveData();
@@ -3680,7 +3774,9 @@
       //   ใช้ปลาย "จริง" — tile แตกเป็น sub-beam ราย span (c.endFlags บอกว่า node ไหนเป็นปลายจริงของคานเต็ม)
       //   → หัวเสาในไม่ได้ nominal · ปลายจริงได้ทั้ง full + tile (ตรงกับ BBS · Codex P2)
       const isRealEnd = c.endFlags ? !!c.endFlags[i] : isEnd;
-      if (isCont && isRealEnd && !groups.length) { groups = [[topSize, 2]]; nominal = true; }
+      // ปลายที่มีคานยื่น: เหล็กบนเป็นของจริงจาก engine — ห้าม nominal (ขัด BBS ที่ suppress แล้ว · review P3)
+      const _endCant = isRealEnd && ((isL && ccModel.cantL > 0) || (isR && ccModel.cantR > 0));
+      if (isCont && isRealEnd && !groups.length && !_endCant) { groups = [[topSize, 2]]; nominal = true; }
       if (!groups.length) return;
       const lbl = isRealEnd ? (nominal ? 'เสริมปลาย*' : 'เสริมปลาย') : 'เสริมหัวเสา';
       const ct = curt && curt.top && curt.top[i];
@@ -3759,10 +3855,19 @@
     if (state.scale === 'auto') { const pxm = (1040 - 140) / totalLen; $('#scaleLabel').textContent = '1:' + Math.round((3779.5 / pxm) / 5) * 5 + ' (auto)'; }
     else $('#scaleLabel').textContent = '1:' + state.scale;
 
-    if (c.spans.length >= 5) { host.style.overflowX = 'visible'; drawElevationTiles(host, c); return; }
+    // honest note: รูปด้านข้างยังวาดเฉพาะช่วงระหว่างเสา — ช่วงยื่นยังไม่วาด (ตามแผน · เหล็ก/ตารางถูกต้องแล้ว) · ต้องโผล่ทั้ง path ปกติ+tiles ≥5 ช่วง (review P3)
+    const _cantNote = () => {
+      if (!(state.mode === 'cont' && (ccModel.cantL || ccModel.cantR))) return;
+      const note = document.createElement('div');
+      note.className = 'mt-2 text-[11px] text-ink-muted';
+      note.textContent = 'ℹ️ รูปด้านข้างแสดงเฉพาะช่วงระหว่างเสา — ช่วงคานยื่นดูที่ ตารางสรุป · หน้าตัด · BBS (รูปด้านข้างช่วงยื่นจะเพิ่มในรุ่นถัดไป)';
+      host.appendChild(note);
+    };
+    if (c.spans.length >= 5) { host.style.overflowX = 'visible'; drawElevationTiles(host, c); _cantNote(); return; }
     const { svg, fitWidth } = buildElevationSVG(c, { callouts: true });
     host.style.overflowX = fitWidth ? 'visible' : 'auto';
     host.appendChild(svg);
+    _cantNote();
   }
 
   // overview strip: whole beam shrunk + Mmax dots at every span/support
@@ -3904,6 +4009,15 @@
       else topLbl = `2-${_mainTop}`;
       if (b && b.n) { nBot = b.n; botLayers = b.n_layers || 0; botLbl = _decompLbl(b.list) || _fmtL(b.list, nBot, _mainBot); botList = b.list; }
       else { nBot = 3; botLbl = `3-${_mainBot}`; }
+    } else if (/^cant\d/.test(loc)) {   // 'cant0'/'cant1' = หน้าตัดช่วงคานยื่น (−M · เหล็กบนรับดึง) — index ตาม out.cantilevers (pi 2026-07-04)
+      const ci = +loc.slice(4) || 0;
+      nBot = 2; botLayers = 0; botLbl = `2-${_mainBot}`;   // ล่าง: เส้นหลักวิ่งผ่าน (nominal 2 มุม)
+      const tc = bars && bars.cantTop && bars.cantTop[ci];
+      if (tc && tc.n) { nTop = tc.n; topLayers = tc.n_layers || 0; topLbl = _decompLbl(tc.list) || _fmtL(tc.list, nTop, _mainTop); topList = tc.list; }
+      else { nTop = 2; topLbl = `2-${_mainTop}`; }
+      // doubly คานยื่น (−M): เหล็กรับแรงอัดอยู่ "ล่าง" (เหมือนหัวเสา · DRMK book p70)
+      const cmpC = bars && bars.cantComp && bars.cantComp[ci];
+      if (cmpC && cmpC.n) { nBot = cmpC.n; botLayers = cmpC.n_layers || 0; botLbl = `${_fmtL(cmpC.list, nBot, _mainBot)} (รับอัด)`; botList = cmpC.list; }
     } else {   // 'left' / 'right' / 'sup' = หน้าตัดหัวเสา (−M)
       nBot = 2; botLayers = 0; botLbl = `2-${_mainBot}`;    // หัวเสา: เหล็กล่าง = เส้นหลักวิ่งผ่าน (nominal 2 มุม)
       let t = null, sIdx = -1;
@@ -3983,12 +4097,22 @@
     const items = state.mode === 'cont'
       ? [['mid', 'กลางคาน (+M · เหล็กล่าง)', '0.25'], ['sup', 'หัวเสา (−M · เหล็กบน)', '0.10']]   // 'sup' = หัวเสาวิกฤตรวม (overview · Codex P2)
       : [['mid', 'กลางช่วง (+M · เหล็กล่าง)', '0.25'], ['left', 'ปลายคาน (เฉือน)', '0.10']];
-    items.forEach(([loc, label, sp]) => {
+    // หน้าตัดช่วงคานยื่น (pi 2026-07-04) — append ท้ายเสมอ (audit index หน้าตัดแบบตำแหน่ง _ms[0]=mid/[1]=sup · ห้ามแทรกหน้า)
+    if (state.mode === 'cont') {
+      const eb = detailBars();
+      if (eb && eb.cantTop) eb.cantTop.forEach((tc, i) => {
+        if (!tc || !tc.n) return;   // ออกแบบไม่สำเร็จ/ไม่มีเหล็ก → ไม่วาด tile (กัน nominal หลอก)
+        const st = (eb.cantStir && eb.cantStir[i]) || {};
+        const stirStr = st.s1 ? `1ป-${st.bar || 'RB9'}@${(st.s1 / 100).toFixed(2)}` : '—';
+        items.push(['cant' + i, `คานยื่น${eb.cantSide[i] === 'L' ? 'ซ้าย' : 'ขวา'} ${(eb.cantLen[i] || 0).toFixed(2)} ม (−M · เหล็กบน)`, stirStr, true]);
+      });
+    }
+    items.forEach(([loc, label, sp, spFinal]) => {
       const wrap = document.createElement('div'); wrap.className = 'flex flex-col items-center';
       const s = buildSection(loc);
       const box = document.createElement('div'); box.style.maxWidth = '128px'; box.appendChild(s.svg); wrap.appendChild(box);
       const cap = document.createElement('div'); cap.className = 'mt-1 text-[11px] text-ink-muted text-center';
-      cap.innerHTML = `${label}<br><span class="mono text-ink">บน ${s.topLbl} · ล่าง ${s.botLbl}</span><br><span class="mono text-ink-muted">${stirText(sp)}</span>`;
+      cap.innerHTML = `${label}<br><span class="mono text-ink">บน ${s.topLbl} · ล่าง ${s.botLbl}</span><br><span class="mono text-ink-muted">${spFinal ? sp : stirText(sp)}</span>`;
       wrap.appendChild(cap); host.appendChild(wrap);
     });
   }
@@ -4024,16 +4148,19 @@
       const ac = analyzeContinuous(), o = ac && ac.out;
       if (o && o.spans && o.spans.length && bars) {
         const ns = o.spans.length;
-        const total = +(o.spans.reduce((s, sp) => s + (sp.L || 0), 0)).toFixed(2);
+        const _cvs = o.cantilevers || [];   // คานยื่น: เหล็กหลักวิ่งเต็มรวมช่วงยื่น (เรขาคณิต · ไม่ใช่แบบสั่งตัด)
+        const total = +(o.spans.reduce((s, sp) => s + (sp.L || 0), 0) + _cvs.reduce((s, c) => s + (+c.L || 0), 0)).toFixed(2);
         const botSize = maxSize(bars.spanBot.map(s => s.size)) || 'DB16';
         const topSize = maxSize(bars.supTop.filter(s => s.n > 0).map(s => s.size)) || botSize;
-        rows.push(['MT', topSize, 2, total, 'บน·หลัก·เต็มคาน']);
-        rows.push(['MB', botSize, 2, total, 'ล่าง·หลัก·เต็มคาน']);
+        rows.push(['MT', topSize, 2, total, 'บน·หลัก·เต็มคาน' + (_cvs.length ? ' (รวมยื่น)' : '')]);
+        rows.push(['MB', botSize, 2, total, 'ล่าง·หลัก·เต็มคาน' + (_cvs.length ? ' (รวมยื่น)' : '')]);
         // เสริมหัวเสา (−M) + เสริมปลาย (nominal) · ยาว L/3
         o.supports.forEach((su, i) => {
           const isEnd = (i === 0 || i === ns);
+          // หัวเสาปลายที่มีคานยื่น: เหล็กบนจริง (ไม่ใช่ nominal) วิ่งเต็มช่วงยื่น + ฝัง Ld เข้าช่วงข้างเคียง (engine Ld_note)
+          const _cv = isEnd ? _cvs.find(c => (i === 0 && c.side === 'L') || (i === ns && c.side === 'R')) : null;
           let groups = extraBarGroups(bars.supTop[i].list);   // คงขนาดผสม (Codex P2)
-          if (isEnd && !groups.length) groups = [[topSize, 2]];   // EXTRA-END nominal
+          if (isEnd && !_cv && !groups.length) groups = [[topSize, 2]];   // EXTRA-END nominal (เฉพาะปลายไม่มียื่น · มียื่น = เหล็กหลัก MT ครอบ 2 มุมแล้ว)
           if (!groups.length) return;
           const spL = i > 0 ? (o.spans[i - 1].L || 0) : 0, spR = i < ns ? (o.spans[i].L || 0) : 0;
           // ยาวเหล็กบน: engine curtailment top → col + ยื่นซ้าย + ยื่นขวา · A2b envelope = asymmetric (cut_third_left/right) · fig-8.32 = 2·cut_third_m · ปลาย nominal คงสคีมาติก
@@ -4042,9 +4169,13 @@
           const _ctEnv = _ct && (_ct.cut_third_left_m != null || _ct.cut_third_right_m != null);
           const _tL = _ctEnv ? (_ct.cut_third_left_m || 0) : (_ct ? _ct.cut_third_m : 0);
           const _tR = _ctEnv ? (_ct.cut_third_right_m || 0) : (_ct ? _ct.cut_third_m : 0);
-          const len = +(_ct ? (_colW + _tL + _tR) : ((isEnd ? (spL || spR) : (spL + spR)) / 3)).toFixed(2);
+          let len = +(_ct ? (_colW + _tL + _tR) : ((isEnd ? (spL || spR) : (spL + spR)) / 3)).toFixed(2);
+          if (_cv) {   // ยื่นเต็ม Lc + max(ระยะตัดฝั่งใน "ข้างเดียว", Ld) — engine cut_third ของหัวเสาปลาย = one-sided (calc _fig-8.32 adj ช่วงในเดียว) ห้ามรวม _tL+_tR (double-count · review P2)
+            const _tInt = (i === 0 ? _tR : _tL);
+            len = +(_colW + (+_cv.L || 0) + Math.max(_tInt, (_cv.Ld_cm || 0) / 100)).toFixed(2);
+          }
           const mark = isEnd ? (i === 0 ? 'TE1' : 'TE2') : `T${i}`;
-          const pos = isEnd ? `บน·เสริมปลาย* ${su.label}` : `บน·เสริมหัวเสา ${su.label}`;
+          const pos = isEnd ? (_cv ? `บน·คานยื่น ${su.label} (ยื่น+Ld)` : `บน·เสริมปลาย* ${su.label}`) : `บน·เสริมหัวเสา ${su.label}`;
           groups.forEach((g, k) => rows.push([mark + (groups.length > 1 ? String.fromCharCode(97 + k) : ''), g[0], g[1], len, pos]));
           // doubly (−M หัวเสา): เหล็กรับแรงอัดอยู่ "ล่าง" → ต้องมีใน BBS ด้วย (takeoff ครบ · ตรงตาราง/หน้าตัด · DRMK p70)
           const _sc = bars.supComp && bars.supComp[i];
@@ -4078,6 +4209,11 @@
             rows.push([`MC${i + 1}${(_mc.list && _mc.list.length > 1) ? String.fromCharCode(97 + k) : ''}`, g[0], g[1], +(sp.L || 0).toFixed(2), `บน·รับอัด·กลางช่วง ${sp.label}`]));
           const sh = sp.shear || {}, nStir = stirrupCount(sh) * (sh.n_legs === 4 ? 2 : 1);   // 2ป = 2 ชิ้น/station (Codex P2)
           if (nStir) rows.push([`S${i + 1}`, sh.bar || 'RB9', nStir, perim, `ปลอก·ช่วง ${sp.label}`]);
+        });
+        // ปลอกช่วงคานยื่น (engine ออกแบบที่หน้าเสา · โซน S1/S2 จาก design_shear เดียวกัน → stirrupCount ใช้ร่วมได้)
+        _cvs.forEach(c => {
+          const sh = c.shear || {}, nStir = stirrupCount(sh) * (sh.n_legs === 4 ? 2 : 1);
+          if (nStir) rows.push([`SV${c.side || ''}`, sh.bar || 'RB9', nStir, perim, `ปลอก·คานยื่น${c.side_label || ''}`]);
         });
       }
     } else {
@@ -4224,10 +4360,11 @@
     const summaryTable = summaryRowsHTML
       ? `<table class="pd-sum"><thead><tr><th>ตำแหน่ง</th><th>+M / −M</th><th>เหล็กหลัก</th><th>Vu</th><th>ปลอก</th></tr></thead><tbody>${summaryRowsHTML}</tbody></table>`
       : '';
-    // §3 รูปหน้าตัดคาน = clone #sectionMain (engine วาดจริงผ่าน buildSection · 2 จุด กลาง+หัวเสา/ปลาย · parity-safe · ว่าง→ไม่พิมพ์)
-    let sectionMainHTML = ($('#sectionMain') && $('#sectionMain').innerHTML) || '';
-    // bulletproof: ถ้า populate ตอนไม่ได้อยู่ step 3 (#sectionMain ยังว่าง) แต่ผลพร้อม → วาดก่อน clone (กัน printAll/beforeprint ขาดหน้าตัด)
-    if (!sectionMainHTML && ready) { try { drawMainSections(); sectionMainHTML = ($('#sectionMain') && $('#sectionMain').innerHTML) || ''; } catch (e) {} }
+    // §3 รูปหน้าตัดคาน = clone #sectionMain (engine วาดจริงผ่าน buildSection · parity-safe · ว่าง→ไม่พิมพ์)
+    // ผลพร้อม → วาดสดก่อน clone เสมอ (เดิม redraw เฉพาะตอนว่าง → แก้คานยื่น/ขนาดนอก step 3 แล้วรูปพิมพ์ค้าง · review P3 · drawMainSections cheap: engine call cached)
+    let sectionMainHTML = '';
+    if (ready) { try { drawMainSections(); } catch (e) {} }
+    sectionMainHTML = ($('#sectionMain') && $('#sectionMain').innerHTML) || '';
     const secFig = sectionMainHTML
       ? `<div class="pd-sub" data-pd="section">หน้าตัดและรายละเอียดเหล็กเสริม</div><div class="pd-secfig">${sectionMainHTML}</div>`
       : '';
@@ -8315,6 +8452,7 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       if (!TT()) { console.warn('[design-audit] __civilTest ยังไม่พร้อม'); return null; }
       if (window.__ccBaseLoadRows && _lrEl) _lrEl.innerHTML = window.__ccBaseLoadRows;   // reset โหลดเป็น default base ให้ guard (เช่น doubly inject บน default) — กัน fail ปลอมเมื่อมีโปรเจกต์เซฟไว้
       if (TT().setTorsion) TT().setTorsion(false, 0, false);   // isolate แรงบิด (global state ใหม่ · กัน user-state รั่วเข้า test อื่น) · guard แรงบิดเปิดเองภายหลัง
+      if (TT().setCant) TT().setCant(0, 0);   // isolate คานยื่น — user overhang รั่วเข้า scenario C (curtailment approx) → false DRIFT (review P2) · guard overhang เปิดเองภายหลัง
 
       // ── A · design tokens (drift guard) ──
       ['--ink', '--accent', '--pass', '--fail', '--rebar', '--concrete'].forEach(v =>
@@ -8561,6 +8699,34 @@ _json.dumps(_r, ensure_ascii=False, default=lambda o: getattr(o, '__dict__', str
       A('min-depth: คานลึกพอ (40×60) → min_depth_ok=true + banner ซ่อน',
         _mdOk.minDepthOk !== false && (!_mdSw2 || _mdSw2.classList.contains('step-hidden')),
         'minDepthOk=' + _mdOk.minDepthOk + ' hidden=' + (_mdSw2 && _mdSw2.classList.contains('step-hidden')));
+
+      // ── คานยื่น (overhang · wire UI→engine · pi 2026-07-04) — เปิด/ปิด ครบวงจร ──
+      TT().setMode('cont'); TT().setSection(30, 60, 240, 'SD40'); TT().setPoints([]); TT().setCant(1.5, 0); TT().recompute(); TT().render();
+      TT().drawMainSections(); TT().drawDetailing();   // วาดชัดเจน — render() วาด #sectionMain/#bbsRows เฉพาะ step 3 (staleness gotcha เดิม C4 · review P2)
+      const _ovO = ((TT().lastInp() || {}).out) || {};
+      A('overhang: เลือกยื่นซ้าย 1.5 ม → engine รับ left_cantilever (has_cantilever + 1 แถวออกแบบ)',
+        _ovO.has_cantilever === true && (_ovO.cantilevers || []).length === 1 && (_ovO.cantilevers[0].top_bars || '—') !== '—',
+        'has=' + _ovO.has_cantilever + ' rows=' + (_ovO.cantilevers || []).length + ' top=' + (_ovO.cantilevers && _ovO.cantilevers[0] && _ovO.cantilevers[0].top_bars));
+      A('overhang: กราฟ V/M ขยายถึงปลายยื่น (diagram.x ติดลบ ≤ −Lc)',
+        _ovO.diagram && Math.min.apply(null, _ovO.diagram.x) <= -1.49,
+        'xmin=' + (_ovO.diagram ? Math.min.apply(null, _ovO.diagram.x) : 'n/a'));
+      A('overhang: ตารางสรุปมีแถว "คานยื่น" (−M · Vu หน้าเสา · ปลอก)',
+        /คานยื่น/.test((document.querySelector('#summaryRows') || {}).textContent || ''), 'summary-txt');
+      const _ovSecs = document.querySelectorAll('#sectionMain svg');
+      A('overhang: หน้าตัด 3 รูป (tile คานยื่น append ท้าย · mid/sup index เดิมไม่เลื่อน)',
+        _ovSecs.length >= 3 && /คานยื่น/.test((document.querySelector('#sectionMain') || {}).textContent || ''),
+        'svgs=' + _ovSecs.length);
+      A('overhang: BBS มีปลอกช่วงยื่น (SVL) + เหล็กหลักรวมยื่น',
+        /คานยื่น|รวมยื่น/.test((document.querySelector('#bbsRows') || {}).textContent || ''), 'bbs-txt');
+      A('overhang: pass/D-C นับคานยื่น (o.passes สอดคล้อง state.res.pass)',
+        !!(TT().res()) && ((TT().res().pass === true) === (_ovO.passes === true)), 'pass=' + (TT().res() || {}).pass + ' o.passes=' + _ovO.passes);
+      TT().setCant(0, 0); TT().recompute(); TT().render();
+      TT().drawMainSections(); TT().drawDetailing();   // วาดชัดเจนฝั่งปิดด้วย — zero-reg check ต้องเทียบ DOM สด ไม่ใช่ค้าง
+      const _ovOff = ((TT().lastInp() || {}).out) || {};
+      A('overhang: ปิดยื่น → กลับ 2 รูป + ไม่มีแถวคานยื่น (zero-reg)',
+        !_ovOff.has_cantilever && document.querySelectorAll('#sectionMain svg').length === 2 &&
+        !/คานยื่น/.test((document.querySelector('#summaryRows') || {}).textContent || ''),
+        'svgs=' + document.querySelectorAll('#sectionMain svg').length);
 
       // ── F · เอกสารพิมพ์ A4 calc-sheet (#cc-print-doc · pi 2026-06-21) ──
       TT().setMode('single'); TT().setSection(25, 50, 240, 'SD40'); TT().recompute(); TT().render();
